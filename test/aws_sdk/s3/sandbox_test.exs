@@ -661,6 +661,23 @@ defmodule AwsSDK.S3.SandboxTest do
     end
   end
 
+  describe "put_bucket_versioning/3" do
+    test "returns mocked success keyed by bucket" do
+      Sandbox.set_put_bucket_versioning_responses([
+        {"test-bucket", fn -> {:ok, %{x_amz_request_id: "req-3"}} end}
+      ])
+
+      assert {:ok, %{x_amz_request_id: "req-3"}} =
+               S3.put_bucket_versioning("test-bucket", "Enabled", sandbox: [enabled: true])
+    end
+
+    test "a status other than Enabled or Suspended raises FunctionClauseError" do
+      assert_raise FunctionClauseError, fn ->
+        S3.put_bucket_versioning("test-bucket", "Off", sandbox: [enabled: true])
+      end
+    end
+  end
+
   describe "put_bucket_lifecycle_configuration/3" do
     test "returns mocked success" do
       Sandbox.set_put_bucket_lifecycle_configuration_responses([

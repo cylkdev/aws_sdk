@@ -62,6 +62,16 @@ defmodule AwsSDK.ConformanceTest do
     refute xml =~ "<SSEAlgorithm></SSEAlgorithm>"
   end
 
+  test "put_bucket_versioning emits the exact VersioningConfiguration body" do
+    ns = "http://s3.amazonaws.com/doc/2006-03-01/"
+
+    assert AwsSDK.S3.XMLBuilder.build_versioning_configuration("Enabled") ==
+             ~s(<VersioningConfiguration xmlns="#{ns}"><Status>Enabled</Status></VersioningConfiguration>)
+
+    assert AwsSDK.S3.XMLBuilder.build_versioning_configuration("Suspended") ==
+             ~s(<VersioningConfiguration xmlns="#{ns}"><Status>Suspended</Status></VersioningConfiguration>)
+  end
+
   test "a lifecycle rule without :status defaults to Enabled instead of raising" do
     xml = AwsSDK.S3.XMLBuilder.build_lifecycle_configuration([%{id: "r", expiration: %{days: 1}}])
 

@@ -173,6 +173,22 @@ defmodule AwsSDK.S3.XMLBuilder do
     "<LifecycleConfiguration xmlns=\"#{@xmlns}\">#{rules_xml}</LifecycleConfiguration>"
   end
 
+  @doc """
+  Builds the `<VersioningConfiguration>` XML body for `PutBucketVersioning`.
+
+  `status` is `"Enabled"` or `"Suspended"`. `MfaDelete` is not supported.
+
+  ## Examples
+
+      AwsSDK.S3.XMLBuilder.build_versioning_configuration("Enabled")
+      #=> ~s(<VersioningConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">) <>
+      #=>   "<Status>Enabled</Status></VersioningConfiguration>"
+  """
+  @spec build_versioning_configuration(status :: binary()) :: binary()
+  def build_versioning_configuration(status) when status in ["Enabled", "Suspended"] do
+    "<VersioningConfiguration xmlns=\"#{@xmlns}\"><Status>#{status}</Status></VersioningConfiguration>"
+  end
+
   defp kms_master_key_id_xml(nil), do: ""
   defp kms_master_key_id_xml(id), do: "<KMSMasterKeyID>#{xml_escape(id)}</KMSMasterKeyID>"
 

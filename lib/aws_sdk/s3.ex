@@ -1720,6 +1720,54 @@ defmodule AwsSDK.S3 do
     end
   end
 
+  @doc """
+  Sets the versioning state of an existing bucket.
+
+  See https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketVersioning.html
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - s3:PutBucketVersioning
+
+  ## Arguments
+
+    * `bucket` - The name of the bucket.
+    * `status` - `"Enabled"` to turn versioning on, or `"Suspended"` to stop creating
+      new versions. Any other value raises `FunctionClauseError`.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+  See the "Shared Options" section in the module documentation for common options.
+
+  `MfaDelete` is not supported.
+
+  ## Examples
+
+      iex> AwsSDK.S3.put_bucket_versioning("my-bucket", "Enabled")
+      {:ok, %{x_amz_request_id: "...", date: "..."}}
+
+  ## Examples
+
+      AwsSDK.S3.put_bucket_versioning("uploads-bucket", "Enabled")
+      #=> {:ok, %{}}
+
+      AwsSDK.S3.put_bucket_versioning("uploads-bucket", "Suspended")
+      #=> {:ok, %{}}
+  """
+  @spec put_bucket_versioning(bucket :: binary(), status :: binary(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def put_bucket_versioning(bucket, status, opts \\ [])
+      when is_binary(bucket) and status in ["Enabled", "Suspended"] do
+    if sandbox?(opts) do
+      sandbox_put_bucket_versioning_response(bucket, status, opts)
+    else
+      do_put_bucket_versioning(bucket, status, opts)
+    end
+  end
+
   @doc false
   def build_operation(method, bucket, key, opts) do
     with {:ok, config} <- resolve_config(opts) do
@@ -2358,6 +2406,11 @@ defmodule AwsSDK.S3 do
     put_bucket_config(bucket, "lifecycle", xml, opts)
   end
 
+  defp do_put_bucket_versioning(bucket, status, opts) do
+    xml = XMLBuilder.build_versioning_configuration(status)
+    put_bucket_config(bucket, "versioning", xml, opts)
+  end
+
   defp put_bucket_config(bucket, query_key, xml, opts) do
     headers = xml_body_headers(xml)
     request_opts = put_opts(opts, query: %{query_key => ""}, body: xml, headers: headers)
@@ -2915,6 +2968,10 @@ defmodule AwsSDK.S3 do
         )
       end
 
+      def put_bucket_versioning(status, opts \\ []) do
+        S3.put_bucket_versioning(source_bucket!(opts), status, with_default_options(opts))
+      end
+
       defp destination_bucket!(opts) do
         with nil <-
                opts[:bucket] ||
@@ -3118,6 +3175,11 @@ defmodule AwsSDK.S3 do
     defdelegate sandbox_put_bucket_lifecycle_configuration_response(bucket, rules, opts),
       to: AwsSDK.S3.Sandbox,
       as: :put_bucket_lifecycle_configuration_response
+
+    @doc false
+    defdelegate sandbox_put_bucket_versioning_response(bucket, status, opts),
+      to: AwsSDK.S3.Sandbox,
+      as: :put_bucket_versioning_response
   else
     defp sandbox_disabled?, do: true
 
@@ -3416,6 +3478,16 @@ defmodule AwsSDK.S3 do
 
       bucket: #{inspect(bucket)}
       rules: #{inspect(rules)}
+      options: #{inspect(opts)}
+      """
+    end
+
+    defp sandbox_put_bucket_versioning_response(bucket, status, opts) do
+      raise """
+      Cannot use sandbox mode outside of test environment.
+
+      bucket: #{inspect(bucket)}
+      status: #{inspect(status)}
       options: #{inspect(opts)}
       """
     end
