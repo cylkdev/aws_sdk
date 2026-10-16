@@ -631,6 +631,48 @@ defmodule AwsSDK.S3 do
   end
 
   @doc """
+  Lists every version of the objects in a bucket, and their delete markers.
+
+  Maps to AWS `ListObjectVersions`. In a bucket with versioning on, deleting
+  an object only adds a delete marker; the earlier versions stay until each
+  is deleted by its version id.
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - s3:ListBucketVersions
+
+  ## Arguments
+
+    * `bucket` - The name of the bucket.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+    * `:prefix` - Only list keys that begin with this prefix.
+    * `:delimiter` - Groups keys that contain the delimiter into a single result.
+    * `:max_keys` - Maximum number of keys returned (up to 1000).
+    * `:key_marker` - The key to start listing from.
+    * `:version_id_marker` - The version to start listing from.
+    * `:encoding_type` - Encoding method for response keys.
+
+  See the "Shared Options" section in the module documentation for common options.
+
+  When `:is_truncated` is true, pass `:next_key_marker` and
+  `:next_version_id_marker` back as `:key_marker` and `:version_id_marker`.
+  """
+  @spec list_object_versions(bucket :: binary(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def list_object_versions(bucket, opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_list_object_versions_response(bucket, opts)
+    else
+      do_list_object_versions(bucket, opts)
+    end
+  end
+
+  @doc """
   Copies an object from one bucket to another.
 
   ## Permissions
@@ -2151,6 +2193,29 @@ defmodule AwsSDK.S3 do
     |> maybe_put_query("encoding-type", opts[:encoding_type])
   end
 
+  defp do_list_object_versions(bucket, opts) do
+    query = list_object_versions_query(opts)
+
+    with {:ok, op} <- build_operation(:get, bucket, nil, Keyword.put(opts, :query, query)),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_list_object_versions(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
+    end
+  end
+
+  defp list_object_versions_query(opts) do
+    %{"versions" => ""}
+    |> maybe_put_query("prefix", opts[:prefix])
+    |> maybe_put_query("delimiter", opts[:delimiter])
+    |> maybe_put_query("max-keys", opts[:max_keys])
+    |> maybe_put_query("key-marker", opts[:key_marker])
+    |> maybe_put_query("version-id-marker", opts[:version_id_marker])
+    |> maybe_put_query("encoding-type", opts[:encoding_type])
+  end
+
   defp do_copy_object(dest_bucket, dest_key, src_bucket, src_key, opts) do
     headers = [{"x-amz-copy-source", copy_source(src_bucket, src_key)}]
 
@@ -3274,6 +3339,11 @@ defmodule AwsSDK.S3 do
       as: :list_objects_response
 
     @doc false
+    defdelegate sandbox_list_object_versions_response(bucket, opts),
+      to: AwsSDK.S3.Sandbox,
+      as: :list_object_versions_response
+
+    @doc false
     defdelegate sandbox_copy_object_response(dest_bucket, dest_key, src_bucket, src_key, opts),
       to: AwsSDK.S3.Sandbox,
       as: :copy_object_response
@@ -3482,6 +3552,15 @@ defmodule AwsSDK.S3 do
     end
 
     defp sandbox_list_objects_response(bucket, opts) do
+      raise """
+      Cannot use sandbox mode outside of test environment.
+
+      bucket: #{inspect(bucket)}
+      options: #{inspect(opts)}
+      """
+    end
+
+    defp sandbox_list_object_versions_response(bucket, opts) do
       raise """
       Cannot use sandbox mode outside of test environment.
 

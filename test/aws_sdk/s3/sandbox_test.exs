@@ -652,6 +652,38 @@ defmodule AwsSDK.S3.SandboxTest do
     end
   end
 
+  describe "list_object_versions/2" do
+    test "returns the response registered for the bucket" do
+      response =
+        {:ok,
+         %{
+           body: %{
+             name: "test-bucket",
+             prefix: nil,
+             key_marker: nil,
+             version_id_marker: nil,
+             next_key_marker: nil,
+             next_version_id_marker: nil,
+             max_keys: 1000,
+             is_truncated: false,
+             delimiter: nil,
+             encoding_type: nil,
+             common_prefixes: [],
+             versions: [],
+             delete_markers: []
+           },
+           headers: %{}
+         }}
+
+      Sandbox.set_list_object_versions_responses([
+        {"test-bucket", fn -> response end}
+      ])
+
+      assert response ===
+               S3.list_object_versions("test-bucket", sandbox: [enabled: true])
+    end
+  end
+
   describe "get_public_access_block/2" do
     test "returns the response registered for the bucket" do
       response =

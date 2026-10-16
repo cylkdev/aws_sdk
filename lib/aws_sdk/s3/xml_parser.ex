@@ -339,6 +339,89 @@ defmodule AwsSDK.S3.XMLParser do
   end
 
   @doc """
+  Parses the `<ListVersionsResult>` body a `ListObjectVersions` call returns.
+
+  `Version` and `DeleteMarker` entries repeat inline, without a wrapper, and
+  are returned as `:versions` and `:delete_markers`. `:max_keys` and `:size`
+  are cast to integers and `:is_truncated` and `:is_latest` to booleans, per
+  the AWS model.
+  """
+  def parse_list_object_versions(xml) do
+    doc = SweetXml.parse(xml)
+
+    %{
+      name: xpath(doc, ~x"//ListVersionsResult/Name/text()"s),
+      prefix:
+        xpath(doc, ~x"//ListVersionsResult/Prefix/text()"o |> transform_by(&optional_text/1)),
+      key_marker:
+        xpath(doc, ~x"//ListVersionsResult/KeyMarker/text()"o |> transform_by(&optional_text/1)),
+      version_id_marker:
+        xpath(
+          doc,
+          ~x"//ListVersionsResult/VersionIdMarker/text()"o |> transform_by(&optional_text/1)
+        ),
+      next_key_marker:
+        xpath(
+          doc,
+          ~x"//ListVersionsResult/NextKeyMarker/text()"o |> transform_by(&optional_text/1)
+        ),
+      next_version_id_marker:
+        xpath(
+          doc,
+          ~x"//ListVersionsResult/NextVersionIdMarker/text()"o |> transform_by(&optional_text/1)
+        ),
+      max_keys: xpath(doc, ~x"//ListVersionsResult/MaxKeys/text()"oi),
+      is_truncated: to_bool(xpath(doc, ~x"//ListVersionsResult/IsTruncated/text()"s)),
+      delimiter:
+        xpath(doc, ~x"//ListVersionsResult/Delimiter/text()"o |> transform_by(&optional_text/1)),
+      encoding_type:
+        xpath(
+          doc,
+          ~x"//ListVersionsResult/EncodingType/text()"o |> transform_by(&optional_text/1)
+        ),
+      common_prefixes:
+        xpath(doc, ~x"//ListVersionsResult/CommonPrefixes"l,
+          prefix: ~x"./Prefix/text()"o |> transform_by(&optional_text/1)
+        ),
+      versions:
+        xpath(doc, ~x"//ListVersionsResult/Version"l,
+          key: ~x"./Key/text()"s,
+          version_id: ~x"./VersionId/text()"s,
+          is_latest: ~x"./IsLatest/text()"s |> transform_by(&to_bool/1),
+          last_modified: ~x"./LastModified/text()"s,
+          etag: ~x"./ETag/text()"s,
+          size: ~x"./Size/text()"oi,
+          storage_class: ~x"./StorageClass/text()"s,
+          checksum_algorithm: ~x"./ChecksumAlgorithm/text()"sl,
+          checksum_type: ~x"./ChecksumType/text()"o |> transform_by(&optional_text/1),
+          owner: [
+            ~x"./Owner"o,
+            id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+            display_name: ~x"./DisplayName/text()"o |> transform_by(&optional_text/1)
+          ],
+          restore_status: [
+            ~x"./RestoreStatus"o,
+            is_restore_in_progress:
+              ~x"./IsRestoreInProgress/text()"o |> transform_by(&optional_text/1),
+            restore_expiry_date: ~x"./RestoreExpiryDate/text()"o |> transform_by(&optional_text/1)
+          ]
+        ),
+      delete_markers:
+        xpath(doc, ~x"//ListVersionsResult/DeleteMarker"l,
+          key: ~x"./Key/text()"s,
+          version_id: ~x"./VersionId/text()"s,
+          is_latest: ~x"./IsLatest/text()"s |> transform_by(&to_bool/1),
+          last_modified: ~x"./LastModified/text()"s,
+          owner: [
+            ~x"./Owner"o,
+            id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+            display_name: ~x"./DisplayName/text()"o |> transform_by(&optional_text/1)
+          ]
+        )
+    }
+  end
+
+  @doc """
   Parses an `InitiateMultipartUploadResult` XML response.
 
   Returns `%{bucket, key, upload_id}`.

@@ -117,6 +117,16 @@ if Code.ensure_loaded?(SandboxRegistry) do
       Sandbox.register(@registry, __MODULE__, :list_objects, entries)
     end
 
+    def list_object_versions_response(bucket, opts) do
+      binding = [bucket: bucket, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :list_object_versions, bucket, binding)
+    end
+
+    def set_list_object_versions_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :list_object_versions, entries)
+    end
+
     def copy_object_response(dest_bucket, dest_key, src_bucket, src_key, opts) do
       binding = [
         dest_bucket: dest_bucket,
