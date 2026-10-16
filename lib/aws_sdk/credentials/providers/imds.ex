@@ -15,6 +15,7 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
   on a non-EC2 host.
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.HTTP
 
   @endpoint "http://169.254.169.254"
@@ -42,10 +43,24 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
     endpoint = opts[:endpoint] || @endpoint
     http = http_opts(opts)
 
-    with {:ok, token} <- get_token(endpoint, http),
-         {:ok, role} <- get_role(endpoint, token, http),
-         {:ok, body} <- get_credentials(endpoint, token, role, http) do
-      decode(body)
+    with {:ok, token_resp} <- get_token(endpoint, http),
+         {:ok, roles_resp} <- get_role(endpoint, token_resp.body, http),
+         role = first_role(roles_resp.body),
+         {:ok, creds_resp} <- get_credentials(endpoint, token_resp.body, role, http),
+         {:ok, creds} <- decode(creds_resp.body) do
+      # The signer reads the top-level keys. Every IMDS response is kept
+      # under `:imds`, one key per call: body as received (the credentials
+      # document JSON-decoded) plus its headers.
+      {:ok,
+       Map.put(
+         creds,
+         :imds,
+         Secrets.strip(%{
+           token: token_resp,
+           security_credentials: roles_resp,
+           role_credentials: %{creds_resp | body: :json.decode(creds_resp.body)}
+         })
+       )}
     end
   end
 
@@ -62,9 +77,14 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
     headers = [{"x-aws-ec2-metadata-token-ttl-seconds", @token_ttl}]
 
     case HTTP.request(:put, url, "", headers, http) do
-      {:ok, %{status_code: 200, body: body}} -> {:ok, body}
-      {:ok, %{status_code: status}} -> {:error, {:imds_token_error, status}}
-      {:error, %{reason: reason}} -> {:error, {:imds_transport_error, reason}}
+      {:ok, %{status_code: 200, body: body, headers: h}} ->
+        {:ok, %{body: body, headers: h}}
+
+      {:ok, %{status_code: status, body: body, headers: h}} ->
+        {:error, {:imds_token_error, %{status_code: status, body: body, headers: h}}}
+
+      {:error, %{error: error}} ->
+        {:error, {:imds_transport_error, error}}
     end
   end
 
@@ -73,10 +93,17 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
     headers = [{"x-aws-ec2-metadata-token", token}]
 
     case HTTP.get(url, headers, http) do
-      {:ok, %{status_code: 200, body: body}} -> {:ok, first_role(body)}
-      {:ok, %{status_code: 404}} -> {:error, :imds_no_role}
-      {:ok, %{status_code: status}} -> {:error, {:imds_role_error, status}}
-      {:error, %{reason: reason}} -> {:error, {:imds_transport_error, reason}}
+      {:ok, %{status_code: 200, body: body, headers: h}} ->
+        {:ok, %{body: body, headers: h}}
+
+      {:ok, %{status_code: 404, body: body, headers: h}} ->
+        {:error, {:imds_no_role, %{status_code: 404, body: body, headers: h}}}
+
+      {:ok, %{status_code: status, body: body, headers: h}} ->
+        {:error, {:imds_role_error, %{status_code: status, body: body, headers: h}}}
+
+      {:error, %{error: error}} ->
+        {:error, {:imds_transport_error, error}}
     end
   end
 
@@ -85,9 +112,14 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
     headers = [{"x-aws-ec2-metadata-token", token}]
 
     case HTTP.get(url, headers, http) do
-      {:ok, %{status_code: 200, body: body}} -> {:ok, body}
-      {:ok, %{status_code: status, body: body}} -> {:error, {:imds_http_error, status, body}}
-      {:error, %{reason: reason}} -> {:error, {:imds_transport_error, reason}}
+      {:ok, %{status_code: 200, body: body, headers: h}} ->
+        {:ok, %{body: body, headers: h}}
+
+      {:ok, %{status_code: status, body: body, headers: h}} ->
+        {:error, {:imds_http_error, %{status_code: status, body: body, headers: h}}}
+
+      {:error, %{error: error}} ->
+        {:error, {:imds_transport_error, error}}
     end
   end
 
@@ -106,7 +138,7 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
          }}
 
       _ ->
-        {:error, {:imds_invalid_response, decoded}}
+        {:error, {:imds_invalid_response, Secrets.strip(decoded)}}
     end
   rescue
     err -> {:error, {:imds_invalid_json, Exception.message(err)}}

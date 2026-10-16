@@ -60,7 +60,7 @@ defmodule Mix.Tasks.AwsSDK.IAM.CreateGroup do
     )
   end
 
-  defp find_group({:ok, %{groups: groups}}, name) do
+  defp find_group({:ok, %{body: %{groups: groups}}}, name) do
     if Enum.any?(groups, &(&1[:group_name] === name)) do
       {:ok, %{}}
     else

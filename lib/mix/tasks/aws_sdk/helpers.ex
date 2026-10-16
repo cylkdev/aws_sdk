@@ -213,7 +213,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
   """
   def find_target(rule, target_id, opts) do
     case AwsSDK.EventBridge.list_targets_by_rule(rule, opts) do
-      {:ok, %{targets: targets}} ->
+      {:ok, %{body: %{targets: targets}}} ->
         if Enum.any?(targets, &(&1[:id] === target_id)) do
           {:ok, %{}}
         else

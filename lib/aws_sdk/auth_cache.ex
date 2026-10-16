@@ -97,7 +97,7 @@ defmodule AwsSDK.AuthCache do
   is near, so a long-running process keeps working without re-authenticating
   on every call.
   """
-  @spec get(key, keyword) :: {:ok, creds} | {:error, term}
+  @spec get(key, keyword) :: {:ok, creds} | {:error, term} | :skip
   def get(key, opts) do
     case lookup(key, opts) do
       {:ok, creds} -> {:ok, creds}
@@ -188,7 +188,7 @@ defmodule AwsSDK.AuthCache do
 
   defp loggable?({:awscli, _}, {:profile_not_found, _}), do: false
   defp loggable?(:aws_instance_auth, {:imds_transport_error, _}), do: false
-  defp loggable?(:aws_instance_auth, :imds_no_role), do: false
+  defp loggable?(:aws_instance_auth, {:imds_no_role, _}), do: false
   defp loggable?(_key, _reason), do: true
 
   # -- GenServer ---------------------------------------------------------------
@@ -230,7 +230,7 @@ defmodule AwsSDK.AuthCache do
           {:error, reason}
 
         :skip ->
-          {:error, :unavailable}
+          :skip
       end
 
     for waiter <- waiters, do: GenServer.reply(waiter, reply)

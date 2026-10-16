@@ -68,19 +68,19 @@ defmodule AwsSDK.HTTP do
   ## Examples
 
       AwsSDK.HTTP.request(:get, "https://example.com/health", "", [{"accept", "text/plain"}])
-      #=> {:ok, %{status: 200, body: "ok", headers: [{"content-type", "text/plain"}]}}
+      #=> {:ok, %{status_code: 200, body: "ok", headers: [{"content-type", "text/plain"}]}}
 
       AwsSDK.HTTP.request(:get, "https://example.com/missing", "", [])
-      #=> {:ok, %{status: 404, body: "not found", headers: [...]}}
+      #=> {:ok, %{status_code: 404, body: "not found", headers: [...]}}
 
       AwsSDK.HTTP.request(:get, "https://unreachable.invalid", "", [], receive_timeout: 1_000)
-      #=> {:error, %Mint.TransportError{reason: :nxdomain}}
+      #=> {:error, %{error: %Req.TransportError{reason: :nxdomain}}}
 
   A non-2xx response is still `{:ok, _}` -- status branching happens in
   `AwsSDK.Client`, not here. Only transport failures return `{:error, _}`.
   """
   @spec request(method, String.t(), iodata, [header], keyword) ::
-          {:ok, response} | {:error, %{reason: term}}
+          {:ok, response} | {:error, %{error: term}}
   def request(method, url, body, headers, opts \\ []) when is_atom(method) do
     :ok = validate_url!(url)
 
@@ -106,9 +106,9 @@ defmodule AwsSDK.HTTP do
   ## Examples
 
       AwsSDK.HTTP.post("https://example.com/api", ~s({"a":1}), [{"content-type", "application/json"}])
-      #=> {:ok, %{status: 200, body: ~s({"ok":true}), headers: [...]}}
+      #=> {:ok, %{status_code: 200, body: ~s({"ok":true}), headers: [...]}}
   """
-  @spec post(String.t(), iodata, [header], keyword) :: {:ok, response} | {:error, %{reason: term}}
+  @spec post(String.t(), iodata, [header], keyword) :: {:ok, response} | {:error, %{error: term}}
   def post(url, body, headers, opts \\ []) do
     request(:post, url, body, headers, opts)
   end
@@ -119,15 +119,15 @@ defmodule AwsSDK.HTTP do
   ## Examples
 
       AwsSDK.HTTP.get("https://example.com/health")
-      #=> {:ok, %{status: 200, body: "ok", headers: [...]}}
+      #=> {:ok, %{status_code: 200, body: "ok", headers: [...]}}
 
       # Used for IMDS credential lookups, which need a token header.
       AwsSDK.HTTP.get("http://169.254.169.254/latest/meta-data/iam/security-credentials/",
         [{"x-aws-ec2-metadata-token", token}]
       )
-      #=> {:ok, %{status: 200, body: "my-instance-role", headers: [...]}}
+      #=> {:ok, %{status_code: 200, body: "my-instance-role", headers: [...]}}
   """
-  @spec get(String.t(), [header], keyword) :: {:ok, response} | {:error, %{reason: term}}
+  @spec get(String.t(), [header], keyword) :: {:ok, response} | {:error, %{error: term}}
   def get(url, headers \\ [], opts \\ []) do
     request(:get, url, nil, headers, opts)
   end
@@ -151,14 +151,14 @@ defmodule AwsSDK.HTTP do
         body,
         [{"content-length", "12000000"}]
       )
-      #=> {:ok, %{status: 200, body: "", headers: [{"etag", "\"9a03\""}]}}
+      #=> {:ok, %{status_code: 200, body: "", headers: [{"etag", "\"9a03\""}]}}
 
   The stream is sent chunk by chunk, so the file is never held in memory in
   full. S3 needs an accurate `content-length`, since it does not accept
   chunked transfer encoding for this.
   """
   @spec stream_upload(method, String.t(), Enumerable.t(), [header], keyword) ::
-          {:ok, response} | {:error, %{reason: term}}
+          {:ok, response} | {:error, %{error: term}}
   def stream_upload(method, url, body_stream, headers, opts \\ []) when is_atom(method) do
     :ok = validate_url!(url)
 
@@ -177,16 +177,18 @@ defmodule AwsSDK.HTTP do
   ## Examples
 
       AwsSDK.HTTP.stream_download("https://uploads.s3.us-east-1.amazonaws.com/big.bin")
-      #=> {:ok, %{status: 200, headers: [...], stream: #Function<...>}}
+      #=> {:ok, %{status_code: 200, headers: [...], body_stream: #Function<...>}}
 
       # Write to disk without buffering the object in memory.
-      {:ok, %{stream: chunks}} = AwsSDK.HTTP.stream_download(url)
+      {:ok, %{body_stream: chunks}} = AwsSDK.HTTP.stream_download(url)
       Stream.into(chunks, File.stream!("/tmp/big.bin")) |> Stream.run()
 
-  Backs `AwsSDK.S3.get_object/3` when `:stream_to` is given.
+  Chunks are binaries; HTTP trailers, if the server sends any, arrive as a
+  `{:trailers, headers}` element. A transport error or receive timeout
+  mid-body raises rather than ending the stream as if it were complete.
   """
   @spec stream_download(String.t(), [header], keyword) ::
-          {:ok, stream_response} | {:error, %{reason: term}}
+          {:ok, stream_response} | {:error, %{error: term}}
   def stream_download(url, headers \\ [], opts \\ []) do
     :ok = validate_url!(url)
     timeout = request_timeout(opts)
@@ -206,7 +208,7 @@ defmodule AwsSDK.HTTP do
          }}
 
       {:error, error} ->
-        {:error, %{reason: error_reason(error)}}
+        {:error, %{error: error}}
     end
   end
 
@@ -232,7 +234,7 @@ defmodule AwsSDK.HTTP do
      }}
   end
 
-  defp handle_response({:error, error}), do: {:error, %{reason: error_reason(error)}}
+  defp handle_response({:error, error}), do: {:error, %{error: error}}
 
   defp body_stream(%Req.Response{body: %Req.Response.Async{}} = response, timeout) do
     Stream.resource(
@@ -261,16 +263,26 @@ defmodule AwsSDK.HTTP do
       msg ->
         case Req.parse_message(response, msg) do
           {:ok, events} -> step({response, events}, timeout)
-          {:error, _exception} -> {:halt, {response, []}}
+          # Halting here would end the stream as though the body were
+          # complete; the caller must learn the body was cut short.
+          {:error, exception} -> raise exception
           :unknown -> {[], {response, []}}
         end
     after
-      timeout -> {:halt, {response, []}}
+      timeout ->
+        raise RuntimeError,
+              "[AwsSDK.HTTP] no response body data within #{timeout}ms; the body is incomplete"
     end
   end
 
   defp step({response, [:done | _]}, _timeout), do: {:halt, {response, []}}
   defp step({response, [{:data, chunk} | rest]}, _timeout), do: {[chunk], {response, rest}}
+  # Trailers carry response data (e.g. S3 checksums) that is not body bytes;
+  # emit them as a tagged element rather than dropping them.
+  defp step({response, [{:trailers, trailers} | rest]}, _timeout) do
+    {[{:trailers, trailers}], {response, rest}}
+  end
+
   defp step({response, [_other | rest]}, timeout), do: step({response, rest}, timeout)
 
   defp to_list_headers(headers) when is_map(headers) do
@@ -284,9 +296,6 @@ defmodule AwsSDK.HTTP do
   defp request_timeout(opts) do
     Keyword.get(opts, :request_timeout, @default_request_timeout)
   end
-
-  defp error_reason(%{reason: reason}), do: reason
-  defp error_reason(other), do: other
 
   defp validate_url!(url) do
     uri = URI.parse(url)

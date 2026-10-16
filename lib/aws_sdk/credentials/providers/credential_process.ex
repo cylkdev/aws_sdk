@@ -15,7 +15,7 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcess do
     profile_name = opts[:profile] || Profile.default()
 
     with profile when is_map(profile) <- Profile.load(profile_name, opts),
-         command when is_binary(command) <- profile["credential_process"] do
+         command when is_binary(command) <- Profile.value(profile, "credential_process") do
       ProcessCreds.run(command, :credential_process)
     else
       _ -> :skip

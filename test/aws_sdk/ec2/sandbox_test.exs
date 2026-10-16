@@ -258,8 +258,10 @@ defmodule AwsSDK.EC2.SandboxTest do
 
     test "returns the response registered for the launch template id" do
       Sandbox.set_describe_launch_template_versions_responses([
-        {"lt-1", fn -> {:ok, %{launch_template_versions: [%{version_number: 1}], next_token: nil}} end},
-        {"lt-2", fn -> {:ok, %{launch_template_versions: [%{version_number: 2}], next_token: nil}} end}
+        {"lt-1",
+         fn -> {:ok, %{launch_template_versions: [%{version_number: 1}], next_token: nil}} end},
+        {"lt-2",
+         fn -> {:ok, %{launch_template_versions: [%{version_number: 2}], next_token: nil}} end}
       ])
 
       assert {:ok, %{launch_template_versions: [%{version_number: 2}]}} =

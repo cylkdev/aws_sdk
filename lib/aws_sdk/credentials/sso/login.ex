@@ -23,7 +23,8 @@ defmodule AwsSDK.Credentials.SSO.Login do
 
   require Logger
 
-  alias AwsSDK.Credentials.Profile
+  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.{ProcessCreds, Profile}
   alias AwsSDK.Credentials.SSO
   alias AwsSDK.Credentials.SSO.{Operation, TokenCache}
 
@@ -37,8 +38,18 @@ defmodule AwsSDK.Credentials.SSO.Login do
   @doc """
   Runs the device-code flow for `profile_name`.
 
-  On success, returns `{:ok, cache}` where `cache` is the new cache
-  contents (also persisted to disk via `TokenCache`).
+  On success, returns `{:ok, calls}`: one key per step, each holding what
+  that step received —
+
+    * `:token_cache_read` — the cache file read while looking for a
+      reusable client registration (`nil` when there was none),
+    * `:register_client` — `%{body:, headers:}` (only when a new
+      registration was needed),
+    * `:start_device_authorization` — `%{body:, headers:}`,
+    * `:open_browser` — `%{command:, output:, exit_status:}`, `:skipped`,
+      or `%{command:, exception:}`,
+    * `:create_token` — every polled `%{status_code:, body:, headers:}`, in order,
+    * `:token_cache_write` — the cache contents written to disk.
 
   ## Examples
 
@@ -50,16 +61,19 @@ defmodule AwsSDK.Credentials.SSO.Login do
       #
       #=> {:ok,
       #=>  %{
-      #=>    "accessToken" => "eyJlbmMiOiJBMjU2R0NN...",
-      #=>    "expiresAt" => "2026-01-01T08:00:00Z",
-      #=>    "region" => "us-east-1",
-      #=>    "startUrl" => "https://example.awsapps.com/start",
-      #=>    "clientId" => "...",
-      #=>    "clientSecret" => "..."
+      #=>    token_cache_read: {:error, :enoent},
+      #=>    register_client: %{body: %{"clientId" => "...", ...}, headers: [...]},
+      #=>    start_device_authorization: %{body: %{"userCode" => "ABCD-EFGH", ...}, headers: [...]},
+      #=>    open_browser: %{command: "open", args: ["..."], stdout: "", stderr: "", exit_status: 0},
+      #=>    create_token: [%{status_code: 400, ...}, %{status_code: 200, ...}],
+      #=>    token_cache_write: %{"accessToken" => "eyJlbmMiOiJBMjU2R0NN...", ...}
       #=>  }}
 
       AwsSDK.Credentials.SSO.Login.run("no-such-profile")
-      #=> {:error, :sso_profile_not_found}
+      #=> {:error, {:profile_not_found, "no-such-profile"}}
+
+  A failure after any call returns `{:error, {reason, calls}}`, where
+  `calls` holds every step result received before the failure.
 
   The token is written to `~/.aws/sso/cache` before returning. A failed
   write is reported as an error rather than success, because reporting
@@ -69,26 +83,58 @@ defmodule AwsSDK.Credentials.SSO.Login do
   @spec run(String.t(), login_opts) :: result
   def run(profile_name, opts \\ []) when is_binary(profile_name) do
     with {:ok, profile} <- load_profile(profile_name, opts),
-         {:ok, config} <- extract_config(profile, opts),
-         {:ok, registration} <- ensure_registration(config, opts),
-         {:ok, device} <- start_device_auth(registration, config, opts),
-         :ok <- prompt_user(device, opts),
-         {:ok, token} <- poll_for_token(registration, device, config, opts) do
-      cache = build_cache(config, registration, token)
+         {:ok, config} <- extract_config(profile, opts) do
+      config |> login(opts) |> Secrets.strip()
+    end
+  end
 
-      # Persisting the token is the point of logging in. If the write fails,
-      # reporting success would tell the user they are logged in while the
-      # next command finds no token.
-      with :ok <- TokenCache.write(config.cache_key, cache, opts) do
-        {:ok, cache}
-      end
+  # Each step's result is added to `calls` under its own key. A failure
+  # returns `{:error, {reason, calls}}`, so everything received before the
+  # failing step is kept.
+  defp login(config, opts) do
+    case ensure_registration(config, opts) do
+      {:error, {reason, calls}} ->
+        {:error, {reason, calls}}
+
+      {:ok, registration, calls} ->
+        case start_device_auth(registration, config, opts) do
+          {:error, reason} ->
+            {:error, {reason, calls}}
+
+          {:ok, device, device_resp} ->
+            calls = Map.put(calls, :start_device_authorization, device_resp)
+            {:ok, browser} = prompt_user(device, opts)
+            calls = Map.put(calls, :open_browser, browser)
+
+            case poll_for_token(registration, device, config, opts) do
+              {:error, {reason, token_resps}} ->
+                {:error, {reason, Map.put(calls, :create_token, token_resps)}}
+
+              {:ok, token, token_resps} ->
+                calls = Map.put(calls, :create_token, token_resps)
+                cache = build_cache(config, registration, token)
+
+                # Persisting the token is the point of logging in. If the
+                # write fails, reporting success would tell the user they are
+                # logged in while the next command finds no token.
+                case TokenCache.write(config.cache_key, cache, opts) do
+                  :ok ->
+                    {:ok, Map.put(calls, :token_cache_write, cache)}
+
+                  {:error, reason} ->
+                    {:error, {reason, Map.put(calls, :token_cache_write, cache)}}
+                end
+            end
+        end
     end
   end
 
   @doc """
   Prompts the user on stdin to confirm an interactive login. Returns
-  `:ok` when the user accepts, `{:error, :sso_login_declined}`
-  otherwise.
+  `{:ok, %{answer: line}}` when the user accepts (`answer: :noninteractive`
+  when no tty was prompted), `{:error, {:sso_login_declined, answer}}`
+  otherwise, where `answer` is the line read, `:eof`, `:timeout`, or
+  `:noninteractive`.
 
   Honors `auto_sso_login_noninteractive`: when stdin is not a tty,
   returns `:ok` only if the opt is truthy.
@@ -98,31 +144,31 @@ defmodule AwsSDK.Credentials.SSO.Login do
       AwsSDK.Credentials.SSO.Login.confirm("dev")
       # AWS SSO credentials for profile dev have expired.
       # Run interactive login now? [Y/n]
-      #=> :ok
+      #=> {:ok, %{answer: "y\n"}}
 
       # Declined, EOF, or no answer within 60 seconds:
-      #=> {:error, :sso_login_declined}
+      #=> {:error, {:sso_login_declined, :timeout}}
 
   When stdin is not a tty there is nobody to prompt, so this declines unless
   `auto_sso_login_noninteractive` is truthy -- otherwise a CI run would hang
   on a prompt no one can answer.
   """
-  @spec confirm(String.t(), login_opts) :: :ok | {:error, term}
+  @spec confirm(String.t(), login_opts) :: {:ok, map} | {:error, term}
   def confirm(profile_name, opts \\ []) do
     if tty?() do
       prompt =
         "AWS SSO credentials for profile #{profile_name} have expired. Run interactive login now? [Y/n] "
 
       case gets_with_timeout(prompt, 60_000) do
-        :timeout -> {:error, :sso_login_declined}
-        :eof -> {:error, :sso_login_declined}
+        :timeout -> {:error, {:sso_login_declined, :timeout}}
+        :eof -> {:error, {:sso_login_declined, :eof}}
         answer -> interpret_confirmation(answer)
       end
     else
       if noninteractive_allowed?(opts) do
-        :ok
+        {:ok, %{answer: :noninteractive}}
       else
-        {:error, :sso_login_declined}
+        {:error, {:sso_login_declined, :noninteractive}}
       end
     end
   end
@@ -131,9 +177,9 @@ defmodule AwsSDK.Credentials.SSO.Login do
     trimmed = answer |> String.trim() |> String.downcase()
 
     if trimmed in ["", "y", "yes"] do
-      :ok
+      {:ok, %{answer: answer}}
     else
-      {:error, :sso_login_declined}
+      {:error, {:sso_login_declined, answer}}
     end
   end
 
@@ -160,17 +206,21 @@ defmodule AwsSDK.Credentials.SSO.Login do
 
   defp extract_config(profile, opts) do
     cond do
-      session_name = profile["sso_session"] ->
+      session_name = Profile.value(profile, "sso_session") ->
         case Profile.load_sso_session(session_name, opts) do
-          nil ->
-            {:error, {:sso_session_not_found, session_name}}
+          %{section: nil} = file ->
+            {:error, {:sso_session_not_found, session_name, file}}
 
-          session ->
+          %{section: session} ->
             finalize_config(session["sso_start_url"], session["sso_region"], session_name)
         end
 
-      profile["sso_start_url"] ->
-        finalize_config(profile["sso_start_url"], profile["sso_region"], profile["sso_start_url"])
+      Profile.value(profile, "sso_start_url") ->
+        finalize_config(
+          Profile.value(profile, "sso_start_url"),
+          Profile.value(profile, "sso_region"),
+          Profile.value(profile, "sso_start_url")
+        )
 
       true ->
         {:error, :sso_not_configured}
@@ -185,19 +235,23 @@ defmodule AwsSDK.Credentials.SSO.Login do
   end
 
   defp ensure_registration(config, opts) do
-    existing = read_cache_for_registration(config.cache_key, opts)
+    # The read result is kept as returned, `{:error, _}` included; a missing
+    # or unreadable cache just means a fresh registration.
+    read = TokenCache.read(config.cache_key, opts)
+    calls = %{token_cache_read: read}
 
-    if registration_valid?(existing) do
-      {:ok, Map.take(existing, ["clientId", "clientSecret", "registrationExpiresAt"])}
+    with {:ok, existing} <- read,
+         true <- registration_valid?(existing) do
+      {:ok, Map.take(existing, ["clientId", "clientSecret", "registrationExpiresAt"]), calls}
     else
-      register(config, opts)
-    end
-  end
+      _ ->
+        case register(config, opts) do
+          {:ok, registration, response} ->
+            {:ok, registration, Map.put(calls, :register_client, response)}
 
-  defp read_cache_for_registration(key, opts) do
-    case TokenCache.read(key, opts) do
-      {:ok, cached} -> cached
-      _ -> %{}
+          {:error, reason} ->
+            {:error, {reason, calls}}
+        end
     end
   end
 
@@ -225,9 +279,12 @@ defmodule AwsSDK.Credentials.SSO.Login do
     }
 
     op = oidc_op("/client/register", body, config.region, opts)
+    response = SSO.execute(op)
 
-    case interpret_oidc_response(SSO.execute(op), fn _ -> nil end) do
+    case interpret_oidc_response(response, fn _ -> nil end) do
       {:ok, body} ->
+        {:ok, %{headers: headers}} = response
+
         expires_at =
           body["clientSecretExpiresAt"]
           |> DateTime.from_unix!(:second)
@@ -238,7 +295,7 @@ defmodule AwsSDK.Credentials.SSO.Login do
            "clientId" => body["clientId"],
            "clientSecret" => body["clientSecret"],
            "registrationExpiresAt" => expires_at
-         }}
+         }, %{body: body, headers: headers}}
 
       {:error, _} = err ->
         err
@@ -258,9 +315,12 @@ defmodule AwsSDK.Credentials.SSO.Login do
     }
 
     op = oidc_op("/device_authorization", body, config.region, opts)
+    response = SSO.execute(op)
 
-    case interpret_oidc_response(SSO.execute(op), fn _ -> nil end) do
+    case interpret_oidc_response(response, fn _ -> nil end) do
       {:ok, body} ->
+        {:ok, %{headers: headers}} = response
+
         {:ok,
          %{
            device_code: body["deviceCode"],
@@ -269,7 +329,7 @@ defmodule AwsSDK.Credentials.SSO.Login do
            verification_uri_complete: body["verificationUriComplete"],
            expires_in: body["expiresIn"] || 600,
            interval: body["interval"] || 5
-         }}
+         }, %{body: body, headers: headers}}
 
       {:error, _} = err ->
         err
@@ -281,8 +341,7 @@ defmodule AwsSDK.Credentials.SSO.Login do
 
     Logger.info("AWS SSO: open #{uri} in your browser and confirm code #{device.user_code}")
 
-    unless opts[:skip_browser_open], do: open_browser(uri)
-    :ok
+    if opts[:skip_browser_open], do: {:ok, :skipped}, else: {:ok, open_browser(uri)}
   end
 
   defp open_browser(uri) do
@@ -293,32 +352,32 @@ defmodule AwsSDK.Credentials.SSO.Login do
         {:win32, _} -> {"cmd", ["/c", "start", uri]}
       end
 
+    # The URL and code were already printed, so failing to auto-open a
+    # browser is not fatal -- but it should not look like it worked.
     try do
-      # The URL and code were already printed, so failing to auto-open a
-      # browser is not fatal -- but it should not look like it worked.
-      case System.cmd(bin, args, stderr_to_stdout: true) do
-        {_output, 0} ->
-          :ok
+      result = ProcessCreds.cmd(bin, args)
 
-        {output, status} ->
-          Logger.debug("AWS SSO: #{bin} exited #{status}: #{String.trim(output)}")
-          :ok
+      if result.exit_status !== 0 do
+        Logger.debug("AWS SSO: #{bin} exited #{result.exit_status}: #{inspect(result.stderr)}")
       end
+
+      result
     rescue
-      _ -> :ok
+      err -> %{command: bin, args: args, exception: err}
     catch
-      _, _ -> :ok
+      kind, reason -> %{command: bin, args: args, exception: {kind, reason}}
     end
   end
 
   defp poll_for_token(registration, device, config, opts) do
     deadline = System.monotonic_time(:second) + device.expires_in
-    poll_loop(registration, device, config, opts, deadline, device.interval)
+    poll_loop(registration, device, config, opts, deadline, device.interval, [])
   end
 
-  defp poll_loop(registration, device, config, opts, deadline, interval) do
+  # Every CreateToken response (pending ones included) is kept, in order.
+  defp poll_loop(registration, device, config, opts, deadline, interval, responses) do
     if System.monotonic_time(:second) >= deadline do
-      {:error, :sso_login_aborted}
+      {:error, {:sso_login_aborted, Enum.reverse(responses)}}
     else
       :timer.sleep(interval * 1_000)
 
@@ -330,16 +389,23 @@ defmodule AwsSDK.Credentials.SSO.Login do
       }
 
       op = oidc_op("/token", body, config.region, opts)
+      response = SSO.execute(op)
 
-      case interpret_oidc_response(SSO.execute(op), device_error(interval)) do
+      responses =
+        case response do
+          {:ok, resp} -> [resp | responses]
+          {:error, _} = err -> [err | responses]
+        end
+
+      case interpret_oidc_response(response, device_error(interval)) do
         {:ok, body} ->
-          {:ok, body}
+          {:ok, body, Enum.reverse(responses)}
 
         {:pending, new_interval} ->
-          poll_loop(registration, device, config, opts, deadline, new_interval)
+          poll_loop(registration, device, config, opts, deadline, new_interval, responses)
 
-        {:error, _} = err ->
-          err
+        {:error, reason} ->
+          {:error, {reason, Enum.reverse(responses)}}
       end
     end
   end
@@ -399,8 +465,8 @@ defmodule AwsSDK.Credentials.SSO.Login do
     end
   end
 
-  defp interpret_oidc_response({:ok, %{status_code: 401}}, _err_fn) do
-    {:error, :sso_token_expired}
+  defp interpret_oidc_response({:ok, %{status_code: 401} = response}, _err_fn) do
+    {:error, {:sso_token_expired, response}}
   end
 
   defp interpret_oidc_response({:ok, %{status_code: status, body: resp_body}}, _err_fn) do
@@ -413,8 +479,8 @@ defmodule AwsSDK.Credentials.SSO.Login do
     fn
       {"authorization_pending", _} -> {:pending, interval}
       {"slow_down", _} -> {:pending, interval + 5}
-      {"expired_token", _} -> {:error, :sso_login_aborted}
-      {"access_denied", _} -> {:error, :sso_login_aborted}
+      {"expired_token", err_body} -> {:error, {:sso_login_aborted, err_body}}
+      {"access_denied", err_body} -> {:error, {:sso_login_aborted, err_body}}
       _ -> nil
     end
   end

@@ -68,7 +68,7 @@ defmodule AwsSDK.IAM do
       end
   """
 
-  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2]
+  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
   alias AwsSDK.Operation
@@ -95,7 +95,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.create_user("alice", path: "/engineering/")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    user: %{
       #=>      user_name: "alice",
@@ -103,17 +103,17 @@ defmodule AwsSDK.IAM do
       #=>      arn: "arn:aws:iam::123456789012:user/alice",
       #=>      path: "/",
       #=>      create_date: "2026-01-01T00:00:00Z",
-      #=>      password_last_used: "",
+      #=>      password_last_used: nil,
       #=>      permissions_boundary: nil,
       #=>      tags: []
       #=>    }
-      #=>  }}
+      #=>  }}}
 
   The result keeps AWS's `CreateUserResult/User` envelope, so the user sits
   under `:user`.
   """
   @spec create_user(username :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_user(username, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_user_response(username, opts)
@@ -129,8 +129,12 @@ defmodule AwsSDK.IAM do
       |> maybe_put("PermissionsBoundary", opts[:permissions_boundary])
 
     with {:ok, op} <- build_operation("CreateUser", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{user: parse_user(body, ~x"//CreateUserResult/User"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{user: parse_user(body, ~x"//CreateUserResult/User"e)}
+       }}
     end
   end
 
@@ -145,7 +149,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_user(user_name: "alice")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    user: %{
       #=>      user_name: "alice",
@@ -160,14 +164,14 @@ defmodule AwsSDK.IAM do
       #=>      },
       #=>      tags: [%{key: "team", value: "infra"}]
       #=>    }
-      #=>  }}
+      #=>  }}}
 
       # Omit :user_name to describe the caller's own user.
       AwsSDK.IAM.get_user()
-      #=> {:ok, %{user: %{user_name: "alice"}}}
+      #=> {:ok, %{body: %{user: %{user_name: "alice"}}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec get_user(opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def get_user(opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_user_response(opts)
@@ -179,8 +183,12 @@ defmodule AwsSDK.IAM do
   defp do_get_user(opts) do
     with {:ok, op} <-
            build_operation("GetUser", maybe_put(%{}, "UserName", opts[:user_name]), opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{user: parse_user(body, ~x"//GetUserResult/User"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{user: parse_user(body, ~x"//GetUserResult/User"e)}
+       }}
     end
   end
 
@@ -196,7 +204,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_users(path_prefix: "/engineering/")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    users: [
       #=>      %{
@@ -211,13 +219,17 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   Each user carries the same members as `get_user/1` returns. When
   `:is_truncated` is true, pass `:marker` back to fetch the next page.
   """
   @spec list_users(opts :: keyword()) ::
-          {:ok, %{users: list(map()), is_truncated: boolean(), marker: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{users: list(map()), is_truncated: boolean(), marker: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def list_users(opts \\ []) do
     if sandbox?(opts) do
@@ -235,14 +247,17 @@ defmodule AwsSDK.IAM do
       |> maybe_put("Marker", opts[:marker])
 
     with {:ok, op} <- build_operation("ListUsers", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      marker = xpath(body, ~x"//ListUsersResult/Marker/text()"s)
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      marker = xpath(body, ~x"//ListUsersResult/Marker/text()"o |> transform_by(&optional_text/1))
 
       {:ok,
        %{
-         users: parse_user(body, ~x"//ListUsersResult/Users/member"l),
-         is_truncated: xpath(body, ~x"//ListUsersResult/IsTruncated/text()"s) === "true",
-         marker: if(marker === "", do: nil, else: marker)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           users: parse_user(body, ~x"//ListUsersResult/Users/member"l),
+           is_truncated: xpath(body, ~x"//ListUsersResult/IsTruncated/text()"s) === "true",
+           marker: marker
+         }
        }}
     end
   end
@@ -258,13 +273,13 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_user("alice")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   AWS returns an empty body. Access keys, policies and group memberships
   must be removed first or AWS rejects the call.
   """
   @spec delete_user(username :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_user(username, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_user_response(username, opts)
@@ -275,8 +290,8 @@ defmodule AwsSDK.IAM do
 
   defp do_delete_user(username, opts) do
     with {:ok, op} <- build_operation("DeleteUser", %{"UserName" => username}, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -297,7 +312,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.create_access_key(user_name: "alice")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    access_key: %{
       #=>      access_key_id: "AKIA1EXAMPLE",
@@ -307,10 +322,12 @@ defmodule AwsSDK.IAM do
       #=>      status: "Active",
       #=>      create_date: "2026-01-01T00:00:00Z"
       #=>    }
-      #=>  }}
+      #=>  }}}
   """
   @spec create_access_key(opts :: keyword()) ::
-          {:ok, %{access_key_id: String.t(), secret_access_key: String.t()}} | {:error, term()}
+          {:ok,
+           %{body: %{access_key_id: String.t(), secret_access_key: String.t()}, headers: map()}}
+          | {:error, term()}
   def create_access_key(opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_access_key_response(opts)
@@ -322,8 +339,12 @@ defmodule AwsSDK.IAM do
   defp do_create_access_key(opts) do
     with {:ok, op} <-
            build_operation("CreateAccessKey", maybe_put(%{}, "UserName", opts[:user_name]), opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{access_key: parse_access_key(body, ~x"//CreateAccessKeyResult/AccessKey"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{access_key: parse_access_key(body, ~x"//CreateAccessKeyResult/AccessKey"e)}
+       }}
     end
   end
 
@@ -338,7 +359,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_access_keys(user_name: "alice")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    access_key_metadata: [
       #=>      %{
@@ -350,7 +371,7 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   The key is `:access_key_metadata`, which is AWS's member name; secrets are
   never returned here.
@@ -379,7 +400,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListAccessKeys", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       access_key_metadata =
         xpath(body, ~x"//AccessKeyMetadata/member"l,
           access_key_id: ~x"./AccessKeyId/text()"s,
@@ -390,9 +411,16 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         access_key_metadata: access_key_metadata,
-         is_truncated: xpath(body, ~x"//ListAccessKeysResult/IsTruncated/text()"s) == "true",
-         marker: xpath(body, ~x"//ListAccessKeysResult/Marker/text()"so)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           access_key_metadata: access_key_metadata,
+           is_truncated: xpath(body, ~x"//ListAccessKeysResult/IsTruncated/text()"s) == "true",
+           marker:
+             xpath(
+               body,
+               ~x"//ListAccessKeysResult/Marker/text()"o |> transform_by(&optional_text/1)
+             )
+         }
        }}
     end
   end
@@ -409,10 +437,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_access_key("AKIA1EXAMPLE", user_name: "alice")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_access_key(access_key_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_access_key(access_key_id, opts \\ []) when is_binary(access_key_id) do
     if sandbox?(opts) do
       sandbox_delete_access_key_response(access_key_id, opts)
@@ -425,8 +453,8 @@ defmodule AwsSDK.IAM do
     params = maybe_put(%{"AccessKeyId" => access_key_id}, "UserName", opts[:user_name])
 
     with {:ok, op} <- build_operation("DeleteAccessKey", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -445,7 +473,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.create_group("developers")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    group: %{
       #=>      group_name: "developers",
@@ -454,10 +482,10 @@ defmodule AwsSDK.IAM do
       #=>      path: "/",
       #=>      create_date: "2026-01-01T00:00:00Z"
       #=>    }
-      #=>  }}
+      #=>  }}}
   """
   @spec create_group(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_group(name, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_group_response(name, opts)
@@ -470,8 +498,12 @@ defmodule AwsSDK.IAM do
     params = maybe_put(%{"GroupName" => name}, "Path", opts[:path])
 
     with {:ok, op} <- build_operation("CreateGroup", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{group: parse_group(body, ~x"//CreateGroupResult/Group"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{group: parse_group(body, ~x"//CreateGroupResult/Group"e)}
+       }}
     end
   end
 
@@ -485,7 +517,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_groups()
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    groups: [
       #=>      %{
@@ -498,10 +530,14 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
   """
   @spec list_groups(opts :: keyword()) ::
-          {:ok, %{groups: list(map()), is_truncated: boolean(), marker: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{groups: list(map()), is_truncated: boolean(), marker: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def list_groups(opts \\ []) do
     if sandbox?(opts) do
@@ -519,7 +555,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("Marker", opts[:marker])
 
     with {:ok, op} <- build_operation("ListGroups", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       groups =
         xpath(body, ~x"//Groups/member"l,
           group_name: ~x"./GroupName/text()"s,
@@ -531,9 +567,13 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         groups: groups,
-         is_truncated: xpath(body, ~x"//ListGroupsResult/IsTruncated/text()"s) == "true",
-         marker: xpath(body, ~x"//ListGroupsResult/Marker/text()"so)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           groups: groups,
+           is_truncated: xpath(body, ~x"//ListGroupsResult/IsTruncated/text()"s) == "true",
+           marker:
+             xpath(body, ~x"//ListGroupsResult/Marker/text()"o |> transform_by(&optional_text/1))
+         }
        }}
     end
   end
@@ -549,10 +589,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_group("developers")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_group(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_group(name, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_group_response(name, opts)
@@ -563,8 +603,8 @@ defmodule AwsSDK.IAM do
 
   defp do_delete_group(name, opts) do
     with {:ok, op} <- build_operation("DeleteGroup", %{"GroupName" => name}, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -584,10 +624,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.add_user_to_group("developers", "alice")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec add_user_to_group(group_name :: String.t(), username :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def add_user_to_group(group_name, username, opts \\ []) do
     if sandbox?(opts) do
       sandbox_add_user_to_group_response(group_name, username, opts)
@@ -603,8 +643,8 @@ defmodule AwsSDK.IAM do
              %{"GroupName" => group_name, "UserName" => username},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -620,14 +660,14 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.remove_user_from_group("developers", "alice")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec remove_user_from_group(
           group_name :: String.t(),
           username :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def remove_user_from_group(group_name, username, opts \\ []) do
     if sandbox?(opts) do
       sandbox_remove_user_from_group_response(group_name, username, opts)
@@ -643,8 +683,8 @@ defmodule AwsSDK.IAM do
              %{"GroupName" => group_name, "UserName" => username},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -677,7 +717,7 @@ defmodule AwsSDK.IAM do
       }
 
       AwsSDK.IAM.create_role("AppRole", trust_policy, description: "App instance role")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    role: %{
       #=>      role_name: "AppRole",
@@ -693,10 +733,12 @@ defmodule AwsSDK.IAM do
       #=>      role_last_used: nil,
       #=>      tags: []
       #=>    }
-      #=>  }}
+      #=>  }}}
   """
   @spec create_role(name :: String.t(), trust_policy :: map(), opts :: keyword()) ::
-          {:ok, %{role_name: String.t(), role_id: String.t(), arn: String.t()}} | {:error, term()}
+          {:ok,
+           %{body: %{role_name: String.t(), role_id: String.t(), arn: String.t()}, headers: map()}}
+          | {:error, term()}
   def create_role(name, trust_policy, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_role_response(name, opts)
@@ -716,8 +758,12 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxSessionDuration", opts[:max_session_duration])
 
     with {:ok, op} <- build_operation("CreateRole", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{role: parse_role(body, ~x"//Role"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{role: parse_role(body, ~x"//Role"e)}
+       }}
     end
   end
 
@@ -732,7 +778,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_role("AppRole")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    role: %{
       #=>      role_name: "AppRole",
@@ -753,13 +799,13 @@ defmodule AwsSDK.IAM do
       #=>      },
       #=>      tags: [%{key: "team", value: "infra"}]
       #=>    }
-      #=>  }}
+      #=>  }}}
 
   `:permissions_boundary` and `:role_last_used` are structures on the wire
   and stay structures here; both are `nil` when AWS omits them.
   """
   @spec get_role(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def get_role(name, opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_role_response(name, opts)
@@ -770,8 +816,12 @@ defmodule AwsSDK.IAM do
 
   defp do_get_role(name, opts) do
     with {:ok, op} <- build_operation("GetRole", %{"RoleName" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{role: parse_role(body, ~x"//Role"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{role: parse_role(body, ~x"//Role"e)}
+       }}
     end
   end
 
@@ -786,7 +836,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_instance_profile("web")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    instance_profile: %{
       #=>      path: "/",
@@ -805,12 +855,12 @@ defmodule AwsSDK.IAM do
       #=>      ],
       #=>      tags: [%{key: "Team", value: "ops"}]
       #=>    }
-      #=>  }}
+      #=>  }}}
 
   The nested roles carry every member `get_role/2` returns.
   """
   @spec get_instance_profile(instance_profile_name :: String.t(), opts :: keyword()) ::
-          {:ok, %{instance_profile: map()}} | {:error, term()}
+          {:ok, %{body: %{instance_profile: map()}, headers: map()}} | {:error, term()}
   def get_instance_profile(instance_profile_name, opts \\ [])
       when is_binary(instance_profile_name) do
     if sandbox?(opts) do
@@ -824,8 +874,9 @@ defmodule AwsSDK.IAM do
     params = %{"InstanceProfileName" => instance_profile_name}
 
     with {:ok, op} <- build_operation("GetInstanceProfile", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_instance_profile(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{headers: Client.deserialize_headers(headers, opts), body: parse_instance_profile(body)}}
     end
   end
 
@@ -865,7 +916,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_roles(path_prefix: "/service-role/")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    roles: [
       #=>      %{
@@ -883,12 +934,16 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   Each role carries the same members as `get_role/2` returns.
   """
   @spec list_roles(opts :: keyword()) ::
-          {:ok, %{roles: list(map()), is_truncated: boolean(), marker: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{roles: list(map()), is_truncated: boolean(), marker: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def list_roles(opts \\ []) do
     if sandbox?(opts) do
@@ -906,12 +961,16 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListRoles", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       {:ok,
        %{
-         roles: parse_role(body, ~x"//Roles/member"l),
-         is_truncated: xpath(body, ~x"//ListRolesResult/IsTruncated/text()"s) == "true",
-         marker: xpath(body, ~x"//ListRolesResult/Marker/text()"so)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           roles: parse_role(body, ~x"//Roles/member"l),
+           is_truncated: xpath(body, ~x"//ListRolesResult/IsTruncated/text()"s) == "true",
+           marker:
+             xpath(body, ~x"//ListRolesResult/Marker/text()"o |> transform_by(&optional_text/1))
+         }
        }}
     end
   end
@@ -927,12 +986,12 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_role("AppRole")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Inline and attached policies must be removed first.
   """
   @spec delete_role(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_role(name, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_role_response(name, opts)
@@ -943,8 +1002,8 @@ defmodule AwsSDK.IAM do
 
   defp do_delete_role(name, opts) do
     with {:ok, op} <- build_operation("DeleteRole", %{"RoleName" => name}, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -971,13 +1030,13 @@ defmodule AwsSDK.IAM do
       }
 
       AwsSDK.IAM.update_assume_role_policy("AppRole", trust_policy)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec update_assume_role_policy(
           role_name :: String.t(),
           policy_document :: map(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def update_assume_role_policy(role_name, policy_document, opts \\ []) do
     if sandbox?(opts) do
       sandbox_update_assume_role_policy_response(role_name, opts)
@@ -993,8 +1052,8 @@ defmodule AwsSDK.IAM do
     }
 
     with {:ok, op} <- build_operation("UpdateAssumeRolePolicy", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1022,14 +1081,14 @@ defmodule AwsSDK.IAM do
       }
 
       AwsSDK.IAM.put_role_policy("AppRole", "read-bucket", policy)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec put_role_policy(
           role_name :: String.t(),
           policy_name :: String.t(),
           document :: map(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def put_role_policy(role_name, policy_name, document, opts \\ []) do
     if sandbox?(opts) do
       sandbox_put_role_policy_response(role_name, policy_name, opts)
@@ -1046,8 +1105,8 @@ defmodule AwsSDK.IAM do
     }
 
     with {:ok, op} <- build_operation("PutRolePolicy", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1067,20 +1126,24 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_role_policy("AppRole", "read-bucket")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    role_name: "AppRole",
       #=>    policy_name: "read-bucket",
       #=>    # URL-encoded JSON, as AWS returns it.
       #=>    policy_document: "%7B%22Version%22%3A%222012-10-17%22..."
-      #=>  }}
+      #=>  }}}
   """
   @spec get_role_policy(
           role_name :: String.t(),
           policy_name :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{role_name: String.t(), policy_name: String.t(), policy_document: map()}}
+          {:ok,
+           %{
+             body: %{role_name: String.t(), policy_name: String.t(), policy_document: map()},
+             headers: map()
+           }}
           | {:error, term()}
   def get_role_policy(role_name, policy_name, opts \\ []) do
     if sandbox?(opts) do
@@ -1097,7 +1160,7 @@ defmodule AwsSDK.IAM do
              %{"RoleName" => role_name, "PolicyName" => policy_name},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       fields =
         xpath(body, ~x"//GetRolePolicyResult"e,
           role_name: ~x"./RoleName/text()"s,
@@ -1109,9 +1172,12 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         role_name: fields.role_name,
-         policy_name: fields.policy_name,
-         policy_document: document
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           role_name: fields.role_name,
+           policy_name: fields.policy_name,
+           policy_document: document
+         }
        }}
     end
   end
@@ -1128,13 +1194,13 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_role_policy("AppRole", "read-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_role_policy(
           role_name :: String.t(),
           policy_name :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_role_policy(role_name, policy_name, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_role_policy_response(role_name, policy_name, opts)
@@ -1150,8 +1216,8 @@ defmodule AwsSDK.IAM do
              %{"RoleName" => role_name, "PolicyName" => policy_name},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1168,12 +1234,12 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_role_policies("AppRole")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policy_names: ["read-bucket", "write-logs"],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   Inline policies only; managed policies come from
   `list_attached_role_policies/2`.
@@ -1201,16 +1267,21 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListRolePolicies", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       policy_names = xpath(body, ~x"//ListRolePoliciesResult/PolicyNames/member/text()"ls)
       is_truncated = xpath(body, ~x"//ListRolePoliciesResult/IsTruncated/text()"s) === "true"
-      marker = xpath(body, ~x"//ListRolePoliciesResult/Marker/text()"s)
+
+      marker =
+        xpath(body, ~x"//ListRolePoliciesResult/Marker/text()"o |> transform_by(&optional_text/1))
 
       {:ok,
        %{
-         policy_names: policy_names,
-         is_truncated: is_truncated,
-         marker: if(marker === "", do: nil, else: marker)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           policy_names: policy_names,
+           is_truncated: is_truncated,
+           marker: marker
+         }
        }}
     end
   end
@@ -1238,7 +1309,7 @@ defmodule AwsSDK.IAM do
       }
 
       AwsSDK.IAM.create_policy("ReadBucket", document, description: "Read one bucket")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policy: %{
       #=>      policy_name: "ReadBucket",
@@ -1254,10 +1325,14 @@ defmodule AwsSDK.IAM do
       #=>      update_date: "2026-01-01T00:00:00Z",
       #=>      tags: []
       #=>    }
-      #=>  }}
+      #=>  }}}
   """
   @spec create_policy(name :: String.t(), policy_document :: map(), opts :: keyword()) ::
-          {:ok, %{policy_name: String.t(), policy_id: String.t(), arn: String.t()}}
+          {:ok,
+           %{
+             body: %{policy_name: String.t(), policy_id: String.t(), arn: String.t()},
+             headers: map()
+           }}
           | {:error, term()}
   def create_policy(name, policy_document, opts \\ []) do
     if sandbox?(opts) do
@@ -1277,8 +1352,12 @@ defmodule AwsSDK.IAM do
       |> maybe_put("Description", opts[:description])
 
     with {:ok, op} <- build_operation("CreatePolicy", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{policy: parse_policy(body, ~x"//Policy"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{policy: parse_policy(body, ~x"//Policy"e)}
+       }}
     end
   end
 
@@ -1293,7 +1372,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_policy("arn:aws:iam::123456789012:policy/ReadBucket")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policy: %{
       #=>      policy_name: "ReadBucket",
@@ -1309,13 +1388,13 @@ defmodule AwsSDK.IAM do
       #=>      update_date: "2026-02-01T00:00:00Z",
       #=>      tags: []
       #=>    }
-      #=>  }}
+      #=>  }}}
 
   The policy body is not here -- fetch a version with
   `get_policy_version/3`.
   """
   @spec get_policy(policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def get_policy(policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_policy_response(policy_arn, opts)
@@ -1326,8 +1405,12 @@ defmodule AwsSDK.IAM do
 
   defp do_get_policy(policy_arn, opts) do
     with {:ok, op} <- build_operation("GetPolicy", %{"PolicyArn" => policy_arn}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, %{policy: parse_policy(body, ~x"//Policy"e)}}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{policy: parse_policy(body, ~x"//Policy"e)}
+       }}
     end
   end
 
@@ -1346,7 +1429,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_policy_version("arn:aws:iam::123456789012:policy/ReadBucket", "v3")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policy_version: %{
       #=>      version_id: "v3",
@@ -1364,7 +1447,7 @@ defmodule AwsSDK.IAM do
       #=>        ]
       #=>      }
       #=>    }
-      #=>  }}
+      #=>  }}}
   """
   @spec get_policy_version(policy_arn :: String.t(), version_id :: String.t(), opts :: keyword()) ::
           {:ok,
@@ -1390,7 +1473,7 @@ defmodule AwsSDK.IAM do
              %{"PolicyArn" => policy_arn, "VersionId" => version_id},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       fields =
         xpath(body, ~x"//GetPolicyVersionResult/PolicyVersion"e,
           document: ~x"./Document/text()"s,
@@ -1406,11 +1489,14 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         policy_version: %{
-           document: document,
-           version_id: fields.version_id,
-           is_default_version: fields.is_default_version === "true",
-           create_date: fields.create_date
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           policy_version: %{
+             document: document,
+             version_id: fields.version_id,
+             is_default_version: fields.is_default_version === "true",
+             create_date: fields.create_date
+           }
          }
        }}
     end
@@ -1430,7 +1516,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_policies(scope: "Local", only_attached: true)
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policies: [
       #=>      %{
@@ -1448,10 +1534,14 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
   """
   @spec list_policies(opts :: keyword()) ::
-          {:ok, %{policies: list(map()), is_truncated: boolean(), marker: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{policies: list(map()), is_truncated: boolean(), marker: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def list_policies(opts \\ []) do
     if sandbox?(opts) do
@@ -1471,12 +1561,19 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListPolicies", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       {:ok,
        %{
-         policies: parse_policy(body, ~x"//Policies/member"l),
-         is_truncated: xpath(body, ~x"//ListPoliciesResult/IsTruncated/text()"s) == "true",
-         marker: xpath(body, ~x"//ListPoliciesResult/Marker/text()"so)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           policies: parse_policy(body, ~x"//Policies/member"l),
+           is_truncated: xpath(body, ~x"//ListPoliciesResult/IsTruncated/text()"s) == "true",
+           marker:
+             xpath(
+               body,
+               ~x"//ListPoliciesResult/Marker/text()"o |> transform_by(&optional_text/1)
+             )
+         }
        }}
     end
   end
@@ -1492,12 +1589,12 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_policy("arn:aws:iam::123456789012:policy/ReadBucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Non-default versions and all attachments must be removed first.
   """
   @spec delete_policy(policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_policy(policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_policy_response(policy_arn, opts)
@@ -1508,8 +1605,8 @@ defmodule AwsSDK.IAM do
 
   defp do_delete_policy(policy_arn, opts) do
     with {:ok, op} <- build_operation("DeletePolicy", %{"PolicyArn" => policy_arn}, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1531,14 +1628,14 @@ defmodule AwsSDK.IAM do
         document,
         set_as_default: true
       )
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    policy_version: %{
       #=>      version_id: "v4",
       #=>      is_default_version: true,
       #=>      create_date: "2026-03-01T00:00:00Z"
       #=>    }
-      #=>  }}
+      #=>  }}}
 
   A policy is capped at five versions; delete one before adding a sixth.
   """
@@ -1546,7 +1643,7 @@ defmodule AwsSDK.IAM do
           policy_arn :: String.t(),
           document :: map(),
           opts :: keyword()
-        ) :: {:ok, %{policy_version: map()}} | {:error, term()}
+        ) :: {:ok, %{body: %{policy_version: map()}, headers: map()}} | {:error, term()}
   def create_policy_version(policy_arn, document, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_policy_version_response(policy_arn, opts)
@@ -1564,7 +1661,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("SetAsDefault", opts[:set_as_default])
 
     with {:ok, op} <- build_operation("CreatePolicyVersion", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       fields =
         xpath(body, ~x"//PolicyVersion"e,
           version_id: ~x"./VersionId/text()"s,
@@ -1574,10 +1671,13 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         policy_version: %{
-           version_id: fields.version_id,
-           is_default_version: fields.is_default_version === "true",
-           create_date: fields.create_date
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           policy_version: %{
+             version_id: fields.version_id,
+             is_default_version: fields.is_default_version === "true",
+             create_date: fields.create_date
+           }
          }
        }}
     end
@@ -1595,13 +1695,13 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.set_default_policy_version("arn:aws:iam::123456789012:policy/ReadBucket", "v3")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec set_default_policy_version(
           policy_arn :: String.t(),
           version_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def set_default_policy_version(policy_arn, version_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_set_default_policy_version_response(policy_arn, version_id, opts)
@@ -1617,8 +1717,8 @@ defmodule AwsSDK.IAM do
              %{"PolicyArn" => policy_arn, "VersionId" => version_id},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1634,7 +1734,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.delete_policy_version("arn:aws:iam::123456789012:policy/ReadBucket", "v2")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   The default version cannot be deleted; promote another first.
   """
@@ -1642,7 +1742,7 @@ defmodule AwsSDK.IAM do
           policy_arn :: String.t(),
           version_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_policy_version(policy_arn, version_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_policy_version_response(policy_arn, version_id, opts)
@@ -1658,8 +1758,8 @@ defmodule AwsSDK.IAM do
              %{"PolicyArn" => policy_arn, "VersionId" => version_id},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1677,7 +1777,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_policy_versions("arn:aws:iam::123456789012:policy/ReadBucket")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    versions: [
       #=>      %{version_id: "v3", is_default_version: true, create_date: "2026-02-01T00:00:00Z"},
@@ -1685,7 +1785,7 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   The documents are not included; fetch one with `get_policy_version/3`.
   """
@@ -1712,7 +1812,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListPolicyVersions", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       versions =
         xpath(body, ~x"//Versions/member"l,
           version_id: ~x"./VersionId/text()"s,
@@ -1722,13 +1822,21 @@ defmodule AwsSDK.IAM do
         |> Enum.map(fn v -> %{v | is_default_version: v.is_default_version === "true"} end)
 
       is_truncated = xpath(body, ~x"//ListPolicyVersionsResult/IsTruncated/text()"s) === "true"
-      marker = xpath(body, ~x"//ListPolicyVersionsResult/Marker/text()"s)
+
+      marker =
+        xpath(
+          body,
+          ~x"//ListPolicyVersionsResult/Marker/text()"o |> transform_by(&optional_text/1)
+        )
 
       {:ok,
        %{
-         versions: versions,
-         is_truncated: is_truncated,
-         marker: if(marker === "", do: nil, else: marker)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           versions: versions,
+           is_truncated: is_truncated,
+           marker: marker
+         }
        }}
     end
   end
@@ -1743,10 +1851,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.attach_role_policy("AppRole", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec attach_role_policy(role_name :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def attach_role_policy(role_name, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_attach_role_policy_response(role_name, policy_arn, opts)
@@ -1762,8 +1870,8 @@ defmodule AwsSDK.IAM do
              %{"RoleName" => role_name, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1773,10 +1881,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.detach_role_policy("AppRole", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec detach_role_policy(role_name :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def detach_role_policy(role_name, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_detach_role_policy_response(role_name, policy_arn, opts)
@@ -1792,8 +1900,8 @@ defmodule AwsSDK.IAM do
              %{"RoleName" => role_name, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1803,7 +1911,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_attached_role_policies("AppRole")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    attached_policies: [
       #=>      %{
@@ -1813,7 +1921,7 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   The key is `:attached_policies`, AWS's own member name. Inline policies
   come from `list_role_policies/2` instead.
@@ -1838,7 +1946,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListAttachedRolePolicies", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       policies =
         xpath(body, ~x"//AttachedPolicies/member"l,
           policy_name: ~x"./PolicyName/text()"s,
@@ -1847,10 +1955,18 @@ defmodule AwsSDK.IAM do
 
       {:ok,
        %{
-         attached_policies: policies,
-         is_truncated:
-           xpath(body, ~x"//ListAttachedRolePoliciesResult/IsTruncated/text()"s) == "true",
-         marker: xpath(body, ~x"//ListAttachedRolePoliciesResult/Marker/text()"so)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           attached_policies: policies,
+           is_truncated:
+             xpath(body, ~x"//ListAttachedRolePoliciesResult/IsTruncated/text()"s) == "true",
+           marker:
+             xpath(
+               body,
+               ~x"//ListAttachedRolePoliciesResult/Marker/text()"o
+               |> transform_by(&optional_text/1)
+             )
+         }
        }}
     end
   end
@@ -1861,10 +1977,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.attach_user_policy("alice", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec attach_user_policy(username :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def attach_user_policy(username, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_attach_user_policy_response(username, policy_arn, opts)
@@ -1880,8 +1996,8 @@ defmodule AwsSDK.IAM do
              %{"UserName" => username, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1891,10 +2007,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.detach_user_policy("alice", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec detach_user_policy(username :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def detach_user_policy(username, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_detach_user_policy_response(username, policy_arn, opts)
@@ -1910,8 +2026,8 @@ defmodule AwsSDK.IAM do
              %{"UserName" => username, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1921,10 +2037,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.attach_group_policy("developers", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec attach_group_policy(group_name :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def attach_group_policy(group_name, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_attach_group_policy_response(group_name, policy_arn, opts)
@@ -1940,8 +2056,8 @@ defmodule AwsSDK.IAM do
              %{"GroupName" => group_name, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1951,10 +2067,10 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.detach_group_policy("developers", "arn:aws:iam::aws:policy/ReadOnlyAccess")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec detach_group_policy(group_name :: String.t(), policy_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def detach_group_policy(group_name, policy_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_detach_group_policy_response(group_name, policy_arn, opts)
@@ -1970,8 +2086,8 @@ defmodule AwsSDK.IAM do
              %{"GroupName" => group_name, "PolicyArn" => policy_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -1994,7 +2110,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_mfa_devices(user_name: "alice")
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    mfa_devices: [
       #=>      %{
@@ -2005,7 +2121,7 @@ defmodule AwsSDK.IAM do
       #=>    ],
       #=>    is_truncated: false,
       #=>    marker: nil
-      #=>  }}
+      #=>  }}}
 
   A virtual MFA device reports an ARN as its `:serial_number`; a hardware
   device reports the physical serial.
@@ -2033,7 +2149,7 @@ defmodule AwsSDK.IAM do
       |> maybe_put("MaxItems", opts[:max_items])
 
     with {:ok, op} <- build_operation("ListMFADevices", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       %{devices: devices, is_truncated: is_truncated, marker: marker} =
         xpath(body, ~x"//ListMFADevicesResult"e,
           devices: [
@@ -2043,14 +2159,17 @@ defmodule AwsSDK.IAM do
             enable_date: ~x"./EnableDate/text()"s
           ],
           is_truncated: ~x"./IsTruncated/text()"s,
-          marker: ~x"./Marker/text()"s
+          marker: ~x"./Marker/text()"o |> transform_by(&optional_text/1)
         )
 
       {:ok,
        %{
-         mfa_devices: devices,
-         is_truncated: is_truncated === "true",
-         marker: if(marker === "", do: nil, else: marker)
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{
+           mfa_devices: devices,
+           is_truncated: is_truncated === "true",
+           marker: marker
+         }
        }}
     end
   end
@@ -2076,14 +2195,15 @@ defmodule AwsSDK.IAM do
         ["sts.amazonaws.com"],
         thumbprints: ["6938fd4d98bab03faadb97b34396831e3780aea1"]
       )
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    open_id_connect_provider_arn:
       #=>      "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
-      #=>  }}
+      #=>  }}}
   """
   @spec create_open_id_connect_provider(url :: String.t(), opts :: keyword()) ::
-          {:ok, %{open_id_connect_provider_arn: String.t()}} | {:error, term()}
+          {:ok, %{body: %{open_id_connect_provider_arn: String.t()}, headers: map()}}
+          | {:error, term()}
   def create_open_id_connect_provider(url, opts \\ []) when is_binary(url) do
     if sandbox?(opts) do
       sandbox_create_open_id_connect_provider_response(url, opts)
@@ -2101,9 +2221,14 @@ defmodule AwsSDK.IAM do
       |> put_member_list("ThumbprintList", opts[:thumbprint_list] || [])
 
     with {:ok, op} <- build_operation("CreateOpenIDConnectProvider", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       arn = xpath(body, ~x"//OpenIDConnectProviderArn/text()"s)
-      {:ok, %{open_id_connect_provider_arn: arn}}
+
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{open_id_connect_provider_arn: arn}
+       }}
     end
   end
 
@@ -2120,14 +2245,14 @@ defmodule AwsSDK.IAM do
       AwsSDK.IAM.get_open_id_connect_provider(
         "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
       )
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    url: "token.actions.githubusercontent.com",
       #=>    client_id_list: ["sts.amazonaws.com"],
       #=>    thumbprint_list: ["6938fd4d98bab03faadb97b34396831e3780aea1"],
       #=>    create_date: "2026-01-01T00:00:00Z",
       #=>    tags: []
-      #=>  }}
+      #=>  }}}
 
   AWS returns `:url` without the `https://` scheme it was created with.
   """
@@ -2155,7 +2280,7 @@ defmodule AwsSDK.IAM do
              %{"OpenIDConnectProviderArn" => provider_arn},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       fields =
         xpath(body, ~x"//GetOpenIDConnectProviderResult"e,
           url: ~x"./Url/text()"s,
@@ -2165,7 +2290,7 @@ defmodule AwsSDK.IAM do
           create_date: ~x"./CreateDate/text()"s
         )
 
-      {:ok, fields}
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: fields}}
     end
   end
 
@@ -2175,17 +2300,18 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.list_open_id_connect_providers()
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    open_id_connect_provider_list: [
       #=>      %{arn: "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"}
       #=>    ]
-      #=>  }}
+      #=>  }}}
 
   ARNs only; call `get_open_id_connect_provider/2` for the details.
   """
   @spec list_open_id_connect_providers(opts :: keyword()) ::
-          {:ok, %{open_id_connect_provider_list: list(%{arn: String.t()})}}
+          {:ok,
+           %{body: %{open_id_connect_provider_list: list(%{arn: String.t()})}, headers: map()}}
           | {:error, term()}
   def list_open_id_connect_providers(opts \\ []) do
     if sandbox?(opts) do
@@ -2197,11 +2323,15 @@ defmodule AwsSDK.IAM do
 
   defp do_list_open_id_connect_providers(opts) do
     with {:ok, op} <- build_operation("ListOpenIDConnectProviders", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       providers =
         xpath(body, ~x"//OpenIDConnectProviderList/member"l, arn: ~x"./Arn/text()"s)
 
-      {:ok, %{open_id_connect_provider_list: providers}}
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: %{open_id_connect_provider_list: providers}
+       }}
     end
   end
 
@@ -2218,10 +2348,10 @@ defmodule AwsSDK.IAM do
       AwsSDK.IAM.delete_open_id_connect_provider(
         "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_open_id_connect_provider(provider_arn :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_open_id_connect_provider(provider_arn, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_open_id_connect_provider_response(provider_arn, opts)
@@ -2237,8 +2367,8 @@ defmodule AwsSDK.IAM do
              %{"OpenIDConnectProviderArn" => provider_arn},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -2257,7 +2387,7 @@ defmodule AwsSDK.IAM do
         "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
         ["6938fd4d98bab03faadb97b34396831e3780aea1"]
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   The list replaces the existing thumbprints outright rather than adding to
   them.
@@ -2266,7 +2396,7 @@ defmodule AwsSDK.IAM do
           provider_arn :: String.t(),
           thumbprint_list :: list(String.t()),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def update_open_id_connect_provider_thumbprint(provider_arn, thumbprint_list, opts \\ []) do
     if sandbox?(opts) do
       sandbox_update_open_id_connect_provider_thumbprint_response(provider_arn, opts)
@@ -2281,8 +2411,8 @@ defmodule AwsSDK.IAM do
       |> put_member_list("ThumbprintList", thumbprint_list)
 
     with {:ok, op} <- build_operation("UpdateOpenIDConnectProviderThumbprint", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -2301,13 +2431,13 @@ defmodule AwsSDK.IAM do
         "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
         "sts.amazonaws.com"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec add_client_id_to_open_id_connect_provider(
           provider_arn :: String.t(),
           client_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def add_client_id_to_open_id_connect_provider(provider_arn, client_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_add_client_id_to_open_id_connect_provider_response(provider_arn, opts)
@@ -2323,8 +2453,8 @@ defmodule AwsSDK.IAM do
              %{"OpenIDConnectProviderArn" => provider_arn, "ClientID" => client_id},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -2343,13 +2473,13 @@ defmodule AwsSDK.IAM do
         "arn:aws:iam::123456789012:oidc-provider/token.actions.githubusercontent.com",
         "sts.amazonaws.com"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec remove_client_id_from_open_id_connect_provider(
           provider_arn :: String.t(),
           client_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def remove_client_id_from_open_id_connect_provider(provider_arn, client_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_remove_client_id_from_open_id_connect_provider_response(provider_arn, opts)
@@ -2365,8 +2495,8 @@ defmodule AwsSDK.IAM do
              %{"OpenIDConnectProviderArn" => provider_arn, "ClientID" => client_id},
              opts
            ),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts), body: %{}}}
     end
   end
 
@@ -2388,7 +2518,7 @@ defmodule AwsSDK.IAM do
   ## Examples
 
       AwsSDK.IAM.get_account_summary()
-      #=> {:ok,
+      #=> {:ok, %{headers: %{x_amzn_request_id: "..."}, body:
       #=>  %{
       #=>    summary_map: [
       #=>      %{key: "Users", value: 12},
@@ -2398,7 +2528,7 @@ defmodule AwsSDK.IAM do
       #=>      %{key: "MFADevices", value: 8},
       #=>      %{key: "AccountMFAEnabled", value: 1}
       #=>    ]
-      #=>  }}
+      #=>  }}}
 
   AWS sends `SummaryMap` as a list of `<entry><key/><value/></entry>`, so a
   list is what comes back. Build a map yourself if you want lookup:
@@ -2408,7 +2538,7 @@ defmodule AwsSDK.IAM do
       #=> %{"Users" => 12, "UsersQuota" => 5000, ...}
   """
   @spec get_account_summary(opts :: keyword()) ::
-          {:ok, %{summary_map: list(map())}} | {:error, term()}
+          {:ok, %{body: %{summary_map: list(map())}, headers: map()}} | {:error, term()}
   def get_account_summary(opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_account_summary_response(opts)
@@ -2419,8 +2549,9 @@ defmodule AwsSDK.IAM do
 
   defp do_get_account_summary(opts) do
     with {:ok, op} <- build_operation("GetAccountSummary", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_account_summary(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{headers: Client.deserialize_headers(headers, opts), body: parse_account_summary(body)}}
     end
   end
 
@@ -2495,11 +2626,13 @@ defmodule AwsSDK.IAM do
       path: ~x"./Path/text()"s,
       create_date: ~x"./CreateDate/text()"s,
       # Returned only by GetUser and ListUsers, and null if never signed in.
-      password_last_used: ~x"./PasswordLastUsed/text()"os,
+      password_last_used: ~x"./PasswordLastUsed/text()"o |> transform_by(&optional_text/1),
       permissions_boundary: [
         ~x"./PermissionsBoundary"o,
-        permissions_boundary_arn: ~x"./PermissionsBoundaryArn/text()"os,
-        permissions_boundary_type: ~x"./PermissionsBoundaryType/text()"os
+        permissions_boundary_arn:
+          ~x"./PermissionsBoundaryArn/text()"o |> transform_by(&optional_text/1),
+        permissions_boundary_type:
+          ~x"./PermissionsBoundaryType/text()"o |> transform_by(&optional_text/1)
       ],
       tags: [~x"./Tags/member"l, key: ~x"./Key/text()"s, value: ~x"./Value/text()"s]
     )
@@ -2512,7 +2645,7 @@ defmodule AwsSDK.IAM do
       user_name: ~x"./UserName/text()"s,
       status: ~x"./Status/text()"s,
       # Omitted from the CreateAccessKey sample despite the shape page.
-      create_date: ~x"./CreateDate/text()"os
+      create_date: ~x"./CreateDate/text()"o |> transform_by(&optional_text/1)
     )
   end
 
@@ -2538,19 +2671,22 @@ defmodule AwsSDK.IAM do
       create_date: ~x"./CreateDate/text()"s,
       # URL-encoded per RFC 3986 -- the GetRole operation note says so, even
       # though the doc samples show it decoded.
-      assume_role_policy_document: ~x"./AssumeRolePolicyDocument/text()"os,
-      description: ~x"./Description/text()"os,
+      assume_role_policy_document:
+        ~x"./AssumeRolePolicyDocument/text()"o |> transform_by(&optional_text/1),
+      description: ~x"./Description/text()"o |> transform_by(&optional_text/1),
       # Required: No, and absent from the GetRole/CreateRole/ListRoles samples.
       max_session_duration: ~x"./MaxSessionDuration/text()"oi,
       permissions_boundary: [
         ~x"./PermissionsBoundary"o,
-        permissions_boundary_arn: ~x"./PermissionsBoundaryArn/text()"os,
-        permissions_boundary_type: ~x"./PermissionsBoundaryType/text()"os
+        permissions_boundary_arn:
+          ~x"./PermissionsBoundaryArn/text()"o |> transform_by(&optional_text/1),
+        permissions_boundary_type:
+          ~x"./PermissionsBoundaryType/text()"o |> transform_by(&optional_text/1)
       ],
       role_last_used: [
         ~x"./RoleLastUsed"o,
-        last_used_date: ~x"./LastUsedDate/text()"os,
-        region: ~x"./Region/text()"os
+        last_used_date: ~x"./LastUsedDate/text()"o |> transform_by(&optional_text/1),
+        region: ~x"./Region/text()"o |> transform_by(&optional_text/1)
       ],
       tags: [~x"./Tags/member"l, key: ~x"./Key/text()"s, value: ~x"./Value/text()"s]
     )
@@ -2569,9 +2705,9 @@ defmodule AwsSDK.IAM do
       # particular is absent from the GetPolicy and CreatePolicy samples.
       attachment_count: ~x"./AttachmentCount/text()"oi,
       permissions_boundary_usage_count: ~x"./PermissionsBoundaryUsageCount/text()"oi,
-      is_attachable: ~x"./IsAttachable/text()"os,
+      is_attachable: ~x"./IsAttachable/text()"o |> transform_by(&optional_text/1),
       # Included in GetPolicy but not in ListPolicies.
-      description: ~x"./Description/text()"os,
+      description: ~x"./Description/text()"o |> transform_by(&optional_text/1),
       tags: [~x"./Tags/member"l, key: ~x"./Key/text()"s, value: ~x"./Value/text()"s]
     )
   end
@@ -2932,4 +3068,8 @@ defmodule AwsSDK.IAM do
       end
     end)
   end
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

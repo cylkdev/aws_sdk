@@ -82,7 +82,7 @@ defmodule Mix.Tasks.AwsSDK.IAM.CreatePolicy do
     list_opts = Keyword.merge(opts, scope: "Local")
 
     case AwsSDK.IAM.list_policies(list_opts) do
-      {:ok, %{policies: policies}} -> policy_lookup_result(policies, name)
+      {:ok, %{body: %{policies: policies}}} -> policy_lookup_result(policies, name)
       error -> error
     end
   end

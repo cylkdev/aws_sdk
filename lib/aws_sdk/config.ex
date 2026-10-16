@@ -65,6 +65,7 @@ defmodule AwsSDK.Config do
   key in caller opts.
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.AuthCache
 
   @app :aws_sdk
@@ -100,7 +101,8 @@ defmodule AwsSDK.Config do
       #=>   secret_access_key: "SK",
       #=>   security_token: nil,
       #=>   region: "eu-west-1",
-      #=>   sandbox: [enabled: false]
+      #=>   sandbox: [enabled: false],
+      #=>   credential_chain: [%{source: ..., result: ...}]
       #=> ]
 
       # With nothing passed, every key is resolved from the app env and the
@@ -117,7 +119,8 @@ defmodule AwsSDK.Config do
       secret_access_key: creds[:secret_access_key],
       security_token: creds[:security_token],
       region: region(opts, creds),
-      sandbox: sandbox(opts)
+      sandbox: sandbox(opts),
+      credential_chain: creds.credential_chain
     ]
   end
 
@@ -126,7 +129,10 @@ defmodule AwsSDK.Config do
   map with `:access_key_id`, `:secret_access_key` and — when the source
   provides them — `:security_token` and `:region`.
 
-  Returns an empty map when no source yields credentials.
+  Every source tried is recorded, in order, under `:credential_chain` as
+  `%{source: source, result: what_that_source_returned}` -- including the
+  failures before the winning source. When no source yields credentials
+  the map holds only `:credential_chain`.
 
   ## Examples
 
@@ -134,7 +140,8 @@ defmodule AwsSDK.Config do
       #=> %{
       #=>   access_key_id: "AKIA1EXAMPLE",
       #=>   secret_access_key: "SK",
-      #=>   security_token: nil
+      #=>   security_token: nil,
+      #=>   credential_chain: [%{source: %{access_key_id: "AKIA1EXAMPLE", ...}, result: %{...}}]
       #=> }
 
       # Resolve everything from a named shared-config profile.
@@ -142,7 +149,8 @@ defmodule AwsSDK.Config do
       #=> %{
       #=>   access_key_id: "ASIA1EXAMPLE",
       #=>   secret_access_key: "...",
-      #=>   security_token: "IQoJb3JpZ2luX2VjEJr..."
+      #=>   security_token: "IQoJb3JpZ2luX2VjEJr...",
+      #=>   credential_chain: [%{source: {:awscli, "dev"}, result: {:ok, %{...}}}]
       #=> }
 
   Passing `:profile` skips the built-in chains entirely, so nothing is read
@@ -154,7 +162,19 @@ defmodule AwsSDK.Config do
     opts
     |> credential_sources()
     |> List.wrap()
-    |> Enum.find_value(%{}, &resolve_credentials(&1, opts))
+    |> Enum.reduce_while([], fn source, attempts ->
+      result = resolve_credentials(source, opts)
+      attempts = [%{source: source, result: Secrets.strip(result)} | attempts]
+
+      case complete(result) do
+        nil -> {:cont, attempts}
+        creds -> {:halt, {creds, attempts}}
+      end
+    end)
+    |> case do
+      {creds, attempts} -> Map.put(creds, :credential_chain, Enum.reverse(attempts))
+      attempts -> %{credential_chain: Enum.reverse(attempts)}
+    end
   end
 
   @doc """
@@ -233,10 +253,18 @@ defmodule AwsSDK.Config do
   def region(opts, creds) when is_list(opts) and is_map(creds) do
     with nil <- present(opts[:region]),
          nil <- resolve_region(Application.get_env(@app, :region)),
-         nil <- present(creds[:region]) do
+         nil <- present(creds[:region]),
+         nil <- present(profile_region(creds)) do
       resolve_region(@region)
     end
   end
+
+  # The profile's region, read from the unmerged profile files a profile-based
+  # credential map carries.
+  defp profile_region(%{profile_files: %{} = profile}),
+    do: AwsSDK.Credentials.Profile.value(profile, "region")
+
+  defp profile_region(_creds), do: nil
 
   @doc """
   Returns the merged sandbox keyword list. Defaults are overlaid with
@@ -297,19 +325,19 @@ defmodule AwsSDK.Config do
   end
 
   defp resolve_credentials(:env, _opts) do
-    complete(%{
+    %{
       access_key_id: present(System.get_env("AWS_ACCESS_KEY_ID")),
       secret_access_key: present(System.get_env("AWS_SECRET_ACCESS_KEY")),
       security_token: present(System.get_env("AWS_SESSION_TOKEN"))
-    })
+    }
   end
 
   defp resolve_credentials(:app_env, _opts) do
-    complete(%{
+    %{
       access_key_id: present(Application.get_env(@app, :access_key_id)),
       secret_access_key: present(Application.get_env(@app, :secret_access_key)),
       security_token: present(Application.get_env(@app, :security_token))
-    })
+    }
   end
 
   defp resolve_credentials({:awscli, {:system, env_var}}, opts) do
@@ -324,27 +352,25 @@ defmodule AwsSDK.Config do
 
     {:awscli, profile}
     |> AuthCache.get(Keyword.put(opts, :ttl_seconds, ttl))
-    |> from_cache()
   end
 
   defp resolve_credentials(:instance_role, opts) do
-    :aws_instance_auth |> AuthCache.get(opts) |> from_cache()
+    :aws_instance_auth |> AuthCache.get(opts)
   end
 
   defp resolve_credentials(:ecs_task_role, opts) do
-    :aws_ecs_auth |> AuthCache.get(opts) |> from_cache()
+    :aws_ecs_auth |> AuthCache.get(opts)
   end
 
-  defp resolve_credentials(creds, _opts) when is_map(creds), do: complete(creds)
+  defp resolve_credentials(creds, _opts) when is_map(creds), do: creds
 
   defp resolve_credentials(_value, _opts), do: nil
-
-  defp from_cache({:ok, creds}) when is_map(creds), do: complete(creds)
-  defp from_cache({:error, _reason}), do: nil
 
   # A source counts only when it produced both halves of a usable pair.
   # Anything less falls through to the next source rather than
   # contributing a fragment to a mixed set.
+  defp complete({:ok, creds}), do: complete(creds)
+
   defp complete(%{access_key_id: key, secret_access_key: secret} = creds)
        when is_binary(key) and is_binary(secret) do
     creds

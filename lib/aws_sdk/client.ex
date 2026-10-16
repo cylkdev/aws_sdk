@@ -9,7 +9,7 @@ defmodule AwsSDK.Client do
     * HTTP dispatch via `AwsSDK.HTTP` (buffered, stream-upload, or
       stream-download depending on struct fields),
     * status-code branching into `{:ok, resp}` for 2xx,
-      `{:error, {:http_error, status, body}}` otherwise, and
+      `{:error, {:http_error, status, body, headers}}` otherwise, and
       `{:error, reason}` on transport failure,
     * credential / endpoint / sandbox resolution driven by a per-service
       opts namespace (`:s3`, `:iam`, `:events`, `:logs`,
@@ -29,6 +29,7 @@ defmodule AwsSDK.Client do
   (virtual-hosted addressing is S3-only), and response body decoding.
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.{Config, HTTP, Signer}
   alias AwsSDK.Credentials.Profile
 
@@ -91,21 +92,21 @@ defmodule AwsSDK.Client do
       {:ok, op} = AwsSDK.EC2.build_operation("DescribeTags", %{}, access_key_id: "AK", secret_access_key: "SK")
 
       AwsSDK.Client.execute(op)
-      #=> {:ok, %{status: 200, body: "<DescribeTagsResponse>...", headers: [...]}}
+      #=> {:ok, %{status_code: 200, body: "<DescribeTagsResponse>...", headers: [...]}}
 
       # Non-2xx is an error at this layer, unlike AwsSDK.HTTP.
       AwsSDK.Client.execute(op)
-      #=> {:error, {:http_error, 403, "<ErrorResponse>...</ErrorResponse>"}}
+      #=> {:error, {:http_error, 403, "<ErrorResponse>...</ErrorResponse>", [{"x-amzn-requestid", "..."}]}}
 
       AwsSDK.Client.execute(op)
-      #=> {:error, %Mint.TransportError{reason: :nxdomain}}
+      #=> {:error, %{error: %Req.TransportError{reason: :nxdomain}}}
 
   The three shapes above are exactly what `request/1` pattern-matches on.
   """
   @spec execute(struct) ::
           {:ok, response}
           | {:ok, stream_response}
-          | {:error, {:http_error, non_neg_integer, binary}}
+          | {:error, {:http_error, non_neg_integer, binary, [header]}}
           | {:error, term}
   def execute(%_{} = op) do
     method = op.method
@@ -142,8 +143,11 @@ defmodule AwsSDK.Client do
   with prior per-service helpers; 3xx handling is now uniform. Success
   passes `execute/1`'s response map (`:status_code`, `:headers`, `:body`,
   and the streaming variants) through untouched. For HTTP failures, `details`
-  carries the original `:status` code alongside `:response` so callers can
-  special-case specific statuses without losing the shared mapping.
+  carries the original `:status` code alongside `:response` (the body) and
+  `:headers` (the response headers, e.g. the request id) so callers can
+  special-case specific statuses without losing the shared mapping. For
+  transport failures, `details` is the transport error map (`:error`,
+  the original exception).
   """
   @spec request(struct) :: {:ok, map} | {:error, ErrorMessage.t()}
   def request(%_{} = op) do
@@ -151,26 +155,32 @@ defmodule AwsSDK.Client do
       {:ok, response} ->
         {:ok, response}
 
-      {:error, {:http_error, status_code, response}} when status_code in 300..399 ->
+      {:error, {:http_error, status_code, response, headers}} when status_code in 300..399 ->
         {:error,
          ErrorMessage.bad_request("redirect not followed.", %{
            status: status_code,
-           response: response
+           response: response,
+           headers: headers
          })}
 
-      {:error, {:http_error, status_code, response}} when status_code in 400..499 ->
+      {:error, {:http_error, status_code, response, headers}} when status_code in 400..499 ->
         {:error,
-         ErrorMessage.not_found("resource not found.", %{status: status_code, response: response})}
+         ErrorMessage.not_found("resource not found.", %{
+           status: status_code,
+           response: response,
+           headers: headers
+         })}
 
-      {:error, {:http_error, status_code, response}} when status_code >= 500 ->
+      {:error, {:http_error, status_code, response, headers}} when status_code >= 500 ->
         {:error,
          ErrorMessage.service_unavailable("service temporarily unavailable", %{
            status: status_code,
-           response: response
+           response: response,
+           headers: headers
          })}
 
-      {:error, reason} ->
-        {:error, ErrorMessage.internal_server_error("internal server error", %{reason: reason})}
+      {:error, transport_error} ->
+        {:error, ErrorMessage.internal_server_error("internal server error", transport_error)}
     end
   end
 
@@ -249,52 +259,22 @@ defmodule AwsSDK.Client do
     if is_binary(ak) and is_binary(sk) do
       {:ok, ak, sk, resolved[:security_token]}
     else
-      {:error, missing_credentials_error(opts)}
+      {:error, missing_credentials_error(resolved[:credential_chain], opts)}
     end
   end
 
-  # When the chain resolved no creds, do a focused diagnostic: load
-  # the active profile and, if it exists, surface its key shape and a
-  # hint about which provider was expected to handle it. This turns
-  # an opaque `:missing_credentials` into an actionable
-  # `{:missing_credentials, %{profile: ..., profile_keys: ...,
-  # hint: ...}}` whenever the user has a profile configured but no
-  # provider could resolve it.
-  defp missing_credentials_error(opts) do
+  # Every source the chain tried is carried as `:credential_chain`, and the
+  # active profile's per-file read results as `:profile_files` (`nil` when
+  # the profile has a section in neither file).
+  defp missing_credentials_error(credential_chain, opts) do
     profile_name = opts[:profile] || Profile.default()
 
-    case Profile.load(profile_name, opts) do
-      nil ->
-        :missing_credentials
-
-      profile when is_map(profile) ->
-        {:missing_credentials,
-         %{
-           profile: profile_name,
-           profile_keys: profile |> Map.keys() |> Enum.sort(),
-           hint: hint_for(profile)
-         }}
-    end
-  end
-
-  defp hint_for(profile) do
-    cond do
-      is_binary(profile["sso_session"]) or is_binary(profile["sso_start_url"]) ->
-        "profile is configured for SSO; run `aws sso login --profile <name>`"
-
-      is_binary(profile["credential_process"]) ->
-        "profile uses credential_process; verify the command exits 0 with a Version 1 JSON body"
-
-      is_binary(profile["login_session"]) ->
-        "profile is configured for `aws login`; ensure AWS CLI ≥ 2.32.0 is on PATH and the session is valid"
-
-      is_binary(profile["role_arn"]) ->
-        "profile assumes a role; verify the source_profile resolves"
-
-      true ->
-        "profile shape not recognized by any provider " <>
-          "(no sso_session/sso_start_url/credential_process/login_session/role_arn/aws_access_key_id)"
-    end
+    {:missing_credentials,
+     Secrets.strip(%{
+       credential_chain: credential_chain,
+       profile: profile_name,
+       profile_files: Profile.load(profile_name, opts)
+     })}
   end
 
   @doc """
@@ -328,12 +308,15 @@ defmodule AwsSDK.Client do
       {:ok, %{status_code: status} = resp} when status in 200..299 ->
         {:ok, resp}
 
-      {:ok, %{status_code: status} = resp} ->
-        body = resp |> Map.get(:body_stream, []) |> Enum.to_list() |> IO.iodata_to_binary()
-        {:error, {:http_error, status, body}}
+      {:ok, %{status_code: status, headers: headers} = resp} ->
+        # The error body is kept as the raw stream elements: binary chunks
+        # and any `{:trailers, _}` elements, in arrival order.
+        body = resp |> Map.get(:body_stream, []) |> Enum.to_list()
 
-      {:error, %{reason: reason}} ->
-        {:error, reason}
+        {:error, {:http_error, status, body, headers}}
+
+      {:error, %{error: _} = transport_error} ->
+        {:error, transport_error}
     end
   end
 
@@ -347,12 +330,12 @@ defmodule AwsSDK.Client do
     {:ok, resp}
   end
 
-  defp translate_buffered({:ok, %{status_code: status, body: body}}) do
-    {:error, {:http_error, status, body}}
+  defp translate_buffered({:ok, %{status_code: status, body: body, headers: headers}}) do
+    {:error, {:http_error, status, body, headers}}
   end
 
-  defp translate_buffered({:error, %{reason: reason}}) do
-    {:error, reason}
+  defp translate_buffered({:error, %{error: _} = transport_error}) do
+    {:error, transport_error}
   end
 
   # -- signing creds map ------------------------------------------------------
@@ -393,4 +376,29 @@ defmodule AwsSDK.Client do
   defp port_suffix("https", 443), do: ""
   defp port_suffix("http", 80), do: ""
   defp port_suffix(_scheme, port), do: ":#{port}"
+
+  # AWS owns the response-header namespace and adds new headers over time
+  # (e.g. `x-amz-checksum-crc64nvme`). `ExUtils.Serializer.deserialize/2`'s default
+  # is `to_existing_atom: true, strict: true`, which crashes on any header
+  # whose snake-cased atom hasn't been referenced elsewhere. Headers must
+  # round-trip without crashing, so atom-safety is relaxed here by default.
+  # Callers can still override any of these options by passing their own
+  # `opts` -- caller-supplied keys win the merge.
+  @response_header_opts [to_existing_atom: false, strict: false]
+
+  @doc """
+  Deserializes response headers into a map with snake_case atom keys.
+
+  Every service returns these as the `:headers` of its result, so nothing a
+  response carries outside its body (request ids, version ids, checksums) is
+  dropped. `opts` are merged over the atom-safety defaults below.
+  """
+  @spec deserialize_headers([header], keyword) :: map
+  def deserialize_headers(headers, opts) do
+    headers
+    |> ExUtils.Serializer.deserialize(merge_response_header_opts(opts))
+    |> Map.new()
+  end
+
+  defp merge_response_header_opts(opts), do: Keyword.merge(@response_header_opts, opts)
 end

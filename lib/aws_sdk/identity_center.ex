@@ -86,21 +86,26 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_instances()
       #=> {:ok,
       #=>  %{
-      #=>    instances: [
+      #=>    body:
       #=>      %{
-      #=>        instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef",
-      #=>        identity_store_id: "d-1234567890",
-      #=>        owner_account_id: "123456789012",
-      #=>        status: "ACTIVE"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        instances: [
+      #=>          %{
+      #=>            instance_arn: "arn:aws:sso:::instance/ssoins-1234567890abcdef",
+      #=>            identity_store_id: "d-1234567890",
+      #=>            owner_account_id: "123456789012",
+      #=>            status: "ACTIVE"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Both the instance ARN and the identity store ID are needed by the other
   operations in this module.
   """
-  @spec list_instances(opts :: keyword()) :: {:ok, map()} | {:error, term()}
+  @spec list_instances(opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_instances(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_instances_response(opts)
@@ -111,8 +116,12 @@ defmodule AwsSDK.IdentityCenter do
 
   defp do_list_instances(opts) do
     with {:ok, op} <- build_operation(:sso, "ListInstances", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -138,19 +147,23 @@ defmodule AwsSDK.IdentityCenter do
       )
       #=> {:ok,
       #=>  %{
-      #=>    permission_set: %{
-      #=>      name: "AdminAccess",
-      #=>      permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-      #=>      description: "Full admin",
-      #=>      session_duration: "PT8H",
-      #=>      created_date: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        permission_set: %{
+      #=>          name: "AdminAccess",
+      #=>          permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
+      #=>          description: "Full admin",
+      #=>          session_duration: "PT8H",
+      #=>          created_date: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   `:session_duration` is an ISO 8601 duration.
   """
   @spec create_permission_set(instance_arn :: String.t(), name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_permission_set(instance_arn, name, opts \\ [])
       when is_binary(instance_arn) and is_binary(name) do
     if sandbox?(opts) do
@@ -168,8 +181,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("RelayState", opts[:relay_state])
 
     with {:ok, op} <- build_operation(:sso, "CreatePermissionSet", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -185,14 +202,14 @@ defmodule AwsSDK.IdentityCenter do
   ## Examples
 
       AwsSDK.IdentityCenter.delete_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_permission_set(
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -213,8 +230,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -231,16 +252,20 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_permission_sets("arn:aws:sso:::instance/ssoins-1234567890abcdef")
       #=> {:ok,
       #=>  %{
-      #=>    permission_sets: [
-      #=>      "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef"
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        permission_sets: [
+      #=>          "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef"
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   ARNs only; call `describe_permission_set/3` for the details.
   """
   @spec list_permission_sets(instance_arn :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_permission_sets(instance_arn, opts \\ []) when is_binary(instance_arn) do
     if sandbox?(opts) do
       sandbox_list_permission_sets_response(instance_arn, opts)
@@ -256,8 +281,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation(:sso, "ListPermissionSets", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -278,7 +307,7 @@ defmodule AwsSDK.IdentityCenter do
         "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         "arn:aws:iam::aws:policy/ReadOnlyAccess"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Call `provision_permission_set/3` afterwards to push the change to the
   accounts the permission set is assigned to.
@@ -288,7 +317,7 @@ defmodule AwsSDK.IdentityCenter do
           permission_set_arn :: String.t(),
           managed_policy_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def attach_managed_policy_to_permission_set(
         instance_arn,
         permission_set_arn,
@@ -326,8 +355,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -345,21 +378,25 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.describe_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
       #=> {:ok,
       #=>  %{
-      #=>    permission_set: %{
-      #=>      name: "AdminAccess",
-      #=>      permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-      #=>      description: "Full admin",
-      #=>      session_duration: "PT8H",
-      #=>      relay_state: "",
-      #=>      created_date: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        permission_set: %{
+      #=>          name: "AdminAccess",
+      #=>          permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
+      #=>          description: "Full admin",
+      #=>          session_duration: "PT8H",
+      #=>          relay_state: "",
+      #=>          created_date: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_permission_set(
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -380,8 +417,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -403,20 +444,24 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.get_inline_policy_for_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
       #=> {:ok,
       #=>  %{
-      #=>    inline_policy: %{
-      #=>      "Version" => "2012-10-17",
-      #=>      "Statement" => [
-      #=>        %{
-      #=>          "Effect" => "Allow",
-      #=>          "Action" => "s3:GetObject",
-      #=>          "Resource" => "arn:aws:s3:::bucket/*"
+      #=>    body:
+      #=>      %{
+      #=>        inline_policy: %{
+      #=>          "Version" => "2012-10-17",
+      #=>          "Statement" => [
+      #=>            %{
+      #=>              "Effect" => "Allow",
+      #=>              "Action" => "s3:GetObject",
+      #=>              "Resource" => "arn:aws:s3:::bucket/*"
+      #=>            }
+      #=>          ]
       #=>        }
-      #=>      ]
-      #=>    }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
       # No inline policy attached.
-      #=> {:ok, %{inline_policy: nil}}
+      #=> {:ok, %{body: %{inline_policy: nil}, headers: %{x_amzn_request_id: "..."}}}
 
   AWS sends the document as a JSON string; it is decoded here. Every other
   member of the response is returned untouched.
@@ -425,7 +470,7 @@ defmodule AwsSDK.IdentityCenter do
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{inline_policy: map() | nil}} | {:error, term()}
+        ) :: {:ok, %{body: %{inline_policy: map() | nil}, headers: map()}} | {:error, term()}
   def get_inline_policy_for_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -450,7 +495,7 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       result = Serializer.deserialize(decode_body(body), deserialize_opts(opts))
 
       # Decoding the policy is leaf-value decoding, not reshaping: AWS sends
@@ -459,11 +504,15 @@ defmodule AwsSDK.IdentityCenter do
       decoded =
         case result[:inline_policy] do
           nil -> nil
-          "" -> nil
+          "" -> ""
           json when is_binary(json) -> :json.decode(json)
         end
 
-      {:ok, Map.put(result, :inline_policy, decoded)}
+      {:ok,
+       %{
+         body: Map.put(result, :inline_policy, decoded),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -485,17 +534,23 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_managed_policies_in_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
       #=> {:ok,
       #=>  %{
-      #=>    attached_managed_policies: [
-      #=>      %{name: "ReadOnlyAccess", arn: "arn:aws:iam::aws:policy/ReadOnlyAccess"}
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        attached_managed_policies: [
+      #=>          %{name: "ReadOnlyAccess", arn: "arn:aws:iam::aws:policy/ReadOnlyAccess"}
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_managed_policies_in_permission_set(
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{attached_managed_policies: list(map())}} | {:error, term()}
+        ) ::
+          {:ok, %{body: %{attached_managed_policies: list(map())}, headers: map()}}
+          | {:error, term()}
   def list_managed_policies_in_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -516,8 +571,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation(:sso, "ListManagedPoliciesInPermissionSet", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -541,15 +600,19 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_account_assignments("arn:aws:sso:::instance/ssoins-1234567890abcdef", "333333333333", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
       #=> {:ok,
       #=>  %{
-      #=>    account_assignments: [
+      #=>    body:
       #=>      %{
-      #=>        account_id: "333333333333",
-      #=>        permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-      #=>        principal_type: "GROUP",
-      #=>        principal_id: "9067b2e8-4051-7096-b1e0-EXAMPLE"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        account_assignments: [
+      #=>          %{
+      #=>            account_id: "333333333333",
+      #=>            permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
+      #=>            principal_type: "GROUP",
+      #=>            principal_id: "9067b2e8-4051-7096-b1e0-EXAMPLE"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_account_assignments(
@@ -557,7 +620,8 @@ defmodule AwsSDK.IdentityCenter do
           account_id :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{account_assignments: list(map())}} | {:error, term()}
+        ) ::
+          {:ok, %{body: %{account_assignments: list(map())}, headers: map()}} | {:error, term()}
   def list_account_assignments(instance_arn, account_id, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(account_id) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -583,8 +647,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation(:sso, "ListAccountAssignments", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -600,13 +668,18 @@ defmodule AwsSDK.IdentityCenter do
   ## Examples
 
       AwsSDK.IdentityCenter.list_accounts_for_provisioned_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef")
-      #=> {:ok, %{account_ids: ["333333333333", "444444444444"], next_token: nil}}
+      #=> {:ok,
+      #=>  %{
+      #=>    body:
+      #=>      %{account_ids: ["333333333333", "444444444444"], next_token: nil},
+      #=>    headers: %{x_amzn_request_id: "..."}
+      #=>  }}
   """
   @spec list_accounts_for_provisioned_permission_set(
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{account_ids: [String.t()]}} | {:error, term()}
+        ) :: {:ok, %{body: %{account_ids: [String.t()]}, headers: map()}} | {:error, term()}
   def list_accounts_for_provisioned_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -628,8 +701,12 @@ defmodule AwsSDK.IdentityCenter do
 
     with {:ok, op} <-
            build_operation(:sso, "ListAccountsForProvisionedPermissionSet", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -653,7 +730,7 @@ defmodule AwsSDK.IdentityCenter do
       }
 
       AwsSDK.IdentityCenter.put_inline_policy_to_permission_set("arn:aws:sso:::instance/ssoins-1234567890abcdef", "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef", policy)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Replaces any existing inline policy outright. Re-provision afterwards.
   """
@@ -662,7 +739,7 @@ defmodule AwsSDK.IdentityCenter do
           permission_set_arn :: String.t(),
           policy :: map(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def put_inline_policy_to_permission_set(instance_arn, permission_set_arn, policy, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) and is_map(policy) do
     if sandbox?(opts) do
@@ -689,8 +766,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -711,14 +792,14 @@ defmodule AwsSDK.IdentityCenter do
         "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
         "arn:aws:iam::aws:policy/ReadOnlyAccess"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec detach_managed_policy_from_permission_set(
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           managed_policy_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def detach_managed_policy_from_permission_set(
         instance_arn,
         permission_set_arn,
@@ -756,8 +837,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -791,16 +876,20 @@ defmodule AwsSDK.IdentityCenter do
       )
       #=> {:ok,
       #=>  %{
-      #=>    account_assignment_creation_status: %{
-      #=>      status: "IN_PROGRESS",
-      #=>      request_id: "4c1b2f1a-EXAMPLE",
-      #=>      target_id: "333333333333",
-      #=>      target_type: "AWS_ACCOUNT",
-      #=>      permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-      #=>      principal_type: "GROUP",
-      #=>      principal_id: "9067b2e8-4051-7096-b1e0-EXAMPLE",
-      #=>      created_date: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        account_assignment_creation_status: %{
+      #=>          status: "IN_PROGRESS",
+      #=>          request_id: "4c1b2f1a-EXAMPLE",
+      #=>          target_id: "333333333333",
+      #=>          target_type: "AWS_ACCOUNT",
+      #=>          permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
+      #=>          principal_type: "GROUP",
+      #=>          principal_id: "9067b2e8-4051-7096-b1e0-EXAMPLE",
+      #=>          created_date: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Assignment is asynchronous; the status describes the job, not a finished
@@ -811,7 +900,7 @@ defmodule AwsSDK.IdentityCenter do
           assignment :: map(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_account_assignment(instance_arn, assignment, opts \\ [])
       when is_binary(instance_arn) and is_map(assignment) do
     if sandbox?(opts) do
@@ -832,8 +921,12 @@ defmodule AwsSDK.IdentityCenter do
     }
 
     with {:ok, op} <- build_operation(:sso, "CreateAccountAssignment", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -857,12 +950,16 @@ defmodule AwsSDK.IdentityCenter do
       )
       #=> {:ok,
       #=>  %{
-      #=>    account_assignment_deletion_status: %{
-      #=>      status: "IN_PROGRESS",
-      #=>      request_id: "5d2c3f2b-EXAMPLE",
-      #=>      target_id: "333333333333",
-      #=>      target_type: "AWS_ACCOUNT"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        account_assignment_deletion_status: %{
+      #=>          status: "IN_PROGRESS",
+      #=>          request_id: "5d2c3f2b-EXAMPLE",
+      #=>          target_id: "333333333333",
+      #=>          target_type: "AWS_ACCOUNT"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec delete_account_assignment(
@@ -870,7 +967,7 @@ defmodule AwsSDK.IdentityCenter do
           assignment :: map(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_account_assignment(instance_arn, assignment, opts \\ [])
       when is_binary(instance_arn) and is_map(assignment) do
     if sandbox?(opts) do
@@ -891,8 +988,12 @@ defmodule AwsSDK.IdentityCenter do
     }
 
     with {:ok, op} <- build_operation(:sso, "DeleteAccountAssignment", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -918,12 +1019,16 @@ defmodule AwsSDK.IdentityCenter do
       )
       #=> {:ok,
       #=>  %{
-      #=>    permission_set_provisioning_status: %{
-      #=>      status: "IN_PROGRESS",
-      #=>      request_id: "6e3d4a3c-EXAMPLE",
-      #=>      permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
-      #=>      created_date: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        permission_set_provisioning_status: %{
+      #=>          status: "IN_PROGRESS",
+      #=>          request_id: "6e3d4a3c-EXAMPLE",
+      #=>          permission_set_arn: "arn:aws:sso:::permissionSet/ssoins-1234567890abcdef/ps-1234567890abcdef",
+      #=>          created_date: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Use `target_type: "AWS_ACCOUNT"` with `:target_id` to provision one
@@ -933,7 +1038,7 @@ defmodule AwsSDK.IdentityCenter do
           instance_arn :: String.t(),
           permission_set_arn :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def provision_permission_set(instance_arn, permission_set_arn, opts \\ [])
       when is_binary(instance_arn) and is_binary(permission_set_arn) do
     if sandbox?(opts) do
@@ -956,8 +1061,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("TargetId", opts[:target_id])
 
     with {:ok, op} <- build_operation(:sso, "ProvisionPermissionSet", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -984,14 +1093,19 @@ defmodule AwsSDK.IdentityCenter do
         family_name: "Example",
         email: "alice@example.com"
       )
-      #=> {:ok, %{user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER", identity_store_id: "d-1234567890"}}
+      #=> {:ok,
+      #=>  %{
+      #=>    body:
+      #=>      %{user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER", identity_store_id: "d-1234567890"},
+      #=>    headers: %{x_amzn_request_id: "..."}
+      #=>  }}
   """
   @spec create_identity_store_user(
           identity_store_id :: String.t(),
           username :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{user_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{user_id: String.t()}, headers: map()}} | {:error, term()}
   def create_identity_store_user(identity_store_id, username, opts \\ [])
       when is_binary(identity_store_id) and is_binary(username) do
     if sandbox?(opts) do
@@ -1009,8 +1123,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("Emails", normalize_emails(opts[:emails]))
 
     with {:ok, op} <- build_operation(:identitystore, "CreateUser", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1026,14 +1144,14 @@ defmodule AwsSDK.IdentityCenter do
   ## Examples
 
       AwsSDK.IdentityCenter.delete_identity_store_user("d-1234567890", "9067b2e8-4051-7096-b1e0-EXAMPLEUSER")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_identity_store_user(
           identity_store_id :: String.t(),
           user_id :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_identity_store_user(identity_store_id, user_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(user_id) do
     if sandbox?(opts) do
@@ -1054,8 +1172,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1068,26 +1190,30 @@ defmodule AwsSDK.IdentityCenter do
     * `user_id` - The user ID.
     * `opts` - Shared options.
 
-  Returns `{:ok, map()}` containing the user's attributes.
+  Returns `{:ok, %{body: map(), headers: map()}}`; `:body` holds the user's attributes.
 
   ## Examples
 
       AwsSDK.IdentityCenter.describe_identity_store_user("d-1234567890", "9067b2e8-4051-7096-b1e0-EXAMPLEUSER")
       #=> {:ok,
       #=>  %{
-      #=>    user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER",
-      #=>    identity_store_id: "d-1234567890",
-      #=>    user_name: "alice",
-      #=>    display_name: "Alice Example",
-      #=>    name: %{given_name: "Alice", family_name: "Example"},
-      #=>    emails: [%{value: "alice@example.com", type: "work", primary: true}]
+      #=>    body:
+      #=>      %{
+      #=>        user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER",
+      #=>        identity_store_id: "d-1234567890",
+      #=>        user_name: "alice",
+      #=>        display_name: "Alice Example",
+      #=>        name: %{given_name: "Alice", family_name: "Example"},
+      #=>        emails: [%{value: "alice@example.com", type: "work", primary: true}]
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_identity_store_user(
           identity_store_id :: String.t(),
           user_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_identity_store_user(identity_store_id, user_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(user_id) do
     if sandbox?(opts) do
@@ -1105,8 +1231,12 @@ defmodule AwsSDK.IdentityCenter do
              %{"IdentityStoreId" => identity_store_id, "UserId" => user_id},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1129,7 +1259,7 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.update_identity_store_user("d-1234567890", "9067b2e8-4051-7096-b1e0-EXAMPLEUSER", [
         %{attribute_path: "displayName", attribute_value: "Alice E."}
       ])
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Each operation targets one SCIM attribute path.
   """
@@ -1138,7 +1268,7 @@ defmodule AwsSDK.IdentityCenter do
           user_id :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def update_identity_store_user(identity_store_id, user_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(user_id) do
     if sandbox?(opts) do
@@ -1164,8 +1294,12 @@ defmodule AwsSDK.IdentityCenter do
     }
 
     with {:ok, op} <- build_operation(:identitystore, "UpdateUser", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1182,21 +1316,26 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_identity_store_users("d-1234567890")
       #=> {:ok,
       #=>  %{
-      #=>    users: [
+      #=>    body:
       #=>      %{
-      #=>        user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER",
-      #=>        identity_store_id: "d-1234567890",
-      #=>        user_name: "alice",
-      #=>        display_name: "Alice Example",
-      #=>        name: %{given_name: "Alice", family_name: "Example"},
-      #=>        emails: [%{value: "alice@example.com", type: "work", primary: true}]
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        users: [
+      #=>          %{
+      #=>            user_id: "9067b2e8-4051-7096-b1e0-EXAMPLEUSER",
+      #=>            identity_store_id: "d-1234567890",
+      #=>            user_name: "alice",
+      #=>            display_name: "Alice Example",
+      #=>            name: %{given_name: "Alice", family_name: "Example"},
+      #=>            emails: [%{value: "alice@example.com", type: "work", primary: true}]
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_identity_store_users(identity_store_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{users: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{users: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_identity_store_users(identity_store_id, opts \\ [])
       when is_binary(identity_store_id) do
     if sandbox?(opts) do
@@ -1213,8 +1352,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation(:identitystore, "ListUsers", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1236,14 +1379,19 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.create_identity_store_group("d-1234567890", "engineering",
         description: "Engineering team"
       )
-      #=> {:ok, %{group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP", identity_store_id: "d-1234567890"}}
+      #=> {:ok,
+      #=>  %{
+      #=>    body:
+      #=>      %{group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP", identity_store_id: "d-1234567890"},
+      #=>    headers: %{x_amzn_request_id: "..."}
+      #=>  }}
   """
   @spec create_identity_store_group(
           identity_store_id :: String.t(),
           display_name :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{group_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{group_id: String.t()}, headers: map()}} | {:error, term()}
   def create_identity_store_group(identity_store_id, display_name, opts \\ [])
       when is_binary(identity_store_id) and is_binary(display_name) do
     if sandbox?(opts) do
@@ -1262,8 +1410,12 @@ defmodule AwsSDK.IdentityCenter do
       )
 
     with {:ok, op} <- build_operation(:identitystore, "CreateGroup", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1279,14 +1431,14 @@ defmodule AwsSDK.IdentityCenter do
   ## Examples
 
       AwsSDK.IdentityCenter.delete_identity_store_group("d-1234567890", "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_identity_store_group(
           identity_store_id :: String.t(),
           group_id :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_identity_store_group(identity_store_id, group_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(group_id) do
     if sandbox?(opts) do
@@ -1307,8 +1459,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1321,24 +1477,28 @@ defmodule AwsSDK.IdentityCenter do
     * `group_id` - The group ID.
     * `opts` - Shared options.
 
-  Returns `{:ok, map()}` containing the group's attributes.
+  Returns `{:ok, %{body: map(), headers: map()}}`; `:body` holds the group's attributes.
 
   ## Examples
 
       AwsSDK.IdentityCenter.describe_identity_store_group("d-1234567890", "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP")
       #=> {:ok,
       #=>  %{
-      #=>    group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP",
-      #=>    identity_store_id: "d-1234567890",
-      #=>    display_name: "engineering",
-      #=>    description: "Engineering team"
+      #=>    body:
+      #=>      %{
+      #=>        group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP",
+      #=>        identity_store_id: "d-1234567890",
+      #=>        display_name: "engineering",
+      #=>        description: "Engineering team"
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_identity_store_group(
           identity_store_id :: String.t(),
           group_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_identity_store_group(identity_store_id, group_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(group_id) do
     if sandbox?(opts) do
@@ -1356,8 +1516,12 @@ defmodule AwsSDK.IdentityCenter do
              %{"IdentityStoreId" => identity_store_id, "GroupId" => group_id},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1374,19 +1538,24 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.list_identity_store_groups("d-1234567890")
       #=> {:ok,
       #=>  %{
-      #=>    groups: [
+      #=>    body:
       #=>      %{
-      #=>        group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP",
-      #=>        identity_store_id: "d-1234567890",
-      #=>        display_name: "engineering",
-      #=>        description: "Engineering team"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        groups: [
+      #=>          %{
+      #=>            group_id: "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP",
+      #=>            identity_store_id: "d-1234567890",
+      #=>            display_name: "engineering",
+      #=>            description: "Engineering team"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_identity_store_groups(identity_store_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{groups: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{groups: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_identity_store_groups(identity_store_id, opts \\ [])
       when is_binary(identity_store_id) do
     if sandbox?(opts) do
@@ -1403,8 +1572,12 @@ defmodule AwsSDK.IdentityCenter do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation(:identitystore, "ListGroups", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1423,8 +1596,12 @@ defmodule AwsSDK.IdentityCenter do
       AwsSDK.IdentityCenter.create_group_membership("d-1234567890", "a1b2c3d4-5061-7080-b1e0-EXAMPLEGRP", "9067b2e8-4051-7096-b1e0-EXAMPLEUSER")
       #=> {:ok,
       #=>  %{
-      #=>    membership_id: "b2c3d4e5-6071-8090-c1f0-EXAMPLEMEMB",
-      #=>    identity_store_id: "d-1234567890"
+      #=>    body:
+      #=>      %{
+      #=>        membership_id: "b2c3d4e5-6071-8090-c1f0-EXAMPLEMEMB",
+      #=>        identity_store_id: "d-1234567890"
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec create_group_membership(
@@ -1432,7 +1609,7 @@ defmodule AwsSDK.IdentityCenter do
           group_id :: String.t(),
           user_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{membership_id: String.t()}} | {:error, term()}
+        ) :: {:ok, %{body: %{membership_id: String.t()}, headers: map()}} | {:error, term()}
   def create_group_membership(identity_store_id, group_id, user_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(group_id) and is_binary(user_id) do
     if sandbox?(opts) do
@@ -1454,8 +1631,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1474,7 +1655,7 @@ defmodule AwsSDK.IdentityCenter do
         "d-1234567890",
         "b2c3d4e5-6071-8090-c1f0-EXAMPLEMEMB"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Takes the membership ID from `create_group_membership/4`, not the user and
   group IDs.
@@ -1484,7 +1665,7 @@ defmodule AwsSDK.IdentityCenter do
           membership_id :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_group_membership(identity_store_id, membership_id, opts \\ [])
       when is_binary(identity_store_id) and is_binary(membership_id) do
     if sandbox?(opts) do
@@ -1505,8 +1686,12 @@ defmodule AwsSDK.IdentityCenter do
              },
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 

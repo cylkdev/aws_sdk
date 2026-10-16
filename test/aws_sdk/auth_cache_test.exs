@@ -128,8 +128,8 @@ defmodule AwsSDK.AuthCacheTest do
       assert {:ok, %{access_key_id: "AKIA_1"}} = AuthCache.get(@key, fetcher: minter(counter))
     end
 
-    test ":skip surfaces as :unavailable and is not cached", %{counter: counter} do
-      assert {:error, :unavailable} = AuthCache.get(@key, fetcher: fn _ -> :skip end)
+    test ":skip is passed through and is not cached", %{counter: counter} do
+      assert :skip = AuthCache.get(@key, fetcher: fn _ -> :skip end)
       assert {:ok, _} = AuthCache.get(@key, fetcher: minter(counter))
       assert mints(counter) === 1
     end

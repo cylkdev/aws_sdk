@@ -53,17 +53,17 @@ defmodule AwsSDK.STS do
 
       setup do
         AwsSDK.STS.Sandbox.set_get_caller_identity_responses([
-          fn -> {:ok, %{account: "123456789012", arn: "arn:aws:iam::123456789012:user/alice", user_id: "AIDA123"}} end
+          fn -> {:ok, %{body: %{account: "123456789012", arn: "arn:aws:iam::123456789012:user/alice", user_id: "AIDA123"}, headers: %{}}} end
         ])
       end
 
       test "returns caller identity" do
-        assert {:ok, %{account: "123456789012"}} =
+        assert {:ok, %{body: %{account: "123456789012"}}} =
                  AwsSDK.STS.get_caller_identity(sandbox: [enabled: true])
       end
   """
 
-  import SweetXml, only: [xpath: 3, sigil_x: 2]
+  import SweetXml, only: [xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
   alias AwsSDK.Operation
@@ -84,21 +84,28 @@ defmodule AwsSDK.STS do
   Wraps the STS `GetCallerIdentity` action. No request parameters are
   required - the response is derived from the signing credentials.
 
-  Returns `{:ok, %{account: String.t(), arn: String.t(), user_id: String.t()}}`
-  on success.
+  Returns `{:ok, %{body: %{account: ..., arn: ..., user_id: ...}, headers: map()}}`
+  on success; `:headers` carries the response headers (e.g. `x_amzn_request_id`).
 
   ## Examples
 
       AwsSDK.STS.get_caller_identity()
       #=> {:ok,
       #=>  %{
-      #=>    account: "123456789012",
-      #=>    arn: "arn:aws:sts::123456789012:assumed-role/deploy/session",
-      #=>    user_id: "AROA1EXAMPLE:session"
+      #=>    body: %{
+      #=>      account: "123456789012",
+      #=>      arn: "arn:aws:sts::123456789012:assumed-role/deploy/session",
+      #=>      user_id: "AROA1EXAMPLE:session"
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6104cbe-af31-11e0-8154-cbc7ccf896c7", ...}
       #=>  }}
   """
   @spec get_caller_identity(opts :: keyword()) ::
-          {:ok, %{account: String.t(), arn: String.t(), user_id: String.t()}}
+          {:ok,
+           %{
+             body: %{account: String.t(), arn: String.t(), user_id: String.t()},
+             headers: map()
+           }}
           | {:error, term()}
   def get_caller_identity(opts \\ []) do
     if sandbox?(opts) do
@@ -110,7 +117,7 @@ defmodule AwsSDK.STS do
 
   defp do_get_caller_identity(opts) do
     with {:ok, op} <- build_operation("GetCallerIdentity", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       fields =
         xpath(body, ~x"//GetCallerIdentityResult"e,
           account: ~x"./Account/text()"s,
@@ -118,7 +125,7 @@ defmodule AwsSDK.STS do
           user_id: ~x"./UserId/text()"s
         )
 
-      {:ok, fields}
+      {:ok, %{body: fields, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -130,15 +137,18 @@ defmodule AwsSDK.STS do
   @spec assume_role(map, map, String.t(), keyword) ::
           {:ok,
            %{
-             credentials: %{
-               access_key_id: String.t(),
-               secret_access_key: String.t(),
-               session_token: String.t(),
-               expiration: DateTime.t() | nil
+             body: %{
+               credentials: %{
+                 access_key_id: String.t(),
+                 secret_access_key: String.t(),
+                 session_token: String.t(),
+                 expiration: DateTime.t() | nil
+               },
+               assumed_role_user: %{arn: String.t(), assumed_role_id: String.t()} | nil,
+               packed_policy_size: integer() | nil,
+               source_identity: String.t()
              },
-             assumed_role_user: %{arn: String.t(), assumed_role_id: String.t()} | nil,
-             packed_policy_size: integer() | nil,
-             source_identity: String.t()
+             headers: map()
            }}
           | {:error, term}
   def assume_role(params, source_creds, region, opts) do
@@ -156,9 +166,16 @@ defmodule AwsSDK.STS do
     }
 
     case Client.execute(op) do
-      {:ok, %{body: xml}} -> parse_assume_role(xml)
-      {:error, {:http_error, status, xml}} -> {:error, {:sts_http_error, status, xml}}
-      {:error, reason} -> {:error, {:sts_transport_error, reason}}
+      {:ok, %{body: xml, headers: headers}} ->
+        with {:ok, parsed} <- parse_assume_role(xml) do
+          {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
+        end
+
+      {:error, {:http_error, status, xml, headers}} ->
+        {:error, {:sts_http_error, status, xml, headers}}
+
+      {:error, reason} ->
+        {:error, {:sts_transport_error, reason}}
     end
   end
 
@@ -195,12 +212,12 @@ defmodule AwsSDK.STS do
         ],
         assumed_role_user: [
           ~x"./AssumedRoleUser"o,
-          arn: ~x"./Arn/text()"os,
-          assumed_role_id: ~x"./AssumedRoleId/text()"os
+          arn: ~x"./Arn/text()"o |> transform_by(&optional_text/1),
+          assumed_role_id: ~x"./AssumedRoleId/text()"o |> transform_by(&optional_text/1)
         ],
         # Only meaningful when a policy or tags were passed, so not guaranteed.
         packed_policy_size: ~x"./PackedPolicySize/text()"oi,
-        source_identity: ~x"./SourceIdentity/text()"os
+        source_identity: ~x"./SourceIdentity/text()"o |> transform_by(&optional_text/1)
       )
 
     case parsed do
@@ -321,4 +338,8 @@ defmodule AwsSDK.STS do
       end
     end)
   end
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

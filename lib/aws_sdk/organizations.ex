@@ -90,18 +90,23 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.create_organization(feature_set: "ALL")
       #=> {:ok,
       #=>  %{
-      #=>    organization: %{
-      #=>      id: "o-exampleorgid",
-      #=>      arn: "arn:aws:organizations::123456789012:organization/o-exampleorgid",
-      #=>      feature_set: "ALL",
-      #=>      master_account_arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/123456789012",
-      #=>      master_account_id: "123456789012",
-      #=>      master_account_email: "root@example.com",
-      #=>      available_policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        organization: %{
+      #=>          id: "o-exampleorgid",
+      #=>          arn: "arn:aws:organizations::123456789012:organization/o-exampleorgid",
+      #=>          feature_set: "ALL",
+      #=>          master_account_arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/123456789012",
+      #=>          master_account_id: "123456789012",
+      #=>          master_account_email: "root@example.com",
+      #=>          available_policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
-  @spec create_organization(opts :: keyword()) :: {:ok, %{organization: map()}} | {:error, term()}
+  @spec create_organization(opts :: keyword()) ::
+          {:ok, %{body: %{organization: map()}, headers: map()}} | {:error, term()}
   def create_organization(opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_organization_response(opts)
@@ -114,8 +119,12 @@ defmodule AwsSDK.Organizations do
     data = maybe_put(%{}, "FeatureSet", opts[:feature_set])
 
     with {:ok, op} <- build_operation("CreateOrganization", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -140,15 +149,19 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.create_organizational_unit("r-exam", "Workloads")
       #=> {:ok,
       #=>  %{
-      #=>    organizational_unit: %{
-      #=>      id: "ou-exam-awsccdev",
-      #=>      arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
-      #=>      name: "Workloads"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        organizational_unit: %{
+      #=>          id: "ou-exam-awsccdev",
+      #=>          arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
+      #=>          name: "Workloads"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec create_organizational_unit(parent_id :: String.t(), name :: String.t(), opts :: keyword()) ::
-          {:ok, %{organizational_unit: map()}} | {:error, term()}
+          {:ok, %{body: %{organizational_unit: map()}, headers: map()}} | {:error, term()}
   def create_organizational_unit(parent_id, name, opts \\ [])
       when is_binary(parent_id) and is_binary(name) do
     if sandbox?(opts) do
@@ -165,8 +178,12 @@ defmodule AwsSDK.Organizations do
              %{"ParentId" => parent_id, "Name" => name},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -192,19 +209,23 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.create_account("tools", "aws+tools@example.com")
       #=> {:ok,
       #=>  %{
-      #=>    create_account_status: %{
-      #=>      id: "car-exampleaccountcreationrequestid",
-      #=>      account_name: "tools",
-      #=>      state: "IN_PROGRESS",
-      #=>      requested_timestamp: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        create_account_status: %{
+      #=>          id: "car-exampleaccountcreationrequestid",
+      #=>          account_name: "tools",
+      #=>          state: "IN_PROGRESS",
+      #=>          requested_timestamp: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Creation is asynchronous. Poll `describe_create_account_status/2` with the
   returned `:id` until `:state` is `"SUCCEEDED"` or `"FAILED"`.
   """
   @spec create_account(name :: String.t(), email :: String.t(), opts :: keyword()) ::
-          {:ok, %{create_account_status: map()}} | {:error, term()}
+          {:ok, %{body: %{create_account_status: map()}, headers: map()}} | {:error, term()}
   def create_account(name, email, opts \\ []) when is_binary(name) and is_binary(email) do
     if sandbox?(opts) do
       sandbox_create_account_response(name, opts)
@@ -222,8 +243,12 @@ defmodule AwsSDK.Organizations do
       )
 
     with {:ok, op} <- build_operation("CreateAccount", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -245,27 +270,35 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.describe_create_account_status("car-exampleaccountcreationrequestid")
       #=> {:ok,
       #=>  %{
-      #=>    create_account_status: %{
-      #=>      id: "car-exampleaccountcreationrequestid",
-      #=>      account_name: "tools",
-      #=>      state: "SUCCEEDED",
-      #=>      account_id: "333333333333",
-      #=>      requested_timestamp: 1.7e9,
-      #=>      completed_timestamp: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        create_account_status: %{
+      #=>          id: "car-exampleaccountcreationrequestid",
+      #=>          account_name: "tools",
+      #=>          state: "SUCCEEDED",
+      #=>          account_id: "333333333333",
+      #=>          requested_timestamp: 1.7e9,
+      #=>          completed_timestamp: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
       # On failure, :failure_reason replaces :account_id.
       #=> {:ok,
       #=>  %{
-      #=>    create_account_status: %{
-      #=>      state: "FAILED",
-      #=>      failure_reason: "EMAIL_ALREADY_EXISTS"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        create_account_status: %{
+      #=>          state: "FAILED",
+      #=>          failure_reason: "EMAIL_ALREADY_EXISTS"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_create_account_status(request_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{create_account_status: map()}} | {:error, term()}
+          {:ok, %{body: %{create_account_status: map()}, headers: map()}} | {:error, term()}
   def describe_create_account_status(request_id, opts \\ []) when is_binary(request_id) do
     if sandbox?(opts) do
       sandbox_describe_create_account_status_response(request_id, opts)
@@ -281,8 +314,12 @@ defmodule AwsSDK.Organizations do
              %{"CreateAccountRequestId" => request_id},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -304,14 +341,14 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.move_account("333333333333", "r-exam", "ou-exam-awsccdev")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec move_account(
           account_id :: String.t(),
           source_parent_id :: String.t(),
           destination_parent_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def move_account(account_id, source_parent_id, destination_parent_id, opts \\ [])
       when is_binary(account_id) and is_binary(source_parent_id) and
              is_binary(destination_parent_id) do
@@ -330,8 +367,12 @@ defmodule AwsSDK.Organizations do
     }
 
     with {:ok, op} <- build_operation("MoveAccount", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -346,11 +387,12 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.delete_organization()
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Every member account must be removed first.
   """
-  @spec delete_organization(opts :: keyword()) :: {:ok, %{}} | {:error, term()}
+  @spec delete_organization(opts :: keyword()) ::
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_organization(opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_organization_response(opts)
@@ -361,8 +403,12 @@ defmodule AwsSDK.Organizations do
 
   defp do_delete_organization(opts) do
     with {:ok, op} <- build_operation("DeleteOrganization", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -378,12 +424,12 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.delete_organizational_unit("ou-exam-awsccdev")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   The OU must contain no accounts or child OUs.
   """
   @spec delete_organizational_unit(ou_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_organizational_unit(ou_id, opts \\ []) when is_binary(ou_id) do
     if sandbox?(opts) do
       sandbox_delete_organizational_unit_response(ou_id, opts)
@@ -395,8 +441,12 @@ defmodule AwsSDK.Organizations do
   defp do_delete_organizational_unit(ou_id, opts) do
     with {:ok, op} <-
            build_operation("DeleteOrganizationalUnit", %{"OrganizationalUnitId" => ou_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -416,12 +466,12 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.close_account("333333333333")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
 
   Closure is asynchronous and not reversible through this API.
   """
   @spec close_account(account_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def close_account(account_id, opts \\ []) when is_binary(account_id) do
     if sandbox?(opts) do
       sandbox_close_account_response(account_id, opts)
@@ -432,8 +482,12 @@ defmodule AwsSDK.Organizations do
 
   defp do_close_account(account_id, opts) do
     with {:ok, op} <- build_operation("CloseAccount", %{"AccountId" => account_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -461,13 +515,13 @@ defmodule AwsSDK.Organizations do
         "333333333333",
         "sso.amazonaws.com"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec register_delegated_administrator(
           account_id :: String.t(),
           service_principal :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def register_delegated_administrator(account_id, service_principal, opts \\ [])
       when is_binary(account_id) and is_binary(service_principal) do
     if sandbox?(opts) do
@@ -481,8 +535,12 @@ defmodule AwsSDK.Organizations do
     data = %{"AccountId" => account_id, "ServicePrincipal" => service_principal}
 
     with {:ok, op} <- build_operation("RegisterDelegatedAdministrator", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -502,10 +560,10 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.enable_aws_service_access("sso.amazonaws.com")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec enable_aws_service_access(service_principal :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def enable_aws_service_access(service_principal, opts \\ [])
       when is_binary(service_principal) do
     if sandbox?(opts) do
@@ -522,8 +580,12 @@ defmodule AwsSDK.Organizations do
              %{"ServicePrincipal" => service_principal},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -538,19 +600,23 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.describe_organization()
       #=> {:ok,
       #=>  %{
-      #=>    organization: %{
-      #=>      id: "o-exampleorgid",
-      #=>      arn: "arn:aws:organizations::123456789012:organization/o-exampleorgid",
-      #=>      feature_set: "ALL",
-      #=>      master_account_arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/123456789012",
-      #=>      master_account_id: "123456789012",
-      #=>      master_account_email: "root@example.com",
-      #=>      available_policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        organization: %{
+      #=>          id: "o-exampleorgid",
+      #=>          arn: "arn:aws:organizations::123456789012:organization/o-exampleorgid",
+      #=>          feature_set: "ALL",
+      #=>          master_account_arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/123456789012",
+      #=>          master_account_id: "123456789012",
+      #=>          master_account_email: "root@example.com",
+      #=>          available_policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_organization(opts :: keyword()) ::
-          {:ok, %{organization: map()}} | {:error, term()}
+          {:ok, %{body: %{organization: map()}, headers: map()}} | {:error, term()}
   def describe_organization(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_organization_response(opts)
@@ -561,8 +627,12 @@ defmodule AwsSDK.Organizations do
 
   defp do_describe_organization(opts) do
     with {:ok, op} <- build_operation("DescribeOrganization", %{}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -580,10 +650,14 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.get_root()
       #=> {:ok,
       #=>  %{
-      #=>    id: "r-exam",
-      #=>    arn: "arn:aws:organizations::123456789012:root/o-exampleorgid/r-exam",
-      #=>    name: "Root",
-      #=>    policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
+      #=>    body:
+      #=>      %{
+      #=>        id: "r-exam",
+      #=>        arn: "arn:aws:organizations::123456789012:root/o-exampleorgid/r-exam",
+      #=>        name: "Root",
+      #=>        policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   A convenience wrapper returning the first element of `list_roots/1`; an
@@ -606,18 +680,22 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_roots()
       #=> {:ok,
       #=>  %{
-      #=>    roots: [
+      #=>    body:
       #=>      %{
-      #=>        id: "r-exam",
-      #=>        arn: "arn:aws:organizations::123456789012:root/o-exampleorgid/r-exam",
-      #=>        name: "Root",
-      #=>        policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        roots: [
+      #=>          %{
+      #=>            id: "r-exam",
+      #=>            arn: "arn:aws:organizations::123456789012:root/o-exampleorgid/r-exam",
+      #=>            name: "Root",
+      #=>            policy_types: [%{type: "SERVICE_CONTROL_POLICY", status: "ENABLED"}]
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
-  @spec list_roots(opts :: keyword()) :: {:ok, map()} | {:error, term()}
+  @spec list_roots(opts :: keyword()) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_roots(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_roots_response(opts)
@@ -637,8 +715,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListRoots", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -662,20 +744,24 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_organizational_units_for_parent("r-exam")
       #=> {:ok,
       #=>  %{
-      #=>    organizational_units: [
+      #=>    body:
       #=>      %{
-      #=>        id: "ou-exam-awsccdev",
-      #=>        arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
-      #=>        name: "Workloads"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        organizational_units: [
+      #=>          %{
+      #=>            id: "ou-exam-awsccdev",
+      #=>            arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
+      #=>            name: "Workloads"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Direct children only -- nested OUs need a call per level.
   """
   @spec list_organizational_units_for_parent(parent_id :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_organizational_units_for_parent(parent_id, opts \\ []) when is_binary(parent_id) do
     if sandbox?(opts) do
       sandbox_list_organizational_units_for_parent_response(parent_id, opts)
@@ -691,8 +777,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListOrganizationalUnitsForParent", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -711,25 +801,30 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_accounts()
       #=> {:ok,
       #=>  %{
-      #=>    accounts: [
+      #=>    body:
       #=>      %{
-      #=>        id: "333333333333",
-      #=>        arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
-      #=>        name: "tools",
-      #=>        email: "aws+tools@example.com",
-      #=>        status: "ACTIVE",
-      #=>        joined_method: "CREATED",
-      #=>        joined_timestamp: 1.7e9
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        accounts: [
+      #=>          %{
+      #=>            id: "333333333333",
+      #=>            arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
+      #=>            name: "tools",
+      #=>            email: "aws+tools@example.com",
+      #=>            status: "ACTIVE",
+      #=>            joined_method: "CREATED",
+      #=>            joined_timestamp: 1.7e9
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Every account in the organization, regardless of OU. Use `list_children/2`
   to scope to one parent.
   """
   @spec list_accounts(opts :: keyword()) ::
-          {:ok, %{accounts: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{accounts: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_accounts(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_accounts_response(opts)
@@ -745,8 +840,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListAccounts", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -771,21 +870,26 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_delegated_administrators(service_principal: "sso.amazonaws.com")
       #=> {:ok,
       #=>  %{
-      #=>    delegated_administrators: [
+      #=>    body:
       #=>      %{
-      #=>        id: "333333333333",
-      #=>        arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
-      #=>        name: "tools",
-      #=>        email: "aws+tools@example.com",
-      #=>        status: "ACTIVE",
-      #=>        delegation_enabled_date: 1.7e9
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        delegated_administrators: [
+      #=>          %{
+      #=>            id: "333333333333",
+      #=>            arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
+      #=>            name: "tools",
+      #=>            email: "aws+tools@example.com",
+      #=>            status: "ACTIVE",
+      #=>            delegation_enabled_date: 1.7e9
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_delegated_administrators(opts :: keyword()) ::
-          {:ok, %{delegated_administrators: list(map())}} | {:error, term()}
+          {:ok, %{body: %{delegated_administrators: list(map())}, headers: map()}}
+          | {:error, term()}
   def list_delegated_administrators(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_delegated_administrators_response(opts)
@@ -802,8 +906,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListDelegatedAdministrators", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -824,14 +932,22 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_aws_service_access_for_organization()
       #=> {:ok,
       #=>  %{
-      #=>    enabled_service_principals: [
-      #=>      %{service_principal: "sso.amazonaws.com", date_enabled: 1.7e9}
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        enabled_service_principals: [
+      #=>          %{service_principal: "sso.amazonaws.com", date_enabled: 1.7e9}
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_aws_service_access_for_organization(opts :: keyword()) ::
-          {:ok, %{enabled_service_principals: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{enabled_service_principals: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def list_aws_service_access_for_organization(opts \\ []) do
     if sandbox?(opts) do
@@ -848,8 +964,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListAWSServiceAccessForOrganization", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -869,14 +989,19 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_parents("333333333333")
       #=> {:ok,
       #=>  %{
-      #=>    parents: [%{id: "ou-exam-awsccdev", type: "ORGANIZATIONAL_UNIT"}],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        parents: [%{id: "ou-exam-awsccdev", type: "ORGANIZATIONAL_UNIT"}],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Always zero or one parent; `:type` is `"ROOT"` or `"ORGANIZATIONAL_UNIT"`.
   """
   @spec list_parents(child_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{parents: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{parents: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_parents(child_id, opts \\ []) when is_binary(child_id) do
     if sandbox?(opts) do
       sandbox_list_parents_response(child_id, opts)
@@ -892,8 +1017,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListParents", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -917,19 +1046,23 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.describe_account("333333333333")
       #=> {:ok,
       #=>  %{
-      #=>    account: %{
-      #=>      id: "333333333333",
-      #=>      arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
-      #=>      name: "tools",
-      #=>      email: "aws+tools@example.com",
-      #=>      status: "ACTIVE",
-      #=>      joined_method: "CREATED",
-      #=>      joined_timestamp: 1.7e9
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        account: %{
+      #=>          id: "333333333333",
+      #=>          arn: "arn:aws:organizations::123456789012:account/o-exampleorgid/333333333333",
+      #=>          name: "tools",
+      #=>          email: "aws+tools@example.com",
+      #=>          status: "ACTIVE",
+      #=>          joined_method: "CREATED",
+      #=>          joined_timestamp: 1.7e9
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_account(account_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{account: map()}} | {:error, term()}
+          {:ok, %{body: %{account: map()}, headers: map()}} | {:error, term()}
   def describe_account(account_id, opts \\ []) when is_binary(account_id) do
     if sandbox?(opts) do
       sandbox_describe_account_response(account_id, opts)
@@ -940,8 +1073,12 @@ defmodule AwsSDK.Organizations do
 
   defp do_describe_account(account_id, opts) do
     with {:ok, op} <- build_operation("DescribeAccount", %{"AccountId" => account_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -961,15 +1098,19 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.describe_organizational_unit("ou-exam-awsccdev")
       #=> {:ok,
       #=>  %{
-      #=>    organizational_unit: %{
-      #=>      id: "ou-exam-awsccdev",
-      #=>      arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
-      #=>      name: "Workloads"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        organizational_unit: %{
+      #=>          id: "ou-exam-awsccdev",
+      #=>          arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
+      #=>          name: "Workloads"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec describe_organizational_unit(ou_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{organizational_unit: map()}} | {:error, term()}
+          {:ok, %{body: %{organizational_unit: map()}, headers: map()}} | {:error, term()}
   def describe_organizational_unit(ou_id, opts \\ []) when is_binary(ou_id) do
     if sandbox?(opts) do
       sandbox_describe_organizational_unit_response(ou_id, opts)
@@ -981,8 +1122,12 @@ defmodule AwsSDK.Organizations do
   defp do_describe_organizational_unit(ou_id, opts) do
     with {:ok, op} <-
            build_operation("DescribeOrganizationalUnit", %{"OrganizationalUnitId" => ou_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1000,18 +1145,22 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.update_organizational_unit("ou-exam-awsccdev", "Production")
       #=> {:ok,
       #=>  %{
-      #=>    organizational_unit: %{
-      #=>      id: "ou-exam-awsccdev",
-      #=>      arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
-      #=>      name: "Production"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        organizational_unit: %{
+      #=>          id: "ou-exam-awsccdev",
+      #=>          arn: "arn:aws:organizations::123456789012:ou/o-exampleorgid/ou-exam-awsccdev",
+      #=>          name: "Production"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec update_organizational_unit(
           ou_id :: String.t(),
           name :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{organizational_unit: map()}} | {:error, term()}
+        ) :: {:ok, %{body: %{organizational_unit: map()}, headers: map()}} | {:error, term()}
   def update_organizational_unit(ou_id, name, opts \\ [])
       when is_binary(ou_id) and is_binary(name) do
     if sandbox?(opts) do
@@ -1025,8 +1174,12 @@ defmodule AwsSDK.Organizations do
     data = %{"OrganizationalUnitId" => ou_id, "Name" => name}
 
     with {:ok, op} <- build_operation("UpdateOrganizationalUnit", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1041,10 +1194,10 @@ defmodule AwsSDK.Organizations do
   ## Examples
 
       AwsSDK.Organizations.disable_aws_service_access("sso.amazonaws.com")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec disable_aws_service_access(service_principal :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def disable_aws_service_access(service_principal, opts \\ [])
       when is_binary(service_principal) do
     if sandbox?(opts) do
@@ -1061,8 +1214,12 @@ defmodule AwsSDK.Organizations do
              %{"ServicePrincipal" => service_principal},
              opts
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1081,13 +1238,13 @@ defmodule AwsSDK.Organizations do
         "333333333333",
         "sso.amazonaws.com"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec deregister_delegated_administrator(
           account_id :: String.t(),
           service_principal :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{}} | {:error, term()}
+        ) :: {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def deregister_delegated_administrator(account_id, service_principal, opts \\ [])
       when is_binary(account_id) and is_binary(service_principal) do
     if sandbox?(opts) do
@@ -1101,8 +1258,12 @@ defmodule AwsSDK.Organizations do
     data = %{"AccountId" => account_id, "ServicePrincipal" => service_principal}
 
     with {:ok, op} <- build_operation("DeregisterDelegatedAdministrator", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1123,15 +1284,23 @@ defmodule AwsSDK.Organizations do
       AwsSDK.Organizations.list_children("r-exam", "ORGANIZATIONAL_UNIT")
       #=> {:ok,
       #=>  %{
-      #=>    children: [%{id: "ou-exam-awsccdev", type: "ORGANIZATIONAL_UNIT"}],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        children: [%{id: "ou-exam-awsccdev", type: "ORGANIZATIONAL_UNIT"}],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
       AwsSDK.Organizations.list_children("ou-exam-awsccdev", "ACCOUNT")
       #=> {:ok,
       #=>  %{
-      #=>    children: [%{id: "333333333333", type: "ACCOUNT"}],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        children: [%{id: "333333333333", type: "ACCOUNT"}],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   IDs and types only; call `describe_account/2` for an account's details.
@@ -1140,7 +1309,9 @@ defmodule AwsSDK.Organizations do
           parent_id :: String.t(),
           child_type :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{children: list(map()), next_token: String.t() | nil}} | {:error, term()}
+        ) ::
+          {:ok, %{body: %{children: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_children(parent_id, child_type, opts \\ [])
       when is_binary(parent_id) and is_binary(child_type) do
     if sandbox?(opts) do
@@ -1157,8 +1328,12 @@ defmodule AwsSDK.Organizations do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("ListChildren", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 

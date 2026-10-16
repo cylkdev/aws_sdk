@@ -34,7 +34,7 @@ defmodule AwsSDK.EC2 do
   via `AwsSDK.EC2.Sandbox`.
   """
 
-  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2]
+  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
   alias AwsSDK.Operation
@@ -64,14 +64,14 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.create_security_group("WebServers", "Web servers", "vpc-1a2b3c4d")
-      #=> {:ok, %{group_id: "sg-1a2b3c4d", tag_set: []}}
+      #=> {:ok, %{body: %{group_id: "sg-1a2b3c4d", tag_set: []}, headers: %{...}}}
   """
   @spec create_security_group(
           name :: String.t(),
           description :: String.t(),
           vpc_id :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_security_group(name, description, vpc_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_security_group_response(name, opts)
@@ -88,14 +88,18 @@ defmodule AwsSDK.EC2 do
     }
 
     with {:ok, op} <- build_operation("CreateSecurityGroup", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       {:ok,
-       xpath(
-         body,
-         ~x"//CreateSecurityGroupResponse"e,
-         group_id: ~x"./groupId/text()"s,
-         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
-       )}
+       %{
+         body:
+           xpath(
+             body,
+             ~x"//CreateSecurityGroupResponse"e,
+             group_id: ~x"./groupId/text()"s,
+             tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+           ),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -112,7 +116,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_security_groups(group_ids: ["sg-1a2b3c4d"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    security_group_info: [
       #=>      %{
       #=>        group_id: "sg-1a2b3c4d",
@@ -120,13 +124,13 @@ defmodule AwsSDK.EC2 do
       #=>        group_description: "Web servers",
       #=>        vpc_id: "vpc-1a2b3c4d",
       #=>        owner_id: "123456789012",
-      #=>        security_group_arn: "",
+      #=>        security_group_arn: nil,
       #=>        ip_permissions: [
       #=>          %{
       #=>            ip_protocol: "tcp",
       #=>            from_port: 443,
       #=>            to_port: 443,
-      #=>            ip_ranges: [%{cidr_ip: "0.0.0.0/0", description: ""}],
+      #=>            ip_ranges: [%{cidr_ip: "0.0.0.0/0", description: nil}],
       #=>            ipv6_ranges: [],
       #=>            prefix_list_ids: [],
       #=>            groups: []
@@ -137,13 +141,17 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   `:from_port` / `:to_port` are `nil` when `ip_protocol` is `"-1"` (all
   protocols) -- AWS omits the elements rather than sending -1.
   """
   @spec describe_security_groups(opts :: keyword()) ::
-          {:ok, %{security_group_info: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{security_group_info: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_security_groups(opts \\ []) do
     if sandbox?(opts) do
@@ -161,7 +169,7 @@ defmodule AwsSDK.EC2 do
       |> put_filters(opts[:filters] || [])
 
     with {:ok, op} <- build_operation("DescribeSecurityGroups", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       groups =
         xpath(body, ~x"//securityGroupInfo/item"l,
           group_id: ~x"./groupId/text()"s,
@@ -169,7 +177,7 @@ defmodule AwsSDK.EC2 do
           group_description: ~x"./groupDescription/text()"s,
           vpc_id: ~x"./vpcId/text()"s,
           owner_id: ~x"./ownerId/text()"s,
-          security_group_arn: ~x"./securityGroupArn/text()"os,
+          security_group_arn: ~x"./securityGroupArn/text()"o |> transform_by(&optional_text/1),
           tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s],
           ip_permissions: [
             ~x"./ipPermissions/item"l,
@@ -182,27 +190,28 @@ defmodule AwsSDK.EC2 do
             ip_ranges: [
               ~x"./ipRanges/item"l,
               cidr_ip: ~x"./cidrIp/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             ipv6_ranges: [
               ~x"./ipv6Ranges/item"l,
               cidr_ipv6: ~x"./cidrIpv6/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             prefix_list_ids: [
               ~x"./prefixListIds/item"l,
               prefix_list_id: ~x"./prefixListId/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             groups: [
               ~x"./groups/item"l,
-              group_id: ~x"./groupId/text()"os,
-              group_name: ~x"./groupName/text()"os,
-              user_id: ~x"./userId/text()"os,
-              vpc_id: ~x"./vpcId/text()"os,
-              vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os,
-              peering_status: ~x"./peeringStatus/text()"os,
-              description: ~x"./description/text()"os
+              group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+              group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+              user_id: ~x"./userId/text()"o |> transform_by(&optional_text/1),
+              vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+              vpc_peering_connection_id:
+                ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+              peering_status: ~x"./peeringStatus/text()"o |> transform_by(&optional_text/1),
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ]
           ],
           ip_permissions_egress: [
@@ -216,35 +225,44 @@ defmodule AwsSDK.EC2 do
             ip_ranges: [
               ~x"./ipRanges/item"l,
               cidr_ip: ~x"./cidrIp/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             ipv6_ranges: [
               ~x"./ipv6Ranges/item"l,
               cidr_ipv6: ~x"./cidrIpv6/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             prefix_list_ids: [
               ~x"./prefixListIds/item"l,
               prefix_list_id: ~x"./prefixListId/text()"s,
-              description: ~x"./description/text()"os
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ],
             groups: [
               ~x"./groups/item"l,
-              group_id: ~x"./groupId/text()"os,
-              group_name: ~x"./groupName/text()"os,
-              user_id: ~x"./userId/text()"os,
-              vpc_id: ~x"./vpcId/text()"os,
-              vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os,
-              peering_status: ~x"./peeringStatus/text()"os,
-              description: ~x"./description/text()"os
+              group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+              group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+              user_id: ~x"./userId/text()"o |> transform_by(&optional_text/1),
+              vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+              vpc_peering_connection_id:
+                ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+              peering_status: ~x"./peeringStatus/text()"o |> transform_by(&optional_text/1),
+              description: ~x"./description/text()"o |> transform_by(&optional_text/1)
             ]
           ]
         )
 
       {:ok,
        %{
-         security_group_info: groups,
-         next_token: xpath(body, ~x"//DescribeSecurityGroupsResponse/nextToken/text()"os)
+         body: %{
+           security_group_info: groups,
+           next_token:
+             xpath(
+               body,
+               ~x"//DescribeSecurityGroupsResponse/nextToken/text()"o
+               |> transform_by(&optional_text/1)
+             )
+         },
+         headers: Client.deserialize_headers(headers, opts)
        }}
     end
   end
@@ -255,13 +273,14 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.delete_security_group(group_id: "sg-1a2b3c4d")
-      #=> {:ok, %{return: true}}
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
 
       # GroupId and GroupName are alternatives; supply one.
       AwsSDK.EC2.delete_security_group(group_name: "WebServers")
-      #=> {:ok, %{return: true}}
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
   """
-  @spec delete_security_group(opts :: keyword()) :: {:ok, map()} | {:error, term()}
+  @spec delete_security_group(opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_security_group(opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_security_group_response(opts)
@@ -279,8 +298,8 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("GroupName", opts[:group_name])
 
     with {:ok, op} <- build_operation("DeleteSecurityGroup", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_return(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok, %{body: parse_return(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -302,33 +321,33 @@ defmodule AwsSDK.EC2 do
         }
       ])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    return: true,
       #=>    security_group_rule_set: [
       #=>      %{
       #=>        security_group_rule_id: "sgr-0a1b2c3d",
       #=>        group_id: "sg-1a2b3c4d",
       #=>        group_owner_id: "123456789012",
-      #=>        is_egress: "false",
+      #=>        is_egress: false,
       #=>        ip_protocol: "tcp",
       #=>        from_port: 443,
       #=>        to_port: 443,
       #=>        cidr_ipv4: "0.0.0.0/0",
       #=>        cidr_ipv6: "",
-      #=>        prefix_list_id: "",
+      #=>        prefix_list_id: nil,
       #=>        referenced_group_info: nil,
       #=>        description: "https",
       #=>        tag_set: [],
-      #=>        security_group_rule_arn: ""
+      #=>        security_group_rule_arn: nil
       #=>      }
       #=>    ]
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec authorize_security_group_ingress(
           group_id :: String.t(),
           ip_permissions :: list(map()),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def authorize_security_group_ingress(group_id, ip_permissions, opts \\ []) do
     if sandbox?(opts) do
       sandbox_authorize_security_group_ingress_response(group_id, opts)
@@ -347,13 +366,13 @@ defmodule AwsSDK.EC2 do
           ip_ranges: [%{cidr_ip: "0.0.0.0/0"}]}
       ])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    return: true,
       #=>    unknown_ip_permission_set: [],
       #=>    revoked_security_group_rule_set: [
       #=>      %{security_group_rule_id: "sgr-0a1b2c3d", ip_protocol: "tcp"}
       #=>    ]
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Rules AWS could not find come back in `:unknown_ip_permission_set` rather
   than as an error.
@@ -362,7 +381,7 @@ defmodule AwsSDK.EC2 do
           group_id :: String.t(),
           ip_permissions :: list(map()),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def revoke_security_group_ingress(group_id, ip_permissions, opts \\ []) do
     if sandbox?(opts) do
       sandbox_revoke_security_group_ingress_response(group_id, opts)
@@ -381,25 +400,25 @@ defmodule AwsSDK.EC2 do
           user_id_group_pairs: [%{group_id: "sg-9z8y7x6w"}]}
       ])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    return: true,
       #=>    security_group_rule_set: [
       #=>      %{
       #=>        security_group_rule_id: "sgr-1b2c3d4e",
-      #=>        is_egress: "true",
+      #=>        is_egress: true,
       #=>        ip_protocol: "tcp",
       #=>        from_port: 5432,
       #=>        to_port: 5432,
       #=>        referenced_group_info: %{group_id: "sg-9z8y7x6w"}
       #=>      }
       #=>    ]
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec authorize_security_group_egress(
           group_id :: String.t(),
           ip_permissions :: list(map()),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def authorize_security_group_egress(group_id, ip_permissions, opts \\ []) do
     if sandbox?(opts) do
       sandbox_authorize_security_group_egress_response(group_id, opts)
@@ -417,17 +436,17 @@ defmodule AwsSDK.EC2 do
         %{protocol: "-1", ip_ranges: [%{cidr_ip: "0.0.0.0/0"}]}
       ])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    return: true,
       #=>    unknown_ip_permission_set: [],
       #=>    revoked_security_group_rule_set: [%{security_group_rule_id: "sgr-2c3d4e5f"}]
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec revoke_security_group_egress(
           group_id :: String.t(),
           ip_permissions :: list(map()),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def revoke_security_group_egress(group_id, ip_permissions, opts \\ []) do
     if sandbox?(opts) do
       sandbox_revoke_security_group_egress_response(group_id, opts)
@@ -442,8 +461,12 @@ defmodule AwsSDK.EC2 do
       |> put_ip_permissions(ip_permissions)
 
     with {:ok, op} <- build_operation(action, params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_sg_rule_result(action, body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_sg_rule_result(action, body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -453,71 +476,85 @@ defmodule AwsSDK.EC2 do
   defp parse_sg_rule_result("Authorize" <> _, body) do
     body
     |> parse_return()
-    |> Map.put(:security_group_rule_set, parse_security_group_rule_set(body))
+    |> Map.put(
+      :security_group_rule_set,
+      parse_security_group_rule_set(body, "securityGroupRuleSet")
+    )
   end
 
   defp parse_sg_rule_result("Revoke" <> _, body) do
     Map.merge(parse_return(body), %{
       unknown_ip_permission_set: parse_ip_permission_set(body),
-      revoked_security_group_rule_set: parse_security_group_rule_set(body)
+      revoked_security_group_rule_set:
+        parse_security_group_rule_set(body, "revokedSecurityGroupRuleSet")
     })
   end
 
-  defp parse_security_group_rule_set(body) do
-    xpath(body, ~x"//securityGroupRuleSet/item"l,
-      security_group_rule_id: ~x"./securityGroupRuleId/text()"os,
-      group_id: ~x"./groupId/text()"os,
-      group_owner_id: ~x"./groupOwnerId/text()"os,
-      is_egress: ~x"./isEgress/text()"os,
-      ip_protocol: ~x"./ipProtocol/text()"os,
+  @doc false
+  def parse_sg_rule_result_for_test(action, xml), do: parse_sg_rule_result(action, xml)
+
+  # Authorize returns `securityGroupRuleSet`, Revoke returns
+  # `revokedSecurityGroupRuleSet`; XPath element names must match exactly.
+  defp parse_security_group_rule_set(body, set_name) do
+    body
+    |> xpath(~x"//#{set_name}/item"l,
+      security_group_rule_id: ~x"./securityGroupRuleId/text()"o |> transform_by(&optional_text/1),
+      group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+      group_owner_id: ~x"./groupOwnerId/text()"o |> transform_by(&optional_text/1),
+      is_egress: ~x"./isEgress/text()"o |> transform_by(&optional_text/1),
+      ip_protocol: ~x"./ipProtocol/text()"o |> transform_by(&optional_text/1),
       from_port: ~x"./fromPort/text()"oi,
       to_port: ~x"./toPort/text()"oi,
-      cidr_ipv4: ~x"./cidrIpv4/text()"os,
-      cidr_ipv6: ~x"./cidrIpv6/text()"os,
-      prefix_list_id: ~x"./prefixListId/text()"os,
+      cidr_ipv4: ~x"./cidrIpv4/text()"o |> transform_by(&optional_text/1),
+      cidr_ipv6: ~x"./cidrIpv6/text()"o |> transform_by(&optional_text/1),
+      prefix_list_id: ~x"./prefixListId/text()"o |> transform_by(&optional_text/1),
       referenced_group_info: [
         ~x"./referencedGroupInfo"o,
-        group_id: ~x"./groupId/text()"os,
-        peering_status: ~x"./peeringStatus/text()"os,
-        user_id: ~x"./userId/text()"os,
-        vpc_id: ~x"./vpcId/text()"os,
-        vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os
+        group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+        peering_status: ~x"./peeringStatus/text()"o |> transform_by(&optional_text/1),
+        user_id: ~x"./userId/text()"o |> transform_by(&optional_text/1),
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        vpc_peering_connection_id:
+          ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1)
       ],
-      description: ~x"./description/text()"os,
+      description: ~x"./description/text()"o |> transform_by(&optional_text/1),
       tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s],
-      security_group_rule_arn: ~x"./securityGroupRuleArn/text()"os
+      security_group_rule_arn:
+        ~x"./securityGroupRuleArn/text()"o |> transform_by(&optional_text/1)
     )
+    |> Enum.map(&coerce_is_egress/1)
   end
 
   defp parse_ip_permission_set(body) do
     xpath(body, ~x"//unknownIpPermissionSet/item"l,
-      ip_protocol: ~x"./ipProtocol/text()"os,
+      ip_protocol: ~x"./ipProtocol/text()"o |> transform_by(&optional_text/1),
       from_port: ~x"./fromPort/text()"oi,
       to_port: ~x"./toPort/text()"oi,
       ip_ranges: [
         ~x"./ipRanges/item"l,
         cidr_ip: ~x"./cidrIp/text()"s,
-        description: ~x"./description/text()"os
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1)
       ],
       ipv6_ranges: [
         ~x"./ipv6Ranges/item"l,
         cidr_ipv6: ~x"./cidrIpv6/text()"s,
-        description: ~x"./description/text()"os
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1)
       ],
       prefix_list_ids: [
         ~x"./prefixListIds/item"l,
         prefix_list_id: ~x"./prefixListId/text()"s,
-        description: ~x"./description/text()"os
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1)
       ],
       groups: [
         ~x"./groups/item"l,
-        group_id: ~x"./groupId/text()"os,
-        group_name: ~x"./groupName/text()"os,
-        user_id: ~x"./userId/text()"os,
-        vpc_id: ~x"./vpcId/text()"os,
-        vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os,
-        peering_status: ~x"./peeringStatus/text()"os,
-        description: ~x"./description/text()"os
+        group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+        group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+        user_id: ~x"./userId/text()"o |> transform_by(&optional_text/1),
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        vpc_peering_connection_id:
+          ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+        peering_status: ~x"./peeringStatus/text()"o |> transform_by(&optional_text/1),
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1)
       ]
     )
   end
@@ -540,7 +577,7 @@ defmodule AwsSDK.EC2 do
         filters: [%{name: "group-id", values: ["sg-0abc"]}]
       )
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    security_group_rule_set: [
       #=>      %{
       #=>        security_group_rule_id: "sgr-0abc",
@@ -552,17 +589,21 @@ defmodule AwsSDK.EC2 do
       #=>        to_port: 443,
       #=>        cidr_ipv4: "0.0.0.0/0",
       #=>        cidr_ipv6: "",
-      #=>        prefix_list_id: "",
+      #=>        prefix_list_id: nil,
       #=>        referenced_group_info: nil,
-      #=>        description: "",
+      #=>        description: nil,
       #=>        tag_set: []
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_security_group_rules(opts :: keyword()) ::
-          {:ok, %{security_group_rule_set: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{security_group_rule_set: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_security_group_rules(opts \\ []) do
     if sandbox?(opts) do
@@ -581,8 +622,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeSecurityGroupRules", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_security_group_rules(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_security_group_rules(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -594,41 +639,48 @@ defmodule AwsSDK.EC2 do
     rules =
       xpath(body, ~x"//securityGroupRuleSet/item"l,
         security_group_rule_id: ~x"./securityGroupRuleId/text()"s,
-        group_id: ~x"./groupId/text()"os,
-        group_owner_id: ~x"./groupOwnerId/text()"os,
+        group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+        group_owner_id: ~x"./groupOwnerId/text()"o |> transform_by(&optional_text/1),
         is_egress: ~x"./isEgress/text()"s,
-        ip_protocol: ~x"./ipProtocol/text()"os,
+        ip_protocol: ~x"./ipProtocol/text()"o |> transform_by(&optional_text/1),
         from_port: ~x"./fromPort/text()"oi,
         to_port: ~x"./toPort/text()"oi,
-        cidr_ipv4: ~x"./cidrIpv4/text()"os,
-        cidr_ipv6: ~x"./cidrIpv6/text()"os,
-        prefix_list_id: ~x"./prefixListId/text()"os,
+        cidr_ipv4: ~x"./cidrIpv4/text()"o |> transform_by(&optional_text/1),
+        cidr_ipv6: ~x"./cidrIpv6/text()"o |> transform_by(&optional_text/1),
+        prefix_list_id: ~x"./prefixListId/text()"o |> transform_by(&optional_text/1),
         referenced_group_info: [
           ~x"./referencedGroupInfo"o,
-          group_id: ~x"./groupId/text()"os,
-          peering_status: ~x"./peeringStatus/text()"os,
-          user_id: ~x"./userId/text()"os,
-          vpc_id: ~x"./vpcId/text()"os,
-          vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os
+          group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+          peering_status: ~x"./peeringStatus/text()"o |> transform_by(&optional_text/1),
+          user_id: ~x"./userId/text()"o |> transform_by(&optional_text/1),
+          vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+          vpc_peering_connection_id:
+            ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1)
         ],
-        description: ~x"./description/text()"os,
-        security_group_rule_arn: ~x"./securityGroupRuleArn/text()"os,
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+        security_group_rule_arn:
+          ~x"./securityGroupRuleArn/text()"o |> transform_by(&optional_text/1),
         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
       )
 
     %{
       security_group_rule_set: Enum.map(rules, &coerce_is_egress/1),
-      next_token: xpath(body, ~x"//DescribeSecurityGroupRulesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeSecurityGroupRulesResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
   defp coerce_is_egress(%{is_egress: value} = rule) do
-    %{rule | is_egress: value === "true"}
+    %{rule | is_egress: to_bool(value)}
   end
 
   # `<return>` is a plain boolean on every mutating EC2 operation.
   defp parse_return(body) do
-    %{return: xpath(body, ~x"//return/text()"os) == "true"}
+    %{return: to_bool(xpath(body, ~x"//return/text()"o |> transform_by(&optional_text/1)))}
   end
 
   # ---------------------------------------------------------------------------
@@ -647,7 +699,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_vpcs(filters: [%{name: "isDefault", values: ["true"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    vpc_set: [
       #=>      %{
       #=>        vpc_id: "vpc-1a2b3c4d",
@@ -661,7 +713,7 @@ defmodule AwsSDK.EC2 do
       #=>          %{
       #=>            cidr_block: "10.0.0.0/16",
       #=>            association_id: "vpc-cidr-assoc-a2b3c4d5",
-      #=>            cidr_block_state: %{state: "associated", status_message: ""}
+      #=>            cidr_block_state: %{state: "associated", status_message: nil}
       #=>          }
       #=>        ],
       #=>        ipv6_cidr_block_association_set: [],
@@ -670,13 +722,14 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   `:is_default` is a real boolean; every other flag AWS models as a String
   (`"true"` / `"false"`) is left as sent.
   """
   @spec describe_vpcs(opts :: keyword()) ::
-          {:ok, %{vpc_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{vpc_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_vpcs(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_vpcs_response(opts)
@@ -692,16 +745,16 @@ defmodule AwsSDK.EC2 do
       |> put_filters(opts[:filters] || [])
 
     with {:ok, op} <- build_operation("DescribeVpcs", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       vpcs =
         xpath(body, ~x"//vpcSet/item"l,
           vpc_id: ~x"./vpcId/text()"s,
           cidr_block: ~x"./cidrBlock/text()"s,
           state: ~x"./state/text()"s,
           is_default: ~x"./isDefault/text()"s,
-          owner_id: ~x"./ownerId/text()"os,
-          dhcp_options_id: ~x"./dhcpOptionsId/text()"os,
-          instance_tenancy: ~x"./instanceTenancy/text()"os,
+          owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+          dhcp_options_id: ~x"./dhcpOptionsId/text()"o |> transform_by(&optional_text/1),
+          instance_tenancy: ~x"./instanceTenancy/text()"o |> transform_by(&optional_text/1),
           cidr_block_association_set: [
             ~x"./cidrBlockAssociationSet/item"l,
             cidr_block: ~x"./cidrBlock/text()"s,
@@ -709,7 +762,7 @@ defmodule AwsSDK.EC2 do
             cidr_block_state: [
               ~x"./cidrBlockState"o,
               state: ~x"./state/text()"s,
-              status_message: ~x"./statusMessage/text()"os
+              status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
             ]
           ],
           ipv6_cidr_block_association_set: [
@@ -719,30 +772,40 @@ defmodule AwsSDK.EC2 do
             ipv6_cidr_block_state: [
               ~x"./ipv6CidrBlockState"o,
               state: ~x"./state/text()"s,
-              status_message: ~x"./statusMessage/text()"os
+              status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
             ],
-            ipv6_pool: ~x"./ipv6Pool/text()"os,
-            ipv6_address_attribute: ~x"./ipv6AddressAttribute/text()"os,
-            ip_source: ~x"./ipSource/text()"os,
-            network_border_group: ~x"./networkBorderGroup/text()"os
+            ipv6_pool: ~x"./ipv6Pool/text()"o |> transform_by(&optional_text/1),
+            ipv6_address_attribute:
+              ~x"./ipv6AddressAttribute/text()"o |> transform_by(&optional_text/1),
+            ip_source: ~x"./ipSource/text()"o |> transform_by(&optional_text/1),
+            network_border_group:
+              ~x"./networkBorderGroup/text()"o |> transform_by(&optional_text/1)
           ],
           tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s],
           block_public_access_states: [
             ~x"./blockPublicAccessStates"o,
-            internet_gateway_block_mode: ~x"./internetGatewayBlockMode/text()"os
+            internet_gateway_block_mode:
+              ~x"./internetGatewayBlockMode/text()"o |> transform_by(&optional_text/1)
           ]
         )
 
       {:ok,
        %{
-         vpc_set: Enum.map(vpcs, &coerce_is_default/1),
-         next_token: xpath(body, ~x"//DescribeVpcsResponse/nextToken/text()"os)
+         body: %{
+           vpc_set: Enum.map(vpcs, &coerce_is_default/1),
+           next_token:
+             xpath(
+               body,
+               ~x"//DescribeVpcsResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+             )
+         },
+         headers: Client.deserialize_headers(headers, opts)
        }}
     end
   end
 
   defp coerce_is_default(%{is_default: value} = vpc) do
-    %{vpc | is_default: value === "true"}
+    %{vpc | is_default: to_bool(value)}
   end
 
   @doc """
@@ -759,7 +822,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_network_acls(filters: [%{name: "vpc-id", values: ["vpc-0abc"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    network_acl_set: [
       #=>      %{
       #=>        network_acl_id: "acl-0abc",
@@ -789,10 +852,12 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_network_acls(opts :: keyword()) ::
-          {:ok, %{network_acl_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{network_acl_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_network_acls(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_network_acls_response(opts)
@@ -810,8 +875,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeNetworkAcls", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_network_acls(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_network_acls(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -822,18 +891,18 @@ defmodule AwsSDK.EC2 do
     acls =
       xpath(body, ~x"//networkAclSet/item"l,
         network_acl_id: ~x"./networkAclId/text()"s,
-        vpc_id: ~x"./vpcId/text()"os,
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
         default: ~x"./default/text()"s,
-        owner_id: ~x"./ownerId/text()"os,
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
         entry_set: [
           ~x"./entrySet/item"l,
           rule_number: ~x"./ruleNumber/text()"oi,
           # protocol is "-1" or an IANA number; AWS types it as a string.
-          protocol: ~x"./protocol/text()"os,
-          rule_action: ~x"./ruleAction/text()"os,
+          protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1),
+          rule_action: ~x"./ruleAction/text()"o |> transform_by(&optional_text/1),
           egress: ~x"./egress/text()"s,
-          cidr_block: ~x"./cidrBlock/text()"os,
-          ipv6_cidr_block: ~x"./ipv6CidrBlock/text()"os,
+          cidr_block: ~x"./cidrBlock/text()"o |> transform_by(&optional_text/1),
+          ipv6_cidr_block: ~x"./ipv6CidrBlock/text()"o |> transform_by(&optional_text/1),
           icmp_type_code: [
             ~x"./icmpTypeCode"o,
             code: ~x"./code/text()"oi,
@@ -844,28 +913,32 @@ defmodule AwsSDK.EC2 do
         association_set: [
           ~x"./associationSet/item"l,
           network_acl_association_id: ~x"./networkAclAssociationId/text()"s,
-          network_acl_id: ~x"./networkAclId/text()"os,
-          subnet_id: ~x"./subnetId/text()"os
+          network_acl_id: ~x"./networkAclId/text()"o |> transform_by(&optional_text/1),
+          subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1)
         ],
         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
       )
 
     %{
       network_acl_set: Enum.map(acls, &coerce_network_acl/1),
-      next_token: xpath(body, ~x"//DescribeNetworkAclsResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeNetworkAclsResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
   defp coerce_network_acl(%{default: default, entry_set: entries} = acl) do
     %{
       acl
-      | default: default === "true",
+      | default: to_bool(default),
         entry_set: Enum.map(entries, &coerce_network_acl_entry/1)
     }
   end
 
   defp coerce_network_acl_entry(%{egress: egress} = entry) do
-    %{entry | egress: egress === "true"}
+    %{entry | egress: to_bool(egress)}
   end
 
   @doc """
@@ -881,7 +954,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_route_tables(filters: [%{name: "vpc-id", values: ["vpc-0abc"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    route_table_set: [
       #=>      %{
       #=>        route_table_id: "rtb-0abc",
@@ -893,7 +966,7 @@ defmodule AwsSDK.EC2 do
       #=>            gateway_id: "igw-0abc",
       #=>            state: "active",
       #=>            origin: "CreateRoute",
-      #=>            nat_gateway_id: ""
+      #=>            nat_gateway_id: nil
       #=>          }
       #=>        ],
       #=>        association_set: [
@@ -901,9 +974,9 @@ defmodule AwsSDK.EC2 do
       #=>            route_table_association_id: "rtbassoc-1",
       #=>            route_table_id: "rtb-0abc",
       #=>            subnet_id: "subnet-1",
-      #=>            gateway_id: "",
+      #=>            gateway_id: nil,
       #=>            main: false,
-      #=>            association_state: %{state: "associated", status_message: ""}
+      #=>            association_state: %{state: "associated", status_message: nil}
       #=>          }
       #=>        ],
       #=>        propagating_vgw_set: [],
@@ -911,13 +984,15 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Only the commonly-read route members are shown; the parser returns every
   documented member of the response.
   """
   @spec describe_route_tables(opts :: keyword()) ::
-          {:ok, %{route_table_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{route_table_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_route_tables(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_route_tables_response(opts)
@@ -935,8 +1010,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeRouteTables", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_route_tables(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_route_tables(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -947,38 +1026,44 @@ defmodule AwsSDK.EC2 do
     tables =
       xpath(body, ~x"//routeTableSet/item"l,
         route_table_id: ~x"./routeTableId/text()"s,
-        vpc_id: ~x"./vpcId/text()"os,
-        owner_id: ~x"./ownerId/text()"os,
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
         route_set: [
           ~x"./routeSet/item"l,
-          destination_cidr_block: ~x"./destinationCidrBlock/text()"os,
-          destination_ipv6_cidr_block: ~x"./destinationIpv6CidrBlock/text()"os,
-          destination_prefix_list_id: ~x"./destinationPrefixListId/text()"os,
-          egress_only_internet_gateway_id: ~x"./egressOnlyInternetGatewayId/text()"os,
-          gateway_id: ~x"./gatewayId/text()"os,
-          instance_id: ~x"./instanceId/text()"os,
-          instance_owner_id: ~x"./instanceOwnerId/text()"os,
-          nat_gateway_id: ~x"./natGatewayId/text()"os,
-          transit_gateway_id: ~x"./transitGatewayId/text()"os,
-          local_gateway_id: ~x"./localGatewayId/text()"os,
-          carrier_gateway_id: ~x"./carrierGatewayId/text()"os,
-          network_interface_id: ~x"./networkInterfaceId/text()"os,
-          vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os,
-          core_network_arn: ~x"./coreNetworkArn/text()"os,
-          state: ~x"./state/text()"os,
-          origin: ~x"./origin/text()"os
+          destination_cidr_block:
+            ~x"./destinationCidrBlock/text()"o |> transform_by(&optional_text/1),
+          destination_ipv6_cidr_block:
+            ~x"./destinationIpv6CidrBlock/text()"o |> transform_by(&optional_text/1),
+          destination_prefix_list_id:
+            ~x"./destinationPrefixListId/text()"o |> transform_by(&optional_text/1),
+          egress_only_internet_gateway_id:
+            ~x"./egressOnlyInternetGatewayId/text()"o |> transform_by(&optional_text/1),
+          gateway_id: ~x"./gatewayId/text()"o |> transform_by(&optional_text/1),
+          instance_id: ~x"./instanceId/text()"o |> transform_by(&optional_text/1),
+          instance_owner_id: ~x"./instanceOwnerId/text()"o |> transform_by(&optional_text/1),
+          nat_gateway_id: ~x"./natGatewayId/text()"o |> transform_by(&optional_text/1),
+          transit_gateway_id: ~x"./transitGatewayId/text()"o |> transform_by(&optional_text/1),
+          local_gateway_id: ~x"./localGatewayId/text()"o |> transform_by(&optional_text/1),
+          carrier_gateway_id: ~x"./carrierGatewayId/text()"o |> transform_by(&optional_text/1),
+          network_interface_id:
+            ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
+          vpc_peering_connection_id:
+            ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+          core_network_arn: ~x"./coreNetworkArn/text()"o |> transform_by(&optional_text/1),
+          state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+          origin: ~x"./origin/text()"o |> transform_by(&optional_text/1)
         ],
         association_set: [
           ~x"./associationSet/item"l,
           route_table_association_id: ~x"./routeTableAssociationId/text()"s,
-          route_table_id: ~x"./routeTableId/text()"os,
-          subnet_id: ~x"./subnetId/text()"os,
-          gateway_id: ~x"./gatewayId/text()"os,
+          route_table_id: ~x"./routeTableId/text()"o |> transform_by(&optional_text/1),
+          subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+          gateway_id: ~x"./gatewayId/text()"o |> transform_by(&optional_text/1),
           main: ~x"./main/text()"s,
           association_state: [
             ~x"./associationState"o,
-            state: ~x"./state/text()"os,
-            status_message: ~x"./statusMessage/text()"os
+            state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+            status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
           ]
         ],
         propagating_vgw_set: [~x"./propagatingVgwSet/item"l, gateway_id: ~x"./gatewayId/text()"s],
@@ -987,7 +1072,11 @@ defmodule AwsSDK.EC2 do
 
     %{
       route_table_set: Enum.map(tables, &coerce_route_table/1),
-      next_token: xpath(body, ~x"//DescribeRouteTablesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeRouteTablesResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -996,7 +1085,7 @@ defmodule AwsSDK.EC2 do
   end
 
   defp coerce_route_table_association(%{main: main} = assoc) do
-    %{assoc | main: main === "true"}
+    %{assoc | main: to_bool(main)}
   end
 
   @doc """
@@ -1011,7 +1100,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_subnets(filters: [%{name: "vpc-id", values: ["vpc-1a2b3c4d"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    subnet_set: [
       #=>      %{
       #=>        subnet_id: "subnet-9d4a7b6c",
@@ -1030,13 +1119,14 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   `:available_ip_address_count` is `nil` on IPv6-only subnets, where AWS
   omits it.
   """
   @spec describe_subnets(opts :: keyword()) ::
-          {:ok, %{subnet_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{subnet_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_subnets(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_subnets_response(opts)
@@ -1052,7 +1142,7 @@ defmodule AwsSDK.EC2 do
       |> put_filters(opts[:filters] || [])
 
     with {:ok, op} <- build_operation("DescribeSubnets", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       subnets =
         xpath(body, ~x"//subnetSet/item"l,
           subnet_id: ~x"./subnetId/text()"s,
@@ -1060,22 +1150,27 @@ defmodule AwsSDK.EC2 do
           cidr_block: ~x"./cidrBlock/text()"s,
           availability_zone: ~x"./availabilityZone/text()"s,
           state: ~x"./state/text()"s,
-          subnet_arn: ~x"./subnetArn/text()"os,
-          owner_id: ~x"./ownerId/text()"os,
-          availability_zone_id: ~x"./availabilityZoneId/text()"os,
+          subnet_arn: ~x"./subnetArn/text()"o |> transform_by(&optional_text/1),
+          owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+          availability_zone_id:
+            ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
           # Required: No -- meaningless on IPv6-only subnets, so never a
           # plain integer cast.
           available_ip_address_count: ~x"./availableIpAddressCount/text()"oi,
           enable_lni_at_device_index: ~x"./enableLniAtDeviceIndex/text()"oi,
-          default_for_az: ~x"./defaultForAz/text()"os,
-          map_public_ip_on_launch: ~x"./mapPublicIpOnLaunch/text()"os,
-          assign_ipv6_address_on_creation: ~x"./assignIpv6AddressOnCreation/text()"os,
-          map_customer_owned_ip_on_launch: ~x"./mapCustomerOwnedIpOnLaunch/text()"os,
-          customer_owned_ipv4_pool: ~x"./customerOwnedIpv4Pool/text()"os,
-          outpost_arn: ~x"./outpostArn/text()"os,
-          enable_dns64: ~x"./enableDns64/text()"os,
-          ipv6_native: ~x"./ipv6Native/text()"os,
-          type: ~x"./type/text()"os,
+          default_for_az: ~x"./defaultForAz/text()"o |> transform_by(&optional_text/1),
+          map_public_ip_on_launch:
+            ~x"./mapPublicIpOnLaunch/text()"o |> transform_by(&optional_text/1),
+          assign_ipv6_address_on_creation:
+            ~x"./assignIpv6AddressOnCreation/text()"o |> transform_by(&optional_text/1),
+          map_customer_owned_ip_on_launch:
+            ~x"./mapCustomerOwnedIpOnLaunch/text()"o |> transform_by(&optional_text/1),
+          customer_owned_ipv4_pool:
+            ~x"./customerOwnedIpv4Pool/text()"o |> transform_by(&optional_text/1),
+          outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+          enable_dns64: ~x"./enableDns64/text()"o |> transform_by(&optional_text/1),
+          ipv6_native: ~x"./ipv6Native/text()"o |> transform_by(&optional_text/1),
+          type: ~x"./type/text()"o |> transform_by(&optional_text/1),
           ipv6_cidr_block_association_set: [
             ~x"./ipv6CidrBlockAssociationSet/item"l,
             ipv6_cidr_block: ~x"./ipv6CidrBlock/text()"s,
@@ -1085,18 +1180,26 @@ defmodule AwsSDK.EC2 do
             ipv6_cidr_block_state: [
               ~x"./ipv6CidrBlockState"o,
               state: ~x"./state/text()"s,
-              status_message: ~x"./statusMessage/text()"os
+              status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
             ],
-            ipv6_address_attribute: ~x"./ipv6AddressAttribute/text()"os,
-            ip_source: ~x"./ipSource/text()"os
+            ipv6_address_attribute:
+              ~x"./ipv6AddressAttribute/text()"o |> transform_by(&optional_text/1),
+            ip_source: ~x"./ipSource/text()"o |> transform_by(&optional_text/1)
           ],
           tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
         )
 
       {:ok,
        %{
-         subnet_set: subnets,
-         next_token: xpath(body, ~x"//DescribeSubnetsResponse/nextToken/text()"os)
+         body: %{
+           subnet_set: subnets,
+           next_token:
+             xpath(
+               body,
+               ~x"//DescribeSubnetsResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+             )
+         },
+         headers: Client.deserialize_headers(headers, opts)
        }}
     end
   end
@@ -1122,12 +1225,12 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_instances(instance_ids: ["i-1234567890abcdef0"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    reservation_set: [
       #=>      %{
       #=>        reservation_id: "r-1a2b3c4d",
       #=>        owner_id: "123456789012",
-      #=>        requester_id: "",
+      #=>        requester_id: nil,
       #=>        instances_set: [
       #=>          %{
       #=>            instance_id: "i-1234567890abcdef0",
@@ -1143,11 +1246,11 @@ defmodule AwsSDK.EC2 do
       #=>            launch_time: "2026-01-01T00:00:00.000Z",
       #=>            placement: %{
       #=>              availability_zone: "us-east-1a",
-      #=>              group_name: "",
+      #=>              group_name: nil,
       #=>              tenancy: "default",
       #=>              partition_number: nil
       #=>            },
-      #=>            cpu_options: %{core_count: 1, threads_per_core: 2, amd_sev_snp: ""},
+      #=>            cpu_options: %{core_count: 1, threads_per_core: 2, amd_sev_snp: nil},
       #=>            metadata_options: %{
       #=>              state: "applied",
       #=>              http_tokens: "required",
@@ -1192,7 +1295,7 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Only the commonly-read members are shown; the parser returns every
   documented member of the response. Note the state is
@@ -1200,7 +1303,8 @@ defmodule AwsSDK.EC2 do
   `:ip_address`, which is AWS's member name.
   """
   @spec describe_instances(opts :: keyword()) ::
-          {:ok, %{reservation_set: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{body: %{reservation_set: list(map()), next_token: String.t() | nil}, headers: map()}}
           | {:error, term()}
   def describe_instances(opts \\ []) do
     if sandbox?(opts) do
@@ -1217,8 +1321,9 @@ defmodule AwsSDK.EC2 do
       |> put_filters(opts[:filters] || [])
 
     with {:ok, op} <- build_operation("DescribeInstances", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_instances(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_instances(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -1230,7 +1335,7 @@ defmodule AwsSDK.EC2 do
       xpath(body, ~x"//reservationSet/item"l,
         reservation_id: ~x"./reservationId/text()"s,
         owner_id: ~x"./ownerId/text()"s,
-        requester_id: ~x"./requesterId/text()"os,
+        requester_id: ~x"./requesterId/text()"o |> transform_by(&optional_text/1),
         instances_set: [
           ~x"./instancesSet/item"l,
           instance_id: ~x"./instanceId/text()"s,
@@ -1241,7 +1346,7 @@ defmodule AwsSDK.EC2 do
             # Required: No on every EC2 member, so no integer is ever cast
             # unconditionally in this module.
             code: ~x"./code/text()"oi,
-            name: ~x"./name/text()"os
+            name: ~x"./name/text()"o |> transform_by(&optional_text/1)
           ],
           private_ip_address: ~x"./privateIpAddress/text()"s,
           ip_address: ~x"./ipAddress/text()"s,
@@ -1249,148 +1354,170 @@ defmodule AwsSDK.EC2 do
           vpc_id: ~x"./vpcId/text()"s,
           launch_time: ~x"./launchTime/text()"s,
           ami_launch_index: ~x"./amiLaunchIndex/text()"oi,
-          private_dns_name: ~x"./privateDnsName/text()"os,
-          dns_name: ~x"./dnsName/text()"os,
-          reason: ~x"./reason/text()"os,
-          key_name: ~x"./keyName/text()"os,
-          source_dest_check: ~x"./sourceDestCheck/text()"os,
-          architecture: ~x"./architecture/text()"os,
-          root_device_type: ~x"./rootDeviceType/text()"os,
-          root_device_name: ~x"./rootDeviceName/text()"os,
-          virtualization_type: ~x"./virtualizationType/text()"os,
-          client_token: ~x"./clientToken/text()"os,
-          hypervisor: ~x"./hypervisor/text()"os,
-          ebs_optimized: ~x"./ebsOptimized/text()"os,
-          kernel_id: ~x"./kernelId/text()"os,
-          ramdisk_id: ~x"./ramdiskId/text()"os,
-          platform: ~x"./platform/text()"os,
-          platform_details: ~x"./platformDetails/text()"os,
-          usage_operation: ~x"./usageOperation/text()"os,
-          usage_operation_update_time: ~x"./usageOperationUpdateTime/text()"os,
-          sriov_net_support: ~x"./sriovNetSupport/text()"os,
-          spot_instance_request_id: ~x"./spotInstanceRequestId/text()"os,
-          instance_lifecycle: ~x"./instanceLifecycle/text()"os,
-          capacity_reservation_id: ~x"./capacityReservationId/text()"os,
-          capacity_block_id: ~x"./capacityBlockId/text()"os,
-          boot_mode: ~x"./bootMode/text()"os,
-          current_instance_boot_mode: ~x"./currentInstanceBootMode/text()"os,
-          ipv6_address: ~x"./ipv6Address/text()"os,
-          tpm_support: ~x"./tpmSupport/text()"os,
-          outpost_arn: ~x"./outpostArn/text()"os,
-          monitoring: [~x"./monitoring"o, state: ~x"./state/text()"os],
+          private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+          dns_name: ~x"./dnsName/text()"o |> transform_by(&optional_text/1),
+          reason: ~x"./reason/text()"o |> transform_by(&optional_text/1),
+          key_name: ~x"./keyName/text()"o |> transform_by(&optional_text/1),
+          source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
+          architecture: ~x"./architecture/text()"o |> transform_by(&optional_text/1),
+          root_device_type: ~x"./rootDeviceType/text()"o |> transform_by(&optional_text/1),
+          root_device_name: ~x"./rootDeviceName/text()"o |> transform_by(&optional_text/1),
+          virtualization_type: ~x"./virtualizationType/text()"o |> transform_by(&optional_text/1),
+          client_token: ~x"./clientToken/text()"o |> transform_by(&optional_text/1),
+          hypervisor: ~x"./hypervisor/text()"o |> transform_by(&optional_text/1),
+          ebs_optimized: ~x"./ebsOptimized/text()"o |> transform_by(&optional_text/1),
+          kernel_id: ~x"./kernelId/text()"o |> transform_by(&optional_text/1),
+          ramdisk_id: ~x"./ramdiskId/text()"o |> transform_by(&optional_text/1),
+          platform: ~x"./platform/text()"o |> transform_by(&optional_text/1),
+          platform_details: ~x"./platformDetails/text()"o |> transform_by(&optional_text/1),
+          usage_operation: ~x"./usageOperation/text()"o |> transform_by(&optional_text/1),
+          usage_operation_update_time:
+            ~x"./usageOperationUpdateTime/text()"o |> transform_by(&optional_text/1),
+          sriov_net_support: ~x"./sriovNetSupport/text()"o |> transform_by(&optional_text/1),
+          spot_instance_request_id:
+            ~x"./spotInstanceRequestId/text()"o |> transform_by(&optional_text/1),
+          instance_lifecycle: ~x"./instanceLifecycle/text()"o |> transform_by(&optional_text/1),
+          capacity_reservation_id:
+            ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
+          capacity_block_id: ~x"./capacityBlockId/text()"o |> transform_by(&optional_text/1),
+          boot_mode: ~x"./bootMode/text()"o |> transform_by(&optional_text/1),
+          current_instance_boot_mode:
+            ~x"./currentInstanceBootMode/text()"o |> transform_by(&optional_text/1),
+          ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+          tpm_support: ~x"./tpmSupport/text()"o |> transform_by(&optional_text/1),
+          outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+          monitoring: [
+            ~x"./monitoring"o,
+            state: ~x"./state/text()"o |> transform_by(&optional_text/1)
+          ],
           state_reason: [
             ~x"./stateReason"o,
-            code: ~x"./code/text()"os,
-            message: ~x"./message/text()"os
+            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+            message: ~x"./message/text()"o |> transform_by(&optional_text/1)
           ],
           iam_instance_profile: [
             ~x"./iamInstanceProfile"o,
-            arn: ~x"./arn/text()"os,
-            id: ~x"./id/text()"os
+            arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
+            id: ~x"./id/text()"o |> transform_by(&optional_text/1)
           ],
           placement: [
             ~x"./placement"o,
-            availability_zone: ~x"./availabilityZone/text()"os,
-            group_name: ~x"./groupName/text()"os,
-            group_id: ~x"./groupId/text()"os,
-            tenancy: ~x"./tenancy/text()"os,
-            affinity: ~x"./affinity/text()"os,
-            host_id: ~x"./hostId/text()"os,
-            host_resource_group_arn: ~x"./hostResourceGroupArn/text()"os,
-            availability_zone_id: ~x"./availabilityZoneId/text()"os,
-            spread_domain: ~x"./spreadDomain/text()"os,
+            availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+            group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+            group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+            tenancy: ~x"./tenancy/text()"o |> transform_by(&optional_text/1),
+            affinity: ~x"./affinity/text()"o |> transform_by(&optional_text/1),
+            host_id: ~x"./hostId/text()"o |> transform_by(&optional_text/1),
+            host_resource_group_arn:
+              ~x"./hostResourceGroupArn/text()"o |> transform_by(&optional_text/1),
+            availability_zone_id:
+              ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
+            spread_domain: ~x"./spreadDomain/text()"o |> transform_by(&optional_text/1),
             partition_number: ~x"./partitionNumber/text()"oi
           ],
           cpu_options: [
             ~x"./cpuOptions"o,
             core_count: ~x"./coreCount/text()"oi,
             threads_per_core: ~x"./threadsPerCore/text()"oi,
-            amd_sev_snp: ~x"./amdSevSnp/text()"os
+            amd_sev_snp: ~x"./amdSevSnp/text()"o |> transform_by(&optional_text/1)
           ],
           # The docs' Example 9 renders this block in PascalCase; a live
           # DescribeInstances response uses lowerCamel like every other
           # structure, so the example is a doc typo.
           metadata_options: [
             ~x"./metadataOptions"o,
-            http_tokens: ~x"./httpTokens/text()"os,
-            http_endpoint: ~x"./httpEndpoint/text()"os,
-            http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"os,
-            instance_metadata_tags: ~x"./instanceMetadataTags/text()"os,
-            state: ~x"./state/text()"os,
+            http_tokens: ~x"./httpTokens/text()"o |> transform_by(&optional_text/1),
+            http_endpoint: ~x"./httpEndpoint/text()"o |> transform_by(&optional_text/1),
+            http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"o |> transform_by(&optional_text/1),
+            instance_metadata_tags:
+              ~x"./instanceMetadataTags/text()"o |> transform_by(&optional_text/1),
+            state: ~x"./state/text()"o |> transform_by(&optional_text/1),
             http_put_response_hop_limit: ~x"./httpPutResponseHopLimit/text()"oi
           ],
-          enclave_options: [~x"./enclaveOptions"o, enabled: ~x"./enabled/text()"os],
+          enclave_options: [
+            ~x"./enclaveOptions"o,
+            enabled: ~x"./enabled/text()"o |> transform_by(&optional_text/1)
+          ],
           hibernation_options: [
             ~x"./hibernationOptions"o,
-            configured: ~x"./configured/text()"os
+            configured: ~x"./configured/text()"o |> transform_by(&optional_text/1)
           ],
           maintenance_options: [
             ~x"./maintenanceOptions"o,
-            auto_recovery: ~x"./autoRecovery/text()"os,
-            reboot_migration: ~x"./rebootMigration/text()"os
+            auto_recovery: ~x"./autoRecovery/text()"o |> transform_by(&optional_text/1),
+            reboot_migration: ~x"./rebootMigration/text()"o |> transform_by(&optional_text/1)
           ],
           private_dns_name_options: [
             ~x"./privateDnsNameOptions"o,
-            hostname_type: ~x"./hostnameType/text()"os,
-            enable_resource_name_dns_a_record: ~x"./enableResourceNameDnsARecord/text()"os,
-            enable_resource_name_dns_aaaa_record: ~x"./enableResourceNameDnsAAAARecord/text()"os
+            hostname_type: ~x"./hostnameType/text()"o |> transform_by(&optional_text/1),
+            enable_resource_name_dns_a_record:
+              ~x"./enableResourceNameDnsARecord/text()"o |> transform_by(&optional_text/1),
+            enable_resource_name_dns_aaaa_record:
+              ~x"./enableResourceNameDnsAAAARecord/text()"o |> transform_by(&optional_text/1)
           ],
           capacity_reservation_specification: [
             ~x"./capacityReservationSpecification"o,
-            capacity_reservation_preference: ~x"./capacityReservationPreference/text()"os,
+            capacity_reservation_preference:
+              ~x"./capacityReservationPreference/text()"o |> transform_by(&optional_text/1),
             capacity_reservation_target: [
               ~x"./capacityReservationTarget"o,
-              capacity_reservation_id: ~x"./capacityReservationId/text()"os,
+              capacity_reservation_id:
+                ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
               capacity_reservation_resource_group_arn:
-                ~x"./capacityReservationResourceGroupArn/text()"os
+                ~x"./capacityReservationResourceGroupArn/text()"o
+                |> transform_by(&optional_text/1)
             ]
           ],
           product_codes: [
             ~x"./productCodes/item"l,
             product_code: ~x"./productCode/text()"s,
-            type: ~x"./type/text()"os
+            type: ~x"./type/text()"o |> transform_by(&optional_text/1)
           ],
           block_device_mapping: [
             ~x"./blockDeviceMapping/item"l,
             device_name: ~x"./deviceName/text()"s,
             ebs: [
               ~x"./ebs"o,
-              volume_id: ~x"./volumeId/text()"os,
-              status: ~x"./status/text()"os,
-              attach_time: ~x"./attachTime/text()"os,
-              delete_on_termination: ~x"./deleteOnTermination/text()"os,
-              volume_owner_id: ~x"./volumeOwnerId/text()"os,
-              associated_resource: ~x"./associatedResource/text()"os,
+              volume_id: ~x"./volumeId/text()"o |> transform_by(&optional_text/1),
+              status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+              attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
+              delete_on_termination:
+                ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+              volume_owner_id: ~x"./volumeOwnerId/text()"o |> transform_by(&optional_text/1),
+              associated_resource:
+                ~x"./associatedResource/text()"o |> transform_by(&optional_text/1),
               ebs_card_index: ~x"./ebsCardIndex/text()"oi
             ]
           ],
           network_interface_set: [
             ~x"./networkInterfaceSet/item"l,
-            network_interface_id: ~x"./networkInterfaceId/text()"os,
-            subnet_id: ~x"./subnetId/text()"os,
-            vpc_id: ~x"./vpcId/text()"os,
-            description: ~x"./description/text()"os,
-            owner_id: ~x"./ownerId/text()"os,
-            status: ~x"./status/text()"os,
-            mac_address: ~x"./macAddress/text()"os,
-            private_ip_address: ~x"./privateIpAddress/text()"os,
-            private_dns_name: ~x"./privateDnsName/text()"os,
-            source_dest_check: ~x"./sourceDestCheck/text()"os,
-            interface_type: ~x"./interfaceType/text()"os,
+            network_interface_id:
+              ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
+            subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+            vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+            description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+            owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+            status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+            mac_address: ~x"./macAddress/text()"o |> transform_by(&optional_text/1),
+            private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+            private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+            source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
+            interface_type: ~x"./interfaceType/text()"o |> transform_by(&optional_text/1),
             association: [
               ~x"./association"o,
-              public_ip: ~x"./publicIp/text()"os,
-              public_dns_name: ~x"./publicDnsName/text()"os,
-              ip_owner_id: ~x"./ipOwnerId/text()"os,
-              carrier_ip: ~x"./carrierIp/text()"os,
-              customer_owned_ip: ~x"./customerOwnedIp/text()"os
+              public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+              public_dns_name: ~x"./publicDnsName/text()"o |> transform_by(&optional_text/1),
+              ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1),
+              carrier_ip: ~x"./carrierIp/text()"o |> transform_by(&optional_text/1),
+              customer_owned_ip: ~x"./customerOwnedIp/text()"o |> transform_by(&optional_text/1)
             ],
             attachment: [
               ~x"./attachment"o,
-              attachment_id: ~x"./attachmentId/text()"os,
-              status: ~x"./status/text()"os,
-              attach_time: ~x"./attachTime/text()"os,
-              delete_on_termination: ~x"./deleteOnTermination/text()"os,
+              attachment_id: ~x"./attachmentId/text()"o |> transform_by(&optional_text/1),
+              status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+              attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
+              delete_on_termination:
+                ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
               device_index: ~x"./deviceIndex/text()"oi,
               network_card_index: ~x"./networkCardIndex/text()"oi,
               ena_queue_count: ~x"./enaQueueCount/text()"oi
@@ -1402,19 +1529,20 @@ defmodule AwsSDK.EC2 do
             ],
             private_ip_addresses_set: [
               ~x"./privateIpAddressesSet/item"l,
-              private_ip_address: ~x"./privateIpAddress/text()"os,
-              private_dns_name: ~x"./privateDnsName/text()"os,
-              primary: ~x"./primary/text()"os,
+              private_ip_address:
+                ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+              private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+              primary: ~x"./primary/text()"o |> transform_by(&optional_text/1),
               association: [
                 ~x"./association"o,
-                public_ip: ~x"./publicIp/text()"os,
-                ip_owner_id: ~x"./ipOwnerId/text()"os
+                public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+                ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1)
               ]
             ],
             ipv6_addresses_set: [
               ~x"./ipv6AddressesSet/item"l,
-              ipv6_address: ~x"./ipv6Address/text()"os,
-              is_primary_ipv6: ~x"./isPrimaryIpv6/text()"os
+              ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+              is_primary_ipv6: ~x"./isPrimaryIpv6/text()"o |> transform_by(&optional_text/1)
             ]
           ],
           tag_set: [
@@ -1432,7 +1560,11 @@ defmodule AwsSDK.EC2 do
 
     %{
       reservation_set: reservations,
-      next_token: xpath(body, ~x"//DescribeInstancesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeInstancesResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -1453,16 +1585,16 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_network_interfaces(filters: [%{name: "group-id", values: ["sg-0abc"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    network_interface_set: [
       #=>      %{
       #=>        network_interface_id: "eni-0abc",
       #=>        subnet_id: "subnet-1",
       #=>        vpc_id: "vpc-1",
       #=>        availability_zone: "us-east-1a",
-      #=>        description: "",
+      #=>        description: nil,
       #=>        owner_id: "123456789012",
-      #=>        requester_id: "",
+      #=>        requester_id: nil,
       #=>        requester_managed: false,
       #=>        status: "in-use",
       #=>        mac_address: "0a:bb:cc:dd:ee:ff",
@@ -1489,13 +1621,17 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   A detached interface parses `:attachment` and `:association` as `nil`
   rather than maps of empty strings.
   """
   @spec describe_network_interfaces(opts :: keyword()) ::
-          {:ok, %{network_interface_set: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{network_interface_set: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_network_interfaces(opts \\ []) do
     if sandbox?(opts) do
@@ -1514,8 +1650,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeNetworkInterfaces", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_network_interfaces(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_network_interfaces(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1526,27 +1666,27 @@ defmodule AwsSDK.EC2 do
     enis =
       xpath(body, ~x"//networkInterfaceSet/item"l,
         network_interface_id: ~x"./networkInterfaceId/text()"s,
-        subnet_id: ~x"./subnetId/text()"os,
-        vpc_id: ~x"./vpcId/text()"os,
-        availability_zone: ~x"./availabilityZone/text()"os,
-        description: ~x"./description/text()"os,
-        owner_id: ~x"./ownerId/text()"os,
-        requester_id: ~x"./requesterId/text()"os,
+        subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        requester_id: ~x"./requesterId/text()"o |> transform_by(&optional_text/1),
         requester_managed: ~x"./requesterManaged/text()"s,
-        status: ~x"./status/text()"os,
-        mac_address: ~x"./macAddress/text()"os,
-        private_ip_address: ~x"./privateIpAddress/text()"os,
-        private_dns_name: ~x"./privateDnsName/text()"os,
+        status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+        mac_address: ~x"./macAddress/text()"o |> transform_by(&optional_text/1),
+        private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+        private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
         source_dest_check: ~x"./sourceDestCheck/text()"s,
-        interface_type: ~x"./interfaceType/text()"os,
-        outpost_arn: ~x"./outpostArn/text()"os,
-        deny_all_igw_traffic: ~x"./denyAllIgwTraffic/text()"os,
-        ipv6_native: ~x"./ipv6Native/text()"os,
-        ipv6_address: ~x"./ipv6Address/text()"os,
+        interface_type: ~x"./interfaceType/text()"o |> transform_by(&optional_text/1),
+        outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+        deny_all_igw_traffic: ~x"./denyAllIgwTraffic/text()"o |> transform_by(&optional_text/1),
+        ipv6_native: ~x"./ipv6Native/text()"o |> transform_by(&optional_text/1),
+        ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
         operator: [
           ~x"./operator"o,
-          managed: ~x"./managed/text()"os,
-          principal: ~x"./principal/text()"os
+          managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+          principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
         ],
         connection_tracking_configuration: [
           ~x"./connectionTrackingConfiguration"o,
@@ -1554,62 +1694,74 @@ defmodule AwsSDK.EC2 do
           udp_stream_timeout: ~x"./udpStreamTimeout/text()"oi,
           udp_timeout: ~x"./udpTimeout/text()"oi
         ],
-        ipv4_prefix_set: [~x"./ipv4PrefixSet/item"l, ipv4_prefix: ~x"./ipv4Prefix/text()"os],
-        ipv6_prefix_set: [~x"./ipv6PrefixSet/item"l, ipv6_prefix: ~x"./ipv6Prefix/text()"os],
+        ipv4_prefix_set: [
+          ~x"./ipv4PrefixSet/item"l,
+          ipv4_prefix: ~x"./ipv4Prefix/text()"o |> transform_by(&optional_text/1)
+        ],
+        ipv6_prefix_set: [
+          ~x"./ipv6PrefixSet/item"l,
+          ipv6_prefix: ~x"./ipv6Prefix/text()"o |> transform_by(&optional_text/1)
+        ],
         group_set: [
           ~x"./groupSet/item"l,
-          group_id: ~x"./groupId/text()"os,
-          group_name: ~x"./groupName/text()"os
+          group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+          group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1)
         ],
         attachment: [
           ~x"./attachment"o,
-          attachment_id: ~x"./attachmentId/text()"os,
-          instance_id: ~x"./instanceId/text()"os,
-          instance_owner_id: ~x"./instanceOwnerId/text()"os,
+          attachment_id: ~x"./attachmentId/text()"o |> transform_by(&optional_text/1),
+          instance_id: ~x"./instanceId/text()"o |> transform_by(&optional_text/1),
+          instance_owner_id: ~x"./instanceOwnerId/text()"o |> transform_by(&optional_text/1),
           device_index: ~x"./deviceIndex/text()"oi,
           network_card_index: ~x"./networkCardIndex/text()"oi,
-          status: ~x"./status/text()"os,
-          attach_time: ~x"./attachTime/text()"os,
-          delete_on_termination: ~x"./deleteOnTermination/text()"os
+          status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+          attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
+          delete_on_termination:
+            ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1)
         ],
         association: [
           ~x"./association"o,
-          public_ip: ~x"./publicIp/text()"os,
-          public_dns_name: ~x"./publicDnsName/text()"os,
-          ip_owner_id: ~x"./ipOwnerId/text()"os,
-          allocation_id: ~x"./allocationId/text()"os,
-          association_id: ~x"./associationId/text()"os,
-          carrier_ip: ~x"./carrierIp/text()"os,
-          customer_owned_ip: ~x"./customerOwnedIp/text()"os
+          public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+          public_dns_name: ~x"./publicDnsName/text()"o |> transform_by(&optional_text/1),
+          ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1),
+          allocation_id: ~x"./allocationId/text()"o |> transform_by(&optional_text/1),
+          association_id: ~x"./associationId/text()"o |> transform_by(&optional_text/1),
+          carrier_ip: ~x"./carrierIp/text()"o |> transform_by(&optional_text/1),
+          customer_owned_ip: ~x"./customerOwnedIp/text()"o |> transform_by(&optional_text/1)
         ],
         private_ip_addresses_set: [
           ~x"./privateIpAddressesSet/item"l,
-          private_ip_address: ~x"./privateIpAddress/text()"os,
-          private_dns_name: ~x"./privateDnsName/text()"os,
-          primary: ~x"./primary/text()"os,
+          private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+          private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+          primary: ~x"./primary/text()"o |> transform_by(&optional_text/1),
           association: [
             ~x"./association"o,
-            public_ip: ~x"./publicIp/text()"os,
-            public_dns_name: ~x"./publicDnsName/text()"os,
-            ip_owner_id: ~x"./ipOwnerId/text()"os
+            public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+            public_dns_name: ~x"./publicDnsName/text()"o |> transform_by(&optional_text/1),
+            ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1)
           ]
         ],
         ipv6_addresses_set: [
           ~x"./ipv6AddressesSet/item"l,
-          ipv6_address: ~x"./ipv6Address/text()"os,
-          is_primary_ipv6: ~x"./isPrimaryIpv6/text()"os
+          ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+          is_primary_ipv6: ~x"./isPrimaryIpv6/text()"o |> transform_by(&optional_text/1)
         ],
         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
       )
 
     %{
       network_interface_set: Enum.map(enis, &coerce_network_interface/1),
-      next_token: xpath(body, ~x"//DescribeNetworkInterfacesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeNetworkInterfacesResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
   defp coerce_network_interface(%{requester_managed: managed, source_dest_check: check} = eni) do
-    %{eni | requester_managed: managed === "true", source_dest_check: check === "true"}
+    %{eni | requester_managed: to_bool(managed), source_dest_check: to_bool(check)}
   end
 
   # ---------------------------------------------------------------------------
@@ -1630,7 +1782,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_key_pairs(filters: [%{name: "key-name", values: ["deploy"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    key_set: [
       #=>      %{
       #=>        key_pair_id: "key-0abc",
@@ -1638,14 +1790,14 @@ defmodule AwsSDK.EC2 do
       #=>        key_fingerprint: "ab:cd:...",
       #=>        key_type: "ed25519",
       #=>        create_time: "2026-01-01T00:00:00Z",
-      #=>        public_key: "",
+      #=>        public_key: nil,
       #=>        tag_set: []
       #=>      }
       #=>    ]
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_key_pairs(opts :: keyword()) ::
-          {:ok, %{key_set: list(map())}} | {:error, term()}
+          {:ok, %{body: %{key_set: list(map())}, headers: map()}} | {:error, term()}
   def describe_key_pairs(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_key_pairs_response(opts)
@@ -1663,8 +1815,9 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("IncludePublicKey", opts[:include_public_key])
 
     with {:ok, op} <- build_operation("DescribeKeyPairs", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_key_pairs(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_key_pairs(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -1675,12 +1828,12 @@ defmodule AwsSDK.EC2 do
     %{
       key_set:
         xpath(body, ~x"//keySet/item"l,
-          key_pair_id: ~x"./keyPairId/text()"os,
+          key_pair_id: ~x"./keyPairId/text()"o |> transform_by(&optional_text/1),
           key_name: ~x"./keyName/text()"s,
-          key_fingerprint: ~x"./keyFingerprint/text()"os,
-          key_type: ~x"./keyType/text()"os,
-          create_time: ~x"./createTime/text()"os,
-          public_key: ~x"./publicKey/text()"os,
+          key_fingerprint: ~x"./keyFingerprint/text()"o |> transform_by(&optional_text/1),
+          key_type: ~x"./keyType/text()"o |> transform_by(&optional_text/1),
+          create_time: ~x"./createTime/text()"o |> transform_by(&optional_text/1),
+          public_key: ~x"./publicKey/text()"o |> transform_by(&optional_text/1),
           tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
         )
     }
@@ -1692,10 +1845,11 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.delete_key_pair("deploy")
-      #=> {:ok, %{return: true, key_pair_id: "key-0abc"}}
+      #=> {:ok, %{body: %{return: true, key_pair_id: "key-0abc"}, headers: %{...}}}
   """
   @spec delete_key_pair(key_name :: String.t(), opts :: keyword()) ::
-          {:ok, %{return: boolean(), key_pair_id: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{return: boolean(), key_pair_id: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def delete_key_pair(key_name, opts \\ []) when is_binary(key_name) do
     if sandbox?(opts) do
       sandbox_delete_key_pair_response(key_name, opts)
@@ -1706,8 +1860,9 @@ defmodule AwsSDK.EC2 do
 
   defp do_delete_key_pair(key_name, opts) do
     with {:ok, op} <- build_operation("DeleteKeyPair", %{"KeyName" => key_name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_delete_key_pair(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_delete_key_pair(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -1716,8 +1871,18 @@ defmodule AwsSDK.EC2 do
 
   defp parse_delete_key_pair(body) do
     %{
-      return: xpath(body, ~x"//DeleteKeyPairResponse/return/text()"os) == "true",
-      key_pair_id: xpath(body, ~x"//DeleteKeyPairResponse/keyPairId/text()"os)
+      return:
+        to_bool(
+          xpath(
+            body,
+            ~x"//DeleteKeyPairResponse/return/text()"o |> transform_by(&optional_text/1)
+          )
+        ),
+      key_pair_id:
+        xpath(
+          body,
+          ~x"//DeleteKeyPairResponse/keyPairId/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -1737,31 +1902,35 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_instance_status(instance_ids: ["i-0abc"], include_all_instances: true)
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    instance_status_set: [
       #=>      %{
       #=>        instance_id: "i-0abc",
       #=>        availability_zone: "us-east-1a",
-      #=>        outpost_arn: "",
+      #=>        outpost_arn: nil,
       #=>        operator: nil,
       #=>        instance_state: %{code: 16, name: "running"},
       #=>        system_status: %{
       #=>          status: "ok",
-      #=>          details: [%{name: "reachability", status: "passed", impaired_since: ""}]
+      #=>          details: [%{name: "reachability", status: "passed", impaired_since: nil}]
       #=>        },
       #=>        instance_status: %{
       #=>          status: "ok",
-      #=>          details: [%{name: "reachability", status: "passed", impaired_since: ""}]
+      #=>          details: [%{name: "reachability", status: "passed", impaired_since: nil}]
       #=>        },
       #=>        attached_ebs_status: nil,
       #=>        events_set: []
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_instance_status(opts :: keyword()) ::
-          {:ok, %{instance_status_set: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{instance_status_set: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_instance_status(opts \\ []) do
     if sandbox?(opts) do
@@ -1781,8 +1950,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeInstanceStatus", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_instance_status(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_instance_status(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1794,33 +1967,38 @@ defmodule AwsSDK.EC2 do
       instance_status_set:
         xpath(body, ~x"//instanceStatusSet/item"l,
           instance_id: ~x"./instanceId/text()"s,
-          availability_zone: ~x"./availabilityZone/text()"os,
-          availability_zone_id: ~x"./availabilityZoneId/text()"os,
-          outpost_arn: ~x"./outpostArn/text()"os,
+          availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+          availability_zone_id:
+            ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
+          outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
           operator: [
             ~x"./operator"o,
-            managed: ~x"./managed/text()"os,
-            principal: ~x"./principal/text()"os
+            managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+            principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
           ],
           instance_state: [
             ~x"./instanceState"o,
             code: ~x"./code/text()"oi,
-            name: ~x"./name/text()"os
+            name: ~x"./name/text()"o |> transform_by(&optional_text/1)
           ],
           system_status: [~x"./systemStatus"o | instance_status_summary_fields()],
           instance_status: [~x"./instanceStatus"o | instance_status_summary_fields()],
           attached_ebs_status: [~x"./attachedEbsStatus"o | instance_status_summary_fields()],
           events_set: [
             ~x"./eventsSet/item"l,
-            instance_event_id: ~x"./instanceEventId/text()"os,
-            code: ~x"./code/text()"os,
-            description: ~x"./description/text()"os,
-            not_before: ~x"./notBefore/text()"os,
-            not_after: ~x"./notAfter/text()"os,
-            not_before_deadline: ~x"./notBeforeDeadline/text()"os
+            instance_event_id: ~x"./instanceEventId/text()"o |> transform_by(&optional_text/1),
+            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+            description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+            not_before: ~x"./notBefore/text()"o |> transform_by(&optional_text/1),
+            not_after: ~x"./notAfter/text()"o |> transform_by(&optional_text/1),
+            not_before_deadline: ~x"./notBeforeDeadline/text()"o |> transform_by(&optional_text/1)
           ]
         ),
-      next_token: xpath(body, ~x"//DescribeInstanceStatusResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeInstanceStatusResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -1840,7 +2018,7 @@ defmodule AwsSDK.EC2 do
         filters: [%{name: "instance-id", values: ["i-0abc"]}]
       )
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    iam_instance_profile_association_set: [
       #=>      %{
       #=>        association_id: "iip-assoc-0abc",
@@ -1854,7 +2032,7 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_iam_instance_profile_associations(opts :: keyword()) ::
           {:ok,
@@ -1877,8 +2055,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeIamInstanceProfileAssociations", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_iam_instance_profile_associations(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_iam_instance_profile_associations(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1893,17 +2075,21 @@ defmodule AwsSDK.EC2 do
           body,
           ~x"//iamInstanceProfileAssociationSet/item"l,
           association_id: ~x"./associationId/text()"s,
-          instance_id: ~x"./instanceId/text()"os,
+          instance_id: ~x"./instanceId/text()"o |> transform_by(&optional_text/1),
           iam_instance_profile: [
             ~x"./iamInstanceProfile"o,
-            arn: ~x"./arn/text()"os,
-            id: ~x"./id/text()"os
+            arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
+            id: ~x"./id/text()"o |> transform_by(&optional_text/1)
           ],
-          state: ~x"./state/text()"os,
-          timestamp: ~x"./timestamp/text()"os
+          state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+          timestamp: ~x"./timestamp/text()"o |> transform_by(&optional_text/1)
         ),
       next_token:
-        xpath(body, ~x"//DescribeIamInstanceProfileAssociationsResponse/nextToken/text()"os)
+        xpath(
+          body,
+          ~x"//DescribeIamInstanceProfileAssociationsResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -1911,12 +2097,12 @@ defmodule AwsSDK.EC2 do
   # attachedEbsStatus.
   defp instance_status_summary_fields do
     [
-      status: ~x"./status/text()"os,
+      status: ~x"./status/text()"o |> transform_by(&optional_text/1),
       details: [
         ~x"./details/item"l,
-        name: ~x"./name/text()"os,
-        status: ~x"./status/text()"os,
-        impaired_since: ~x"./impairedSince/text()"os
+        name: ~x"./name/text()"o |> transform_by(&optional_text/1),
+        status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+        impaired_since: ~x"./impairedSince/text()"o |> transform_by(&optional_text/1)
       ]
     ]
   end
@@ -1936,7 +2122,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.terminate_instances(["i-1234567890abcdef0"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    instances_set: [
       #=>      %{
       #=>        instance_id: "i-1234567890abcdef0",
@@ -1944,10 +2130,10 @@ defmodule AwsSDK.EC2 do
       #=>        previous_state: %{code: 16, name: "running"}
       #=>      }
       #=>    ]
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec terminate_instances(instance_ids :: [String.t()], opts :: keyword()) ::
-          {:ok, %{instances_set: list(map())}} | {:error, term()}
+          {:ok, %{body: %{instances_set: list(map())}, headers: map()}} | {:error, term()}
   def terminate_instances([_ | _] = instance_ids, opts \\ []) do
     if sandbox?(opts) do
       sandbox_terminate_instances_response(instance_ids, opts)
@@ -1960,8 +2146,12 @@ defmodule AwsSDK.EC2 do
     params = put_member_list(%{}, "InstanceId", instance_ids)
 
     with {:ok, op} <- build_operation("TerminateInstances", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_terminate_instances(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_terminate_instances(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1976,12 +2166,12 @@ defmodule AwsSDK.EC2 do
           current_state: [
             ~x"./currentState"o,
             code: ~x"./code/text()"oi,
-            name: ~x"./name/text()"os
+            name: ~x"./name/text()"o |> transform_by(&optional_text/1)
           ],
           previous_state: [
             ~x"./previousState"o,
             code: ~x"./code/text()"oi,
-            name: ~x"./name/text()"os
+            name: ~x"./name/text()"o |> transform_by(&optional_text/1)
           ]
         )
     }
@@ -2007,14 +2197,22 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.get_console_output("i-1234567890abcdef0", latest: true)
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    instance_id: "i-1234567890abcdef0",
       #=>    timestamp: "2026-08-05T12:00:00.000Z",
       #=>    output: "[    0.000000] Linux version 6.1..."
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec get_console_output(instance_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{instance_id: String.t(), timestamp: String.t() | nil, output: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{
+               instance_id: String.t(),
+               timestamp: String.t() | nil,
+               output: String.t() | nil
+             },
+             headers: map()
+           }}
           | {:error, term()}
   def get_console_output(instance_id, opts \\ []) when is_binary(instance_id) do
     if sandbox?(opts) do
@@ -2030,8 +2228,9 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("Latest", opts[:latest])
 
     with {:ok, op} <- build_operation("GetConsoleOutput", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_get_console_output(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_get_console_output(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -2042,8 +2241,8 @@ defmodule AwsSDK.EC2 do
     result =
       xpath(body, ~x"//GetConsoleOutputResponse"e,
         instance_id: ~x"./instanceId/text()"s,
-        timestamp: ~x"./timestamp/text()"os,
-        output: ~x"./output/text()"os
+        timestamp: ~x"./timestamp/text()"o |> transform_by(&optional_text/1),
+        output: ~x"./output/text()"o |> transform_by(&optional_text/1)
       )
 
     %{result | output: decode_console_output(result.output)}
@@ -2093,7 +2292,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.create_network_insights_path("i-0aaa", "i-0bbb", "tcp", destination_port: 443)
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    network_insights_path: %{
       #=>      network_insights_path_id: "nip-0abc",
       #=>      network_insights_path_arn: "arn:aws:ec2:us-east-1:123456789012:network-insights-path/nip-0abc",
@@ -2102,20 +2301,20 @@ defmodule AwsSDK.EC2 do
       #=>      destination: "i-0bbb",
       #=>      source_arn: "arn:aws:ec2:us-east-1:123456789012:instance/i-0aaa",
       #=>      destination_arn: "arn:aws:ec2:us-east-1:123456789012:instance/i-0bbb",
-      #=>      source_ip: "",
-      #=>      destination_ip: "",
+      #=>      source_ip: nil,
+      #=>      destination_ip: nil,
       #=>      protocol: "tcp",
       #=>      destination_port: 443,
       #=>      tag_set: []
       #=>    }
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec create_network_insights_path(
           source :: String.t(),
           destination :: String.t(),
           protocol :: String.t(),
           opts :: keyword()
-        ) :: {:ok, %{network_insights_path: map()}} | {:error, term()}
+        ) :: {:ok, %{body: %{network_insights_path: map()}, headers: map()}} | {:error, term()}
   def create_network_insights_path(source, destination, protocol, opts \\ [])
       when is_binary(source) and is_binary(destination) and is_binary(protocol) do
     if sandbox?(opts) do
@@ -2138,8 +2337,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("DestinationIp", opts[:destination_ip])
 
     with {:ok, op} <- build_operation("CreateNetworkInsightsPath", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_create_network_insights_path(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_create_network_insights_path(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2152,15 +2355,16 @@ defmodule AwsSDK.EC2 do
       network_insights_path:
         xpath(body, ~x"//networkInsightsPath"e,
           network_insights_path_id: ~x"./networkInsightsPathId/text()"s,
-          network_insights_path_arn: ~x"./networkInsightsPathArn/text()"os,
-          created_date: ~x"./createdDate/text()"os,
-          source: ~x"./source/text()"os,
-          destination: ~x"./destination/text()"os,
-          source_arn: ~x"./sourceArn/text()"os,
-          destination_arn: ~x"./destinationArn/text()"os,
-          source_ip: ~x"./sourceIp/text()"os,
-          destination_ip: ~x"./destinationIp/text()"os,
-          protocol: ~x"./protocol/text()"os,
+          network_insights_path_arn:
+            ~x"./networkInsightsPathArn/text()"o |> transform_by(&optional_text/1),
+          created_date: ~x"./createdDate/text()"o |> transform_by(&optional_text/1),
+          source: ~x"./source/text()"o |> transform_by(&optional_text/1),
+          destination: ~x"./destination/text()"o |> transform_by(&optional_text/1),
+          source_arn: ~x"./sourceArn/text()"o |> transform_by(&optional_text/1),
+          destination_arn: ~x"./destinationArn/text()"o |> transform_by(&optional_text/1),
+          source_ip: ~x"./sourceIp/text()"o |> transform_by(&optional_text/1),
+          destination_ip: ~x"./destinationIp/text()"o |> transform_by(&optional_text/1),
+          protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1),
           destination_port: ~x"./destinationPort/text()"oi,
           filter_at_source: [~x"./filterAtSource"o | path_filter_fields()],
           filter_at_destination: [~x"./filterAtDestination"o | path_filter_fields()],
@@ -2172,13 +2376,13 @@ defmodule AwsSDK.EC2 do
   # PathFilter, shared by filterAtSource and filterAtDestination.
   defp path_filter_fields do
     [
-      source_address: ~x"./sourceAddress/text()"os,
+      source_address: ~x"./sourceAddress/text()"o |> transform_by(&optional_text/1),
       source_port_range: [
         ~x"./sourcePortRange"o,
         from_port: ~x"./fromPort/text()"oi,
         to_port: ~x"./toPort/text()"oi
       ],
-      destination_address: ~x"./destinationAddress/text()"os,
+      destination_address: ~x"./destinationAddress/text()"o |> transform_by(&optional_text/1),
       destination_port_range: [
         ~x"./destinationPortRange"o,
         from_port: ~x"./fromPort/text()"oi,
@@ -2196,24 +2400,24 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.start_network_insights_analysis("nip-0abc")
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    network_insights_analysis: %{
       #=>      network_insights_analysis_id: "nia-0abc",
       #=>      network_insights_analysis_arn: "arn:aws:ec2:us-east-1:123456789012:network-insights-analysis/nia-0abc",
       #=>      network_insights_path_id: "nip-0abc",
       #=>      start_date: "2026-08-05T12:00:00Z",
       #=>      status: "running",
-      #=>      status_message: "",
+      #=>      status_message: nil,
       #=>      network_path_found: nil
       #=>    }
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Poll with `describe_network_insights_analyses/1` until `:status` is
   `"succeeded"` (or `"failed"`), then read `:network_path_found` and
   `:explanation_set`.
   """
   @spec start_network_insights_analysis(path_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{network_insights_analysis: map()}} | {:error, term()}
+          {:ok, %{body: %{network_insights_analysis: map()}, headers: map()}} | {:error, term()}
   def start_network_insights_analysis(path_id, opts \\ []) when is_binary(path_id) do
     if sandbox?(opts) do
       sandbox_start_network_insights_analysis_response(path_id, opts)
@@ -2226,8 +2430,12 @@ defmodule AwsSDK.EC2 do
     params = %{"NetworkInsightsPathId" => path_id, "ClientToken" => client_token(opts)}
 
     with {:ok, op} <- build_operation("StartNetworkInsightsAnalysis", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_start_network_insights_analysis(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_start_network_insights_analysis(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2264,22 +2472,22 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_network_insights_analyses(analysis_ids: ["nia-0abc"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    network_insights_analysis_set: [
       #=>      %{
       #=>        network_insights_analysis_id: "nia-0abc",
       #=>        network_insights_path_id: "nip-0abc",
       #=>        start_date: "2026-08-05T12:00:00Z",
       #=>        status: "succeeded",
-      #=>        status_message: "",
-      #=>        warning_message: "",
+      #=>        status_message: nil,
+      #=>        warning_message: nil,
       #=>        network_path_found: false,
       #=>        explanation_set: [
       #=>          %{
       #=>            direction: "ingress",
       #=>            explanation_code: "ENI_SG_RULES_MISMATCH",
-      #=>            network_interface: %{id: "eni-1", arn: "...", name: ""},
-      #=>            security_groups: [%{id: "sg-1", arn: "", name: ""}],
+      #=>            network_interface: %{id: "eni-1", arn: "...", name: nil},
+      #=>            security_groups: [%{id: "sg-1", arn: nil, name: nil}],
       #=>            port: 443
       #=>          }
       #=>        ],
@@ -2289,13 +2497,17 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Only the commonly-read members are shown; the parser returns every
   documented member of the response.
   """
   @spec describe_network_insights_analyses(opts :: keyword()) ::
-          {:ok, %{network_insights_analysis_set: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{network_insights_analysis_set: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_network_insights_analyses(opts \\ []) do
     if sandbox?(opts) do
@@ -2315,8 +2527,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeNetworkInsightsAnalyses", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_network_insights_analyses(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_network_insights_analyses(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2335,7 +2551,12 @@ defmodule AwsSDK.EC2 do
     %{
       network_insights_analysis_set:
         Enum.map(result.network_insights_analysis_set, &coerce_network_path_found/1),
-      next_token: xpath(body, ~x"//DescribeNetworkInsightsAnalysesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeNetworkInsightsAnalysesResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -2346,10 +2567,11 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.delete_network_insights_path("nip-0abc")
-      #=> {:ok, %{network_insights_path_id: "nip-0abc"}}
+      #=> {:ok, %{body: %{network_insights_path_id: "nip-0abc"}, headers: %{...}}}
   """
   @spec delete_network_insights_path(path_id :: String.t(), opts :: keyword()) ::
-          {:ok, %{network_insights_path_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{network_insights_path_id: String.t()}, headers: map()}}
+          | {:error, term()}
   def delete_network_insights_path(path_id, opts \\ []) when is_binary(path_id) do
     if sandbox?(opts) do
       sandbox_delete_network_insights_path_response(path_id, opts)
@@ -2362,8 +2584,12 @@ defmodule AwsSDK.EC2 do
     params = %{"NetworkInsightsPathId" => path_id}
 
     with {:ok, op} <- build_operation("DeleteNetworkInsightsPath", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_delete_network_insights_path(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_delete_network_insights_path(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2384,23 +2610,25 @@ defmodule AwsSDK.EC2 do
   defp network_insights_analysis_fields do
     [
       network_insights_analysis_id: ~x"./networkInsightsAnalysisId/text()"s,
-      network_insights_analysis_arn: ~x"./networkInsightsAnalysisArn/text()"os,
-      network_insights_path_id: ~x"./networkInsightsPathId/text()"os,
+      network_insights_analysis_arn:
+        ~x"./networkInsightsAnalysisArn/text()"o |> transform_by(&optional_text/1),
+      network_insights_path_id:
+        ~x"./networkInsightsPathId/text()"o |> transform_by(&optional_text/1),
       additional_account_set: ~x"./additionalAccountSet/item/text()"sl,
       filter_in_arn_set: ~x"./filterInArnSet/item/text()"sl,
       filter_out_arn_set: ~x"./filterOutArnSet/item/text()"sl,
-      start_date: ~x"./startDate/text()"os,
-      status: ~x"./status/text()"os,
-      status_message: ~x"./statusMessage/text()"os,
-      warning_message: ~x"./warningMessage/text()"os,
-      network_path_found: ~x"./networkPathFound/text()"os,
+      start_date: ~x"./startDate/text()"o |> transform_by(&optional_text/1),
+      status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+      status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1),
+      warning_message: ~x"./warningMessage/text()"o |> transform_by(&optional_text/1),
+      network_path_found: ~x"./networkPathFound/text()"o |> transform_by(&optional_text/1),
       forward_path_component_set: [~x"./forwardPathComponentSet/item"l | path_component_fields()],
       return_path_component_set: [~x"./returnPathComponentSet/item"l | path_component_fields()],
       explanation_set: [~x"./explanationSet/item"l | explanation_fields()],
       alternate_path_hint_set: [
         ~x"./alternatePathHintSet/item"l,
-        component_id: ~x"./componentId/text()"os,
-        component_arn: ~x"./componentArn/text()"os
+        component_id: ~x"./componentId/text()"o |> transform_by(&optional_text/1),
+        component_arn: ~x"./componentArn/text()"o |> transform_by(&optional_text/1)
       ],
       suggested_account_set: ~x"./suggestedAccountSet/item/text()"sl,
       tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
@@ -2418,13 +2646,17 @@ defmodule AwsSDK.EC2 do
   end
 
   defp coerce_network_path_found(%{network_path_found: value} = analysis) do
-    %{analysis | network_path_found: value === "true"}
+    %{analysis | network_path_found: to_bool(value)}
   end
 
   # AnalysisComponent — the {id, arn, name} triple AWS uses for every
   # referenced resource in an analysis.
   defp analysis_component_fields do
-    [id: ~x"./id/text()"os, arn: ~x"./arn/text()"os, name: ~x"./name/text()"os]
+    [
+      id: ~x"./id/text()"o |> transform_by(&optional_text/1),
+      arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
+      name: ~x"./name/text()"o |> transform_by(&optional_text/1)
+    ]
   end
 
   # PathComponent (one hop of the analysed path).
@@ -2447,31 +2679,32 @@ defmodule AwsSDK.EC2 do
       route_table_route: [~x"./routeTableRoute"o | analysis_route_table_route_fields()],
       transit_gateway_route_table_route: [
         ~x"./transitGatewayRouteTableRoute"o,
-        destination_cidr: ~x"./destinationCidr/text()"os,
-        state: ~x"./state/text()"os,
-        route_origin: ~x"./routeOrigin/text()"os,
-        prefix_list_id: ~x"./prefixListId/text()"os,
-        attachment_id: ~x"./attachmentId/text()"os,
-        resource_id: ~x"./resourceId/text()"os,
-        resource_type: ~x"./resourceType/text()"os
+        destination_cidr: ~x"./destinationCidr/text()"o |> transform_by(&optional_text/1),
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+        route_origin: ~x"./routeOrigin/text()"o |> transform_by(&optional_text/1),
+        prefix_list_id: ~x"./prefixListId/text()"o |> transform_by(&optional_text/1),
+        attachment_id: ~x"./attachmentId/text()"o |> transform_by(&optional_text/1),
+        resource_id: ~x"./resourceId/text()"o |> transform_by(&optional_text/1),
+        resource_type: ~x"./resourceType/text()"o |> transform_by(&optional_text/1)
       ],
       security_group_rule: [~x"./securityGroupRule"o | analysis_security_group_rule_fields()],
       additional_detail_set: [
         ~x"./additionalDetailSet/item"l,
-        additional_detail_type: ~x"./additionalDetailType/text()"os,
+        additional_detail_type:
+          ~x"./additionalDetailType/text()"o |> transform_by(&optional_text/1),
         component: [~x"./component"o | analysis_component_fields()]
       ],
       explanation_set: [~x"./explanationSet/item"l | explanation_fields()],
       firewall_stateless_rule: [~x"./firewallStatelessRule"o | firewall_stateless_rule_fields()],
       firewall_stateful_rule: [~x"./firewallStatefulRule"o | firewall_stateful_rule_fields()],
-      service_name: ~x"./serviceName/text()"os
+      service_name: ~x"./serviceName/text()"o |> transform_by(&optional_text/1)
     ]
   end
 
   # AnalysisPacketHeader.
   defp analysis_packet_header_fields do
     [
-      protocol: ~x"./protocol/text()"os,
+      protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1),
       source_addresses: ~x"./sourceAddressSet/item/text()"sl,
       destination_addresses: ~x"./destinationAddressSet/item/text()"sl,
       source_port_ranges: [
@@ -2490,10 +2723,10 @@ defmodule AwsSDK.EC2 do
   # AnalysisAclRule.
   defp analysis_acl_rule_fields do
     [
-      cidr: ~x"./cidr/text()"os,
-      egress: ~x"./egress/text()"os,
-      protocol: ~x"./protocol/text()"os,
-      rule_action: ~x"./ruleAction/text()"os,
+      cidr: ~x"./cidr/text()"o |> transform_by(&optional_text/1),
+      egress: ~x"./egress/text()"o |> transform_by(&optional_text/1),
+      protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1),
+      rule_action: ~x"./ruleAction/text()"o |> transform_by(&optional_text/1),
       rule_number: ~x"./ruleNumber/text()"oi,
       port_range: [~x"./portRange"o, from: ~x"./from/text()"oi, to: ~x"./to/text()"oi]
     ]
@@ -2502,32 +2735,35 @@ defmodule AwsSDK.EC2 do
   # AnalysisRouteTableRoute.
   defp analysis_route_table_route_fields do
     [
-      destination_cidr: ~x"./destinationCidr/text()"os,
-      destination_prefix_list_id: ~x"./destinationPrefixListId/text()"os,
-      egress_only_internet_gateway_id: ~x"./egressOnlyInternetGatewayId/text()"os,
-      gateway_id: ~x"./gatewayId/text()"os,
-      instance_id: ~x"./instanceId/text()"os,
-      nat_gateway_id: ~x"./natGatewayId/text()"os,
-      network_interface_id: ~x"./networkInterfaceId/text()"os,
-      origin: ~x"./origin/text()"os,
-      transit_gateway_id: ~x"./transitGatewayId/text()"os,
-      vpc_peering_connection_id: ~x"./vpcPeeringConnectionId/text()"os,
-      state: ~x"./state/text()"os,
-      carrier_gateway_id: ~x"./carrierGatewayId/text()"os,
-      core_network_arn: ~x"./coreNetworkArn/text()"os,
-      local_gateway_id: ~x"./localGatewayId/text()"os
+      destination_cidr: ~x"./destinationCidr/text()"o |> transform_by(&optional_text/1),
+      destination_prefix_list_id:
+        ~x"./destinationPrefixListId/text()"o |> transform_by(&optional_text/1),
+      egress_only_internet_gateway_id:
+        ~x"./egressOnlyInternetGatewayId/text()"o |> transform_by(&optional_text/1),
+      gateway_id: ~x"./gatewayId/text()"o |> transform_by(&optional_text/1),
+      instance_id: ~x"./instanceId/text()"o |> transform_by(&optional_text/1),
+      nat_gateway_id: ~x"./natGatewayId/text()"o |> transform_by(&optional_text/1),
+      network_interface_id: ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
+      origin: ~x"./origin/text()"o |> transform_by(&optional_text/1),
+      transit_gateway_id: ~x"./transitGatewayId/text()"o |> transform_by(&optional_text/1),
+      vpc_peering_connection_id:
+        ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+      state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+      carrier_gateway_id: ~x"./carrierGatewayId/text()"o |> transform_by(&optional_text/1),
+      core_network_arn: ~x"./coreNetworkArn/text()"o |> transform_by(&optional_text/1),
+      local_gateway_id: ~x"./localGatewayId/text()"o |> transform_by(&optional_text/1)
     ]
   end
 
   # AnalysisSecurityGroupRule.
   defp analysis_security_group_rule_fields do
     [
-      cidr: ~x"./cidr/text()"os,
-      direction: ~x"./direction/text()"os,
-      security_group_id: ~x"./securityGroupId/text()"os,
+      cidr: ~x"./cidr/text()"o |> transform_by(&optional_text/1),
+      direction: ~x"./direction/text()"o |> transform_by(&optional_text/1),
+      security_group_id: ~x"./securityGroupId/text()"o |> transform_by(&optional_text/1),
       port_range: [~x"./portRange"o, from: ~x"./from/text()"oi, to: ~x"./to/text()"oi],
-      prefix_list_id: ~x"./prefixListId/text()"os,
-      protocol: ~x"./protocol/text()"os
+      prefix_list_id: ~x"./prefixListId/text()"o |> transform_by(&optional_text/1),
+      protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1)
     ]
   end
 
@@ -2536,22 +2772,22 @@ defmodule AwsSDK.EC2 do
   # them, or a scalar.
   defp explanation_fields do
     [
-      direction: ~x"./direction/text()"os,
-      explanation_code: ~x"./explanationCode/text()"os,
-      state: ~x"./state/text()"os,
-      address: ~x"./address/text()"os,
+      direction: ~x"./direction/text()"o |> transform_by(&optional_text/1),
+      explanation_code: ~x"./explanationCode/text()"o |> transform_by(&optional_text/1),
+      state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+      address: ~x"./address/text()"o |> transform_by(&optional_text/1),
       addresses: ~x"./addressSet/item/text()"sl,
       cidrs: ~x"./cidrSet/item/text()"sl,
-      packet_field: ~x"./packetField/text()"os,
-      missing_component: ~x"./missingComponent/text()"os,
+      packet_field: ~x"./packetField/text()"o |> transform_by(&optional_text/1),
+      missing_component: ~x"./missingComponent/text()"o |> transform_by(&optional_text/1),
       port: ~x"./port/text()"oi,
       port_ranges: [~x"./portRangeSet/item"l, from: ~x"./from/text()"oi, to: ~x"./to/text()"oi],
       protocols: ~x"./protocolSet/item/text()"sl,
-      load_balancer_arn: ~x"./loadBalancerArn/text()"os,
+      load_balancer_arn: ~x"./loadBalancerArn/text()"o |> transform_by(&optional_text/1),
       load_balancer_listener_port: ~x"./loadBalancerListenerPort/text()"oi,
       load_balancer_target_port: ~x"./loadBalancerTargetPort/text()"oi,
-      component_account: ~x"./componentAccount/text()"os,
-      component_region: ~x"./componentRegion/text()"os,
+      component_account: ~x"./componentAccount/text()"o |> transform_by(&optional_text/1),
+      component_region: ~x"./componentRegion/text()"o |> transform_by(&optional_text/1),
       acl: [~x"./acl"o | analysis_component_fields()],
       acl_rule: [~x"./aclRule"o | analysis_acl_rule_fields()],
       attached_to: [~x"./attachedTo"o | analysis_component_fields()],
@@ -2570,8 +2806,8 @@ defmodule AwsSDK.EC2 do
       ],
       load_balancer_target: [
         ~x"./loadBalancerTarget"o,
-        address: ~x"./address/text()"os,
-        availability_zone: ~x"./availabilityZone/text()"os,
+        address: ~x"./address/text()"o |> transform_by(&optional_text/1),
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
         instance: [~x"./instance"o | analysis_component_fields()],
         port: ~x"./port/text()"oi
       ],
@@ -2609,7 +2845,7 @@ defmodule AwsSDK.EC2 do
   # FirewallStatelessRule.
   defp firewall_stateless_rule_fields do
     [
-      rule_group_arn: ~x"./ruleGroupArn/text()"os,
+      rule_group_arn: ~x"./ruleGroupArn/text()"o |> transform_by(&optional_text/1),
       sources: ~x"./sourceSet/item/text()"sl,
       destinations: ~x"./destinationSet/item/text()"sl,
       source_ports: [~x"./sourcePortSet/item"l, from: ~x"./from/text()"oi, to: ~x"./to/text()"oi],
@@ -2619,7 +2855,7 @@ defmodule AwsSDK.EC2 do
         to: ~x"./to/text()"oi
       ],
       protocols: ~x"./protocolSet/item/text()"sl,
-      rule_action: ~x"./ruleAction/text()"os,
+      rule_action: ~x"./ruleAction/text()"o |> transform_by(&optional_text/1),
       priority: ~x"./priority/text()"oi
     ]
   end
@@ -2627,7 +2863,7 @@ defmodule AwsSDK.EC2 do
   # FirewallStatefulRule.
   defp firewall_stateful_rule_fields do
     [
-      rule_group_arn: ~x"./ruleGroupArn/text()"os,
+      rule_group_arn: ~x"./ruleGroupArn/text()"o |> transform_by(&optional_text/1),
       sources: ~x"./sourceSet/item/text()"sl,
       destinations: ~x"./destinationSet/item/text()"sl,
       source_ports: [~x"./sourcePortSet/item"l, from: ~x"./from/text()"oi, to: ~x"./to/text()"oi],
@@ -2636,9 +2872,9 @@ defmodule AwsSDK.EC2 do
         from: ~x"./from/text()"oi,
         to: ~x"./to/text()"oi
       ],
-      protocol: ~x"./protocol/text()"os,
-      rule_action: ~x"./ruleAction/text()"os,
-      direction: ~x"./direction/text()"os
+      protocol: ~x"./protocol/text()"o |> transform_by(&optional_text/1),
+      rule_action: ~x"./ruleAction/text()"o |> transform_by(&optional_text/1),
+      direction: ~x"./direction/text()"o |> transform_by(&optional_text/1)
     ]
   end
 
@@ -2683,7 +2919,7 @@ defmodule AwsSDK.EC2 do
         filters: [%{name: "tag:ReleaseGroup", values: ["deployd"]}]
       )
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    images_set: [
       #=>      %{
       #=>        image_id: "ami-0abcdef1234567890",
@@ -2701,8 +2937,8 @@ defmodule AwsSDK.EC2 do
       #=>        block_device_mapping: [
       #=>          %{
       #=>            device_name: "/dev/xvda",
-      #=>            virtual_name: "",
-      #=>            no_device: "",
+      #=>            virtual_name: nil,
+      #=>            no_device: nil,
       #=>            ebs: %{
       #=>              snapshot_id: "snap-0a1b2c3d",
       #=>              volume_size: 30,
@@ -2715,13 +2951,14 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   An instance-store device carries no `<ebs>` element, so its `:ebs` is
   `nil` rather than a map of empty strings.
   """
   @spec describe_images(opts :: keyword()) ::
-          {:ok, %{images_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{images_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_images(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_images_response(opts)
@@ -2738,8 +2975,9 @@ defmodule AwsSDK.EC2 do
       |> put_filters(reject_valueless_filters(opts[:filters] || []))
 
     with {:ok, op} <- build_operation("DescribeImages", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_images(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_images(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -2759,75 +2997,82 @@ defmodule AwsSDK.EC2 do
           key: ~x"./key/text()"s,
           value: ~x"./value/text()"s
         ],
-        image_location: ~x"./imageLocation/text()"os,
-        image_type: ~x"./imageType/text()"os,
+        image_location: ~x"./imageLocation/text()"o |> transform_by(&optional_text/1),
+        image_type: ~x"./imageType/text()"o |> transform_by(&optional_text/1),
         # Examples 2 and 3 and the current Contents use isPublic; Example 1
         # uses the stale `public`. Read the documented name.
-        is_public: ~x"./isPublic/text()"os,
-        image_owner_alias: ~x"./imageOwnerAlias/text()"os,
-        description: ~x"./description/text()"os,
-        architecture: ~x"./architecture/text()"os,
+        is_public: ~x"./isPublic/text()"o |> transform_by(&optional_text/1),
+        image_owner_alias: ~x"./imageOwnerAlias/text()"o |> transform_by(&optional_text/1),
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+        architecture: ~x"./architecture/text()"o |> transform_by(&optional_text/1),
         # `platform` is a Windows-only flag; platformDetails is the general
         # field.
-        platform: ~x"./platform/text()"os,
-        platform_details: ~x"./platformDetails/text()"os,
-        usage_operation: ~x"./usageOperation/text()"os,
-        ena_support: ~x"./enaSupport/text()"os,
-        sriov_net_support: ~x"./sriovNetSupport/text()"os,
-        kernel_id: ~x"./kernelId/text()"os,
-        ramdisk_id: ~x"./ramdiskId/text()"os,
-        root_device_type: ~x"./rootDeviceType/text()"os,
-        root_device_name: ~x"./rootDeviceName/text()"os,
-        virtualization_type: ~x"./virtualizationType/text()"os,
-        hypervisor: ~x"./hypervisor/text()"os,
-        boot_mode: ~x"./bootMode/text()"os,
-        tpm_support: ~x"./tpmSupport/text()"os,
-        imds_support: ~x"./imdsSupport/text()"os,
-        deprecation_time: ~x"./deprecationTime/text()"os,
-        deregistration_protection: ~x"./deregistrationProtection/text()"os,
-        last_launched_time: ~x"./lastLaunchedTime/text()"os,
-        source_image_id: ~x"./sourceImageId/text()"os,
-        source_image_region: ~x"./sourceImageRegion/text()"os,
-        source_instance_id: ~x"./sourceInstanceId/text()"os,
-        public_ssm_parameter_name: ~x"./publicSsmParameterName/text()"os,
-        free_tier_eligible: ~x"./freeTierEligible/text()"os,
-        image_allowed: ~x"./imageAllowed/text()"os,
+        platform: ~x"./platform/text()"o |> transform_by(&optional_text/1),
+        platform_details: ~x"./platformDetails/text()"o |> transform_by(&optional_text/1),
+        usage_operation: ~x"./usageOperation/text()"o |> transform_by(&optional_text/1),
+        ena_support: ~x"./enaSupport/text()"o |> transform_by(&optional_text/1),
+        sriov_net_support: ~x"./sriovNetSupport/text()"o |> transform_by(&optional_text/1),
+        kernel_id: ~x"./kernelId/text()"o |> transform_by(&optional_text/1),
+        ramdisk_id: ~x"./ramdiskId/text()"o |> transform_by(&optional_text/1),
+        root_device_type: ~x"./rootDeviceType/text()"o |> transform_by(&optional_text/1),
+        root_device_name: ~x"./rootDeviceName/text()"o |> transform_by(&optional_text/1),
+        virtualization_type: ~x"./virtualizationType/text()"o |> transform_by(&optional_text/1),
+        hypervisor: ~x"./hypervisor/text()"o |> transform_by(&optional_text/1),
+        boot_mode: ~x"./bootMode/text()"o |> transform_by(&optional_text/1),
+        tpm_support: ~x"./tpmSupport/text()"o |> transform_by(&optional_text/1),
+        imds_support: ~x"./imdsSupport/text()"o |> transform_by(&optional_text/1),
+        deprecation_time: ~x"./deprecationTime/text()"o |> transform_by(&optional_text/1),
+        deregistration_protection:
+          ~x"./deregistrationProtection/text()"o |> transform_by(&optional_text/1),
+        last_launched_time: ~x"./lastLaunchedTime/text()"o |> transform_by(&optional_text/1),
+        source_image_id: ~x"./sourceImageId/text()"o |> transform_by(&optional_text/1),
+        source_image_region: ~x"./sourceImageRegion/text()"o |> transform_by(&optional_text/1),
+        source_instance_id: ~x"./sourceInstanceId/text()"o |> transform_by(&optional_text/1),
+        public_ssm_parameter_name:
+          ~x"./publicSsmParameterName/text()"o |> transform_by(&optional_text/1),
+        free_tier_eligible: ~x"./freeTierEligible/text()"o |> transform_by(&optional_text/1),
+        image_allowed: ~x"./imageAllowed/text()"o |> transform_by(&optional_text/1),
         state_reason: [
           ~x"./stateReason"o,
-          code: ~x"./code/text()"os,
-          message: ~x"./message/text()"os
+          code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+          message: ~x"./message/text()"o |> transform_by(&optional_text/1)
         ],
         product_codes: [
           ~x"./productCodes/item"l,
           product_code: ~x"./productCode/text()"s,
-          type: ~x"./type/text()"os
+          type: ~x"./type/text()"o |> transform_by(&optional_text/1)
         ],
         block_device_mapping: [
           ~x"./blockDeviceMapping/item"l,
           device_name: ~x"./deviceName/text()"s,
-          virtual_name: ~x"./virtualName/text()"os,
-          no_device: ~x"./noDevice/text()"os,
+          virtual_name: ~x"./virtualName/text()"o |> transform_by(&optional_text/1),
+          no_device: ~x"./noDevice/text()"o |> transform_by(&optional_text/1),
           # Instance-store devices carry no <ebs> child at all, so the
           # anchor is optional and the whole sub-map comes back nil.
           ebs: [
             ~x"./ebs"o,
-            snapshot_id: ~x"./snapshotId/text()"os,
+            snapshot_id: ~x"./snapshotId/text()"o |> transform_by(&optional_text/1),
             # Every EBS integer is Required: No -- never a plain cast.
             volume_size: ~x"./volumeSize/text()"oi,
             iops: ~x"./iops/text()"oi,
             throughput: ~x"./throughput/text()"oi,
             ebs_card_index: ~x"./ebsCardIndex/text()"oi,
-            volume_type: ~x"./volumeType/text()"os,
-            delete_on_termination: ~x"./deleteOnTermination/text()"os,
-            encrypted: ~x"./encrypted/text()"os,
-            outpost_arn: ~x"./outpostArn/text()"os
+            volume_type: ~x"./volumeType/text()"o |> transform_by(&optional_text/1),
+            delete_on_termination:
+              ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+            encrypted: ~x"./encrypted/text()"o |> transform_by(&optional_text/1),
+            outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1)
           ]
         ]
       )
 
     %{
       images_set: images,
-      next_token: xpath(body, ~x"//DescribeImagesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeImagesResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -2846,10 +3091,10 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.deregister_image("ami-0abcdef1234567890")
-      #=> {:ok, %{return: true, delete_associated_snapshot_result_set: []}}
+      #=> {:ok, %{body: %{return: true, delete_snapshot_result_set: []}, headers: %{...}}}
   """
   @spec deregister_image(image_id :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def deregister_image(image_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_deregister_image_response(image_id, opts)
@@ -2860,16 +3105,20 @@ defmodule AwsSDK.EC2 do
 
   defp do_deregister_image(image_id, opts) do
     with {:ok, op} <- build_operation("DeregisterImage", %{"ImageId" => image_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       {:ok,
-       Map.put(
-         parse_return(body),
-         :delete_associated_snapshot_result_set,
-         xpath(body, ~x"//deleteSnapshotResultSet/item"l,
-           snapshot_id: ~x"./snapshotId/text()"os,
-           return_code: ~x"./returnCode/text()"os
-         )
-       )}
+       %{
+         body:
+           Map.put(
+             parse_return(body),
+             :delete_snapshot_result_set,
+             xpath(body, ~x"//deleteSnapshotResultSet/item"l,
+               snapshot_id: ~x"./snapshotId/text()"o |> transform_by(&optional_text/1),
+               return_code: ~x"./returnCode/text()"o |> transform_by(&optional_text/1)
+             )
+           ),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2892,32 +3141,34 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_snapshots(owner_ids: ["self"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    snapshot_set: [
       #=>      %{
       #=>        snapshot_id: "snap-0abc",
       #=>        volume_id: "vol-0abc",
       #=>        status: "completed",
-      #=>        status_message: "",
+      #=>        status_message: nil,
       #=>        start_time: "2026-01-01T00:00:00Z",
       #=>        progress: "100%",
       #=>        owner_id: "123456789012",
-      #=>        owner_alias: "",
+      #=>        owner_alias: nil,
       #=>        volume_size: 30,
-      #=>        description: "",
+      #=>        description: nil,
       #=>        encrypted: false,
-      #=>        kms_key_id: "",
-      #=>        outpost_arn: "",
+      #=>        kms_key_id: nil,
+      #=>        outpost_arn: nil,
       #=>        storage_tier: "standard",
-      #=>        restore_expiry_time: "",
+      #=>        restore_expiry_time: nil,
       #=>        tag_set: []
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_snapshots(opts :: keyword()) ::
-          {:ok, %{snapshot_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{snapshot_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_snapshots(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_snapshots_response(opts)
@@ -2937,8 +3188,9 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeSnapshots", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_snapshots(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_snapshots(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -2949,38 +3201,43 @@ defmodule AwsSDK.EC2 do
     snapshots =
       xpath(body, ~x"//snapshotSet/item"l,
         snapshot_id: ~x"./snapshotId/text()"s,
-        volume_id: ~x"./volumeId/text()"os,
-        status: ~x"./status/text()"os,
-        status_message: ~x"./statusMessage/text()"os,
-        start_time: ~x"./startTime/text()"os,
-        progress: ~x"./progress/text()"os,
-        owner_id: ~x"./ownerId/text()"os,
-        owner_alias: ~x"./ownerAlias/text()"os,
+        volume_id: ~x"./volumeId/text()"o |> transform_by(&optional_text/1),
+        status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+        status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1),
+        start_time: ~x"./startTime/text()"o |> transform_by(&optional_text/1),
+        progress: ~x"./progress/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        owner_alias: ~x"./ownerAlias/text()"o |> transform_by(&optional_text/1),
         volume_size: ~x"./volumeSize/text()"oi,
-        description: ~x"./description/text()"os,
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
         encrypted: ~x"./encrypted/text()"s,
-        kms_key_id: ~x"./kmsKeyId/text()"os,
-        data_encryption_key_id: ~x"./dataEncryptionKeyId/text()"os,
-        outpost_arn: ~x"./outpostArn/text()"os,
-        storage_tier: ~x"./storageTier/text()"os,
-        restore_expiry_time: ~x"./restoreExpiryTime/text()"os,
-        sse_type: ~x"./sseType/text()"os,
-        availability_zone: ~x"./availabilityZone/text()"os,
-        transfer_type: ~x"./transferType/text()"os,
+        kms_key_id: ~x"./kmsKeyId/text()"o |> transform_by(&optional_text/1),
+        data_encryption_key_id:
+          ~x"./dataEncryptionKeyId/text()"o |> transform_by(&optional_text/1),
+        outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+        storage_tier: ~x"./storageTier/text()"o |> transform_by(&optional_text/1),
+        restore_expiry_time: ~x"./restoreExpiryTime/text()"o |> transform_by(&optional_text/1),
+        sse_type: ~x"./sseType/text()"o |> transform_by(&optional_text/1),
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+        transfer_type: ~x"./transferType/text()"o |> transform_by(&optional_text/1),
         completion_duration_minutes: ~x"./completionDurationMinutes/text()"oi,
-        completion_time: ~x"./completionTime/text()"os,
+        completion_time: ~x"./completionTime/text()"o |> transform_by(&optional_text/1),
         full_snapshot_size_in_bytes: ~x"./fullSnapshotSizeInBytes/text()"oi,
         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
       )
 
     %{
       snapshot_set: Enum.map(snapshots, &coerce_encrypted/1),
-      next_token: xpath(body, ~x"//DescribeSnapshotsResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeSnapshotsResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
   defp coerce_encrypted(%{encrypted: value} = snapshot) do
-    %{snapshot | encrypted: value === "true"}
+    %{snapshot | encrypted: to_bool(value)}
   end
 
   @doc """
@@ -2989,10 +3246,10 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.delete_snapshot("snap-0a1b2c3d")
-      #=> {:ok, %{return: true}}
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
   """
   @spec delete_snapshot(snapshot_id :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_snapshot(snapshot_id, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_snapshot_response(snapshot_id, opts)
@@ -3003,8 +3260,8 @@ defmodule AwsSDK.EC2 do
 
   defp do_delete_snapshot(snapshot_id, opts) do
     with {:ok, op} <- build_operation("DeleteSnapshot", %{"SnapshotId" => snapshot_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_return(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok, %{body: parse_return(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -3020,17 +3277,17 @@ defmodule AwsSDK.EC2 do
   ## Examples
 
       AwsSDK.EC2.create_tags(["i-1234567890abcdef0"], [%{key: "Name", value: "web-1"}])
-      #=> {:ok, %{return: true}}
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
 
       # Tuples work too.
       AwsSDK.EC2.create_tags(["ami-0abcdef1234567890"], [{"ReleaseGroup", "deployd"}])
-      #=> {:ok, %{return: true}}
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
   """
   @spec create_tags(
           resource_ids :: list(String.t()),
           tags :: list(map() | {String.t(), String.t()}),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_tags(resource_ids, tags, opts \\ []) do
     if sandbox?(opts) do
       sandbox_create_tags_response(resource_ids, opts)
@@ -3046,8 +3303,8 @@ defmodule AwsSDK.EC2 do
       |> put_tags("Tag", tags)
 
     with {:ok, op} <- build_operation("CreateTags", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_return(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok, %{body: parse_return(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -3076,7 +3333,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_launch_templates(launch_template_names: ["web"])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    launch_templates: [
       #=>      %{
       #=>        launch_template_id: "lt-0a1b2c3d4e5f6789a",
@@ -3090,13 +3347,14 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   The configuration itself is not here -- fetch a version with
   `describe_launch_template_versions/1`.
   """
   @spec describe_launch_templates(opts :: keyword()) ::
-          {:ok, %{launch_templates: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{body: %{launch_templates: list(map()), next_token: String.t() | nil}, headers: map()}}
           | {:error, term()}
   def describe_launch_templates(opts \\ []) do
     if sandbox?(opts) do
@@ -3116,8 +3374,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeLaunchTemplates", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_launch_templates(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_launch_templates(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -3132,7 +3394,12 @@ defmodule AwsSDK.EC2 do
           ~x"//DescribeLaunchTemplatesResponse/launchTemplates/item"l,
           launch_template_fields()
         ),
-      next_token: xpath(body, ~x"//DescribeLaunchTemplatesResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeLaunchTemplatesResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -3142,14 +3409,14 @@ defmodule AwsSDK.EC2 do
     [
       launch_template_id: ~x"./launchTemplateId/text()"s,
       launch_template_name: ~x"./launchTemplateName/text()"s,
-      create_time: ~x"./createTime/text()"os,
-      created_by: ~x"./createdBy/text()"os,
+      create_time: ~x"./createTime/text()"o |> transform_by(&optional_text/1),
+      created_by: ~x"./createdBy/text()"o |> transform_by(&optional_text/1),
       default_version_number: ~x"./defaultVersionNumber/text()"oi,
       latest_version_number: ~x"./latestVersionNumber/text()"oi,
       operator: [
         ~x"./operator"o,
-        managed: ~x"./managed/text()"os,
-        principal: ~x"./principal/text()"os
+        managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+        principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
       ],
       tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
     ]
@@ -3188,13 +3455,13 @@ defmodule AwsSDK.EC2 do
         versions: ["$Latest"]
       )
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    launch_template_versions: [
       #=>      %{
       #=>        launch_template_id: "lt-0a1b2c3d4e5f6789a",
       #=>        launch_template_name: "web",
       #=>        version_number: 3,
-      #=>        version_description: "",
+      #=>        version_description: nil,
       #=>        create_time: "2026-01-01T00:00:00.000Z",
       #=>        created_by: "arn:aws:iam::123456789012:user/deploy",
       #=>        default_version: "false",
@@ -3208,7 +3475,7 @@ defmodule AwsSDK.EC2 do
       #=>          security_group_id_set: ["sg-1a2b3c4d"],
       #=>          iam_instance_profile: %{
       #=>            arn: "arn:aws:iam::123456789012:instance-profile/app",
-      #=>            name: ""
+      #=>            name: nil
       #=>          },
       #=>          placement: %{availability_zone: "us-east-1a", tenancy: "default"},
       #=>          metadata_options: %{
@@ -3243,13 +3510,17 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   Every member of `:launch_template_data` is optional in AWS's model, so a
   minimal template returns mostly `nil` sub-structures and empty lists.
   """
   @spec describe_launch_template_versions(opts :: keyword()) ::
-          {:ok, %{launch_template_versions: list(map()), next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{launch_template_versions: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_launch_template_versions(opts \\ []) do
     if sandbox?(opts) do
@@ -3273,8 +3544,12 @@ defmodule AwsSDK.EC2 do
       |> maybe_put("MaxResults", opts[:max_results])
 
     with {:ok, op} <- build_operation("DescribeLaunchTemplateVersions", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_launch_template_versions(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_launch_template_versions(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -3291,18 +3566,23 @@ defmodule AwsSDK.EC2 do
           launch_template_id: ~x"./launchTemplateId/text()"s,
           launch_template_name: ~x"./launchTemplateName/text()"s,
           version_number: ~x"./versionNumber/text()"oi,
-          version_description: ~x"./versionDescription/text()"os,
-          create_time: ~x"./createTime/text()"os,
-          created_by: ~x"./createdBy/text()"os,
-          default_version: ~x"./defaultVersion/text()"os,
+          version_description: ~x"./versionDescription/text()"o |> transform_by(&optional_text/1),
+          create_time: ~x"./createTime/text()"o |> transform_by(&optional_text/1),
+          created_by: ~x"./createdBy/text()"o |> transform_by(&optional_text/1),
+          default_version: ~x"./defaultVersion/text()"o |> transform_by(&optional_text/1),
           operator: [
             ~x"./operator"o,
-            managed: ~x"./managed/text()"os,
-            principal: ~x"./principal/text()"os
+            managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+            principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
           ],
           launch_template_data: [~x"./launchTemplateData"o | launch_template_data_fields()]
         ),
-      next_token: xpath(body, ~x"//DescribeLaunchTemplateVersionsResponse/nextToken/text()"os)
+      next_token:
+        xpath(
+          body,
+          ~x"//DescribeLaunchTemplateVersionsResponse/nextToken/text()"o
+          |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -3311,91 +3591,109 @@ defmodule AwsSDK.EC2 do
   # every sub-structure anchor is optional.
   defp launch_template_data_fields do
     [
-      image_id: ~x"./imageId/text()"os,
-      instance_type: ~x"./instanceType/text()"os,
-      kernel_id: ~x"./kernelId/text()"os,
-      ram_disk_id: ~x"./ramDiskId/text()"os,
-      key_name: ~x"./keyName/text()"os,
+      image_id: ~x"./imageId/text()"o |> transform_by(&optional_text/1),
+      instance_type: ~x"./instanceType/text()"o |> transform_by(&optional_text/1),
+      kernel_id: ~x"./kernelId/text()"o |> transform_by(&optional_text/1),
+      ram_disk_id: ~x"./ramDiskId/text()"o |> transform_by(&optional_text/1),
+      key_name: ~x"./keyName/text()"o |> transform_by(&optional_text/1),
       # Base64 as AWS stores it; decoding here would be this module inventing
       # a representation, and the value is not always valid UTF-8.
-      user_data: ~x"./userData/text()"os,
-      ebs_optimized: ~x"./ebsOptimized/text()"os,
-      disable_api_termination: ~x"./disableApiTermination/text()"os,
-      disable_api_stop: ~x"./disableApiStop/text()"os,
-      instance_initiated_shutdown_behavior: ~x"./instanceInitiatedShutdownBehavior/text()"os,
+      user_data: ~x"./userData/text()"o |> transform_by(&optional_text/1),
+      ebs_optimized: ~x"./ebsOptimized/text()"o |> transform_by(&optional_text/1),
+      disable_api_termination:
+        ~x"./disableApiTermination/text()"o |> transform_by(&optional_text/1),
+      disable_api_stop: ~x"./disableApiStop/text()"o |> transform_by(&optional_text/1),
+      instance_initiated_shutdown_behavior:
+        ~x"./instanceInitiatedShutdownBehavior/text()"o |> transform_by(&optional_text/1),
       security_group_id_set: ~x"./securityGroupIdSet/item/text()"sl,
       security_group_set: ~x"./securityGroupSet/item/text()"sl,
       iam_instance_profile: [
         ~x"./iamInstanceProfile"o,
-        arn: ~x"./arn/text()"os,
-        name: ~x"./name/text()"os
+        arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
+        name: ~x"./name/text()"o |> transform_by(&optional_text/1)
       ],
-      monitoring: [~x"./monitoring"o, enabled: ~x"./enabled/text()"os],
+      monitoring: [
+        ~x"./monitoring"o,
+        enabled: ~x"./enabled/text()"o |> transform_by(&optional_text/1)
+      ],
       placement: [
         ~x"./placement"o,
-        availability_zone: ~x"./availabilityZone/text()"os,
-        affinity: ~x"./affinity/text()"os,
-        group_name: ~x"./groupName/text()"os,
-        group_id: ~x"./groupId/text()"os,
-        host_id: ~x"./hostId/text()"os,
-        tenancy: ~x"./tenancy/text()"os,
-        spread_domain: ~x"./spreadDomain/text()"os,
-        host_resource_group_arn: ~x"./hostResourceGroupArn/text()"os,
-        availability_zone_id: ~x"./availabilityZoneId/text()"os,
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+        affinity: ~x"./affinity/text()"o |> transform_by(&optional_text/1),
+        group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+        group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+        host_id: ~x"./hostId/text()"o |> transform_by(&optional_text/1),
+        tenancy: ~x"./tenancy/text()"o |> transform_by(&optional_text/1),
+        spread_domain: ~x"./spreadDomain/text()"o |> transform_by(&optional_text/1),
+        host_resource_group_arn:
+          ~x"./hostResourceGroupArn/text()"o |> transform_by(&optional_text/1),
+        availability_zone_id: ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
         partition_number: ~x"./partitionNumber/text()"oi
       ],
       cpu_options: [
         ~x"./cpuOptions"o,
         core_count: ~x"./coreCount/text()"oi,
         threads_per_core: ~x"./threadsPerCore/text()"oi,
-        amd_sev_snp: ~x"./amdSevSnp/text()"os
+        amd_sev_snp: ~x"./amdSevSnp/text()"o |> transform_by(&optional_text/1)
       ],
       metadata_options: [
         ~x"./metadataOptions"o,
-        state: ~x"./state/text()"os,
-        http_tokens: ~x"./httpTokens/text()"os,
-        http_endpoint: ~x"./httpEndpoint/text()"os,
-        http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"os,
-        instance_metadata_tags: ~x"./instanceMetadataTags/text()"os,
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+        http_tokens: ~x"./httpTokens/text()"o |> transform_by(&optional_text/1),
+        http_endpoint: ~x"./httpEndpoint/text()"o |> transform_by(&optional_text/1),
+        http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"o |> transform_by(&optional_text/1),
+        instance_metadata_tags:
+          ~x"./instanceMetadataTags/text()"o |> transform_by(&optional_text/1),
         http_put_response_hop_limit: ~x"./httpPutResponseHopLimit/text()"oi
       ],
-      enclave_options: [~x"./enclaveOptions"o, enabled: ~x"./enabled/text()"os],
-      hibernation_options: [~x"./hibernationOptions"o, configured: ~x"./configured/text()"os],
+      enclave_options: [
+        ~x"./enclaveOptions"o,
+        enabled: ~x"./enabled/text()"o |> transform_by(&optional_text/1)
+      ],
+      hibernation_options: [
+        ~x"./hibernationOptions"o,
+        configured: ~x"./configured/text()"o |> transform_by(&optional_text/1)
+      ],
       maintenance_options: [
         ~x"./maintenanceOptions"o,
-        auto_recovery: ~x"./autoRecovery/text()"os,
-        reboot_migration: ~x"./rebootMigration/text()"os
+        auto_recovery: ~x"./autoRecovery/text()"o |> transform_by(&optional_text/1),
+        reboot_migration: ~x"./rebootMigration/text()"o |> transform_by(&optional_text/1)
       ],
       private_dns_name_options: [
         ~x"./privateDnsNameOptions"o,
-        hostname_type: ~x"./hostnameType/text()"os,
-        enable_resource_name_dns_a_record: ~x"./enableResourceNameDnsARecord/text()"os,
-        enable_resource_name_dns_aaaa_record: ~x"./enableResourceNameDnsAAAARecord/text()"os
+        hostname_type: ~x"./hostnameType/text()"o |> transform_by(&optional_text/1),
+        enable_resource_name_dns_a_record:
+          ~x"./enableResourceNameDnsARecord/text()"o |> transform_by(&optional_text/1),
+        enable_resource_name_dns_aaaa_record:
+          ~x"./enableResourceNameDnsAAAARecord/text()"o |> transform_by(&optional_text/1)
       ],
       instance_market_options: [
         ~x"./instanceMarketOptions"o,
-        market_type: ~x"./marketType/text()"os,
+        market_type: ~x"./marketType/text()"o |> transform_by(&optional_text/1),
         spot_options: [
           ~x"./spotOptions"o,
-          max_price: ~x"./maxPrice/text()"os,
-          spot_instance_type: ~x"./spotInstanceType/text()"os,
+          max_price: ~x"./maxPrice/text()"o |> transform_by(&optional_text/1),
+          spot_instance_type: ~x"./spotInstanceType/text()"o |> transform_by(&optional_text/1),
           block_duration_minutes: ~x"./blockDurationMinutes/text()"oi,
-          valid_until: ~x"./validUntil/text()"os,
-          instance_interruption_behavior: ~x"./instanceInterruptionBehavior/text()"os
+          valid_until: ~x"./validUntil/text()"o |> transform_by(&optional_text/1),
+          instance_interruption_behavior:
+            ~x"./instanceInterruptionBehavior/text()"o |> transform_by(&optional_text/1)
         ]
       ],
       credit_specification: [
         ~x"./creditSpecification"o,
-        cpu_credits: ~x"./cpuCredits/text()"os
+        cpu_credits: ~x"./cpuCredits/text()"o |> transform_by(&optional_text/1)
       ],
       capacity_reservation_specification: [
         ~x"./capacityReservationSpecification"o,
-        capacity_reservation_preference: ~x"./capacityReservationPreference/text()"os,
+        capacity_reservation_preference:
+          ~x"./capacityReservationPreference/text()"o |> transform_by(&optional_text/1),
         capacity_reservation_target: [
           ~x"./capacityReservationTarget"o,
-          capacity_reservation_id: ~x"./capacityReservationId/text()"os,
+          capacity_reservation_id:
+            ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
           capacity_reservation_resource_group_arn:
-            ~x"./capacityReservationResourceGroupArn/text()"os
+            ~x"./capacityReservationResourceGroupArn/text()"o |> transform_by(&optional_text/1)
         ]
       ],
       instance_requirements: [
@@ -3409,66 +3707,72 @@ defmodule AwsSDK.EC2 do
         cpu_manufacturer_set: ~x"./cpuManufacturerSet/item/text()"sl,
         instance_generation_set: ~x"./instanceGenerationSet/item/text()"sl,
         excluded_instance_type_set: ~x"./excludedInstanceTypeSet/item/text()"sl,
-        burstable_performance: ~x"./burstablePerformance/text()"os,
-        bare_metal: ~x"./bareMetal/text()"os,
-        local_storage: ~x"./localStorage/text()"os
+        burstable_performance:
+          ~x"./burstablePerformance/text()"o |> transform_by(&optional_text/1),
+        bare_metal: ~x"./bareMetal/text()"o |> transform_by(&optional_text/1),
+        local_storage: ~x"./localStorage/text()"o |> transform_by(&optional_text/1)
       ],
       block_device_mapping_set: [
         ~x"./blockDeviceMappingSet/item"l,
-        device_name: ~x"./deviceName/text()"os,
-        virtual_name: ~x"./virtualName/text()"os,
-        no_device: ~x"./noDevice/text()"os,
+        device_name: ~x"./deviceName/text()"o |> transform_by(&optional_text/1),
+        virtual_name: ~x"./virtualName/text()"o |> transform_by(&optional_text/1),
+        no_device: ~x"./noDevice/text()"o |> transform_by(&optional_text/1),
         ebs: [
           ~x"./ebs"o,
-          snapshot_id: ~x"./snapshotId/text()"os,
+          snapshot_id: ~x"./snapshotId/text()"o |> transform_by(&optional_text/1),
           volume_size: ~x"./volumeSize/text()"oi,
-          volume_type: ~x"./volumeType/text()"os,
+          volume_type: ~x"./volumeType/text()"o |> transform_by(&optional_text/1),
           iops: ~x"./iops/text()"oi,
           throughput: ~x"./throughput/text()"oi,
-          delete_on_termination: ~x"./deleteOnTermination/text()"os,
-          encrypted: ~x"./encrypted/text()"os,
-          kms_key_id: ~x"./kmsKeyId/text()"os
+          delete_on_termination:
+            ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+          encrypted: ~x"./encrypted/text()"o |> transform_by(&optional_text/1),
+          kms_key_id: ~x"./kmsKeyId/text()"o |> transform_by(&optional_text/1)
         ]
       ],
       network_interface_set: [
         ~x"./networkInterfaceSet/item"l,
-        network_interface_id: ~x"./networkInterfaceId/text()"os,
+        network_interface_id: ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
         device_index: ~x"./deviceIndex/text()"oi,
         network_card_index: ~x"./networkCardIndex/text()"oi,
-        subnet_id: ~x"./subnetId/text()"os,
-        description: ~x"./description/text()"os,
-        associate_public_ip_address: ~x"./associatePublicIpAddress/text()"os,
-        associate_carrier_ip_address: ~x"./associateCarrierIpAddress/text()"os,
-        delete_on_termination: ~x"./deleteOnTermination/text()"os,
-        interface_type: ~x"./interfaceType/text()"os,
-        private_ip_address: ~x"./privateIpAddress/text()"os,
+        subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+        associate_public_ip_address:
+          ~x"./associatePublicIpAddress/text()"o |> transform_by(&optional_text/1),
+        associate_carrier_ip_address:
+          ~x"./associateCarrierIpAddress/text()"o |> transform_by(&optional_text/1),
+        delete_on_termination:
+          ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+        interface_type: ~x"./interfaceType/text()"o |> transform_by(&optional_text/1),
+        private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
         ipv6_address_count: ~x"./ipv6AddressCount/text()"oi,
         secondary_private_ip_address_count: ~x"./secondaryPrivateIpAddressCount/text()"oi,
         group_set: ~x"./groupSet/item/text()"sl,
         private_ip_addresses_set: [
           ~x"./privateIpAddressesSet/item"l,
-          primary: ~x"./primary/text()"os,
-          private_ip_address: ~x"./privateIpAddress/text()"os
+          primary: ~x"./primary/text()"o |> transform_by(&optional_text/1),
+          private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1)
         ],
         ipv6_addresses_set: [
           ~x"./ipv6AddressesSet/item"l,
-          ipv6_address: ~x"./ipv6Address/text()"os,
-          is_primary_ipv6: ~x"./isPrimaryIpv6/text()"os
+          ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+          is_primary_ipv6: ~x"./isPrimaryIpv6/text()"o |> transform_by(&optional_text/1)
         ]
       ],
       # A TagSpecification nests its own tagSet, so tags live two levels down.
       tag_specification_set: [
         ~x"./tagSpecificationSet/item"l,
-        resource_type: ~x"./resourceType/text()"os,
+        resource_type: ~x"./resourceType/text()"o |> transform_by(&optional_text/1),
         tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
       ],
       license_set: [
         ~x"./licenseSet/item"l,
-        license_configuration_arn: ~x"./licenseConfigurationArn/text()"os
+        license_configuration_arn:
+          ~x"./licenseConfigurationArn/text()"o |> transform_by(&optional_text/1)
       ],
       elastic_gpu_specification_set: [
         ~x"./elasticGpuSpecificationSet/item"l,
-        type: ~x"./type/text()"os
+        type: ~x"./type/text()"o |> transform_by(&optional_text/1)
       ]
     ]
   end
@@ -3484,7 +3788,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.create_launch_template_version("lt-0a1b2c3d", %{"ImageId" => "ami-1"})
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    launch_template_version: %{
       #=>      launch_template_id: "lt-0a1b2c3d",
       #=>      version_number: 2,
@@ -3492,7 +3796,7 @@ defmodule AwsSDK.EC2 do
       #=>      launch_template_data: %{image_id: "ami-1"}
       #=>    },
       #=>    warning: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   A new version is not the default version. An auto scaling group pointed at
   `$Latest` launches it; one pointed at `$Default` does not.
@@ -3519,7 +3823,7 @@ defmodule AwsSDK.EC2 do
           launch_template_id :: String.t(),
           launch_template_data :: map(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_launch_template_version(launch_template_id, launch_template_data, opts \\ [])
       when is_binary(launch_template_id) and is_map(launch_template_data) do
     if sandbox?(opts) do
@@ -3533,8 +3837,9 @@ defmodule AwsSDK.EC2 do
     params = create_launch_template_version_params(launch_template_id, launch_template_data, opts)
 
     with {:ok, op} <- build_operation("CreateLaunchTemplateVersion", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      create_launch_template_version_result(body)
+         {:ok, %{body: body, headers: headers}} <- Client.request(op),
+         {:ok, parsed} <- create_launch_template_version_result(body) do
+      {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -3587,14 +3892,14 @@ defmodule AwsSDK.EC2 do
           launch_template_id: ~x"./launchTemplateId/text()"s,
           launch_template_name: ~x"./launchTemplateName/text()"s,
           version_number: ~x"./versionNumber/text()"oi,
-          version_description: ~x"./versionDescription/text()"os,
-          create_time: ~x"./createTime/text()"os,
-          created_by: ~x"./createdBy/text()"os,
-          default_version: ~x"./defaultVersion/text()"os,
+          version_description: ~x"./versionDescription/text()"o |> transform_by(&optional_text/1),
+          create_time: ~x"./createTime/text()"o |> transform_by(&optional_text/1),
+          created_by: ~x"./createdBy/text()"o |> transform_by(&optional_text/1),
+          default_version: ~x"./defaultVersion/text()"o |> transform_by(&optional_text/1),
           operator: [
             ~x"./operator"o,
-            managed: ~x"./managed/text()"os,
-            principal: ~x"./principal/text()"os
+            managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+            principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
           ],
           launch_template_data: [~x"./launchTemplateData"o | launch_template_data_fields()]
         ),
@@ -3604,8 +3909,8 @@ defmodule AwsSDK.EC2 do
           ~x"//CreateLaunchTemplateVersionResponse/warning"o,
           errors: [
             ~x"./errorSet/item"l,
-            code: ~x"./code/text()"os,
-            message: ~x"./message/text()"os
+            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+            message: ~x"./message/text()"o |> transform_by(&optional_text/1)
           ]
         )
     }
@@ -3624,13 +3929,13 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.modify_launch_template("lt-0a1b2c3d", "3")
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    launch_template: %{
       #=>      launch_template_id: "lt-0a1b2c3d",
       #=>      default_version_number: 3,
       #=>      latest_version_number: 7
       #=>    }
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   An auto scaling group launching `$Default` reads what this sets, so moving
   the default is what puts a version in front of the next instance a group
@@ -3649,7 +3954,7 @@ defmodule AwsSDK.EC2 do
           launch_template_id :: String.t(),
           default_version :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def modify_launch_template(launch_template_id, default_version, opts \\ [])
       when is_binary(launch_template_id) and is_binary(default_version) do
     if sandbox?(opts) do
@@ -3663,8 +3968,9 @@ defmodule AwsSDK.EC2 do
     params = modify_launch_template_params(launch_template_id, default_version, opts)
 
     with {:ok, op} <- build_operation("ModifyLaunchTemplate", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      modify_launch_template_result(body)
+         {:ok, %{body: body, headers: headers}} <- Client.request(op),
+         {:ok, parsed} <- modify_launch_template_result(body) do
+      {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -3716,11 +4022,11 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.delete_launch_template_version("lt-0a1b2c3d", "3")
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    launch_template_id: "lt-0a1b2c3d",
       #=>    launch_template_name: "web",
       #=>    version_number: 3
-      #=>  }}
+      #=>  }, headers: %{...}}}
 
   AWS answers a version it could not delete inside a 200, in the
   `unsuccessfullyDeletedLaunchTemplateVersionSet` rather than as an HTTP
@@ -3737,7 +4043,7 @@ defmodule AwsSDK.EC2 do
           launch_template_id :: String.t(),
           version :: String.t(),
           opts :: keyword()
-        ) :: {:ok, map()} | {:error, term()}
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_launch_template_version(launch_template_id, version, opts \\ [])
       when is_binary(launch_template_id) and is_binary(version) do
     if sandbox?(opts) do
@@ -3751,8 +4057,9 @@ defmodule AwsSDK.EC2 do
     params = delete_launch_template_version_params(launch_template_id, version, opts)
 
     with {:ok, op} <- build_operation("DeleteLaunchTemplateVersions", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      delete_launch_template_version_result(body)
+         {:ok, %{body: body, headers: headers}} <- Client.request(op),
+         {:ok, parsed} <- delete_launch_template_version_result(body) do
+      {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -3771,11 +4078,11 @@ defmodule AwsSDK.EC2 do
   # not the one this operation promises.
   defp delete_launch_template_version_result(body) do
     case parse_delete_launch_template_versions(body) do
-      %{successful: [item]} ->
-        {:ok, item}
+      %{successfully_deleted_launch_template_version_set: [_]} = result ->
+        {:ok, result}
 
-      %{unsuccessful: [item]} ->
-        {:error, {:launch_template_version_not_deleted, item}}
+      %{unsuccessfully_deleted_launch_template_version_set: [_]} = result ->
+        {:error, {:launch_template_version_not_deleted, result}}
 
       _ ->
         {:error, {:unexpected_response, %{operation: "DeleteLaunchTemplateVersions", body: body}}}
@@ -3792,25 +4099,27 @@ defmodule AwsSDK.EC2 do
 
   defp parse_delete_launch_template_versions(body) do
     %{
-      successful:
+      successfully_deleted_launch_template_version_set:
         xpath(
           body,
           ~x"//DeleteLaunchTemplateVersionsResponse/successfullyDeletedLaunchTemplateVersionSet/item"l,
-          launch_template_id: ~x"./launchTemplateId/text()"os,
-          launch_template_name: ~x"./launchTemplateName/text()"os,
+          launch_template_id: ~x"./launchTemplateId/text()"o |> transform_by(&optional_text/1),
+          launch_template_name:
+            ~x"./launchTemplateName/text()"o |> transform_by(&optional_text/1),
           version_number: ~x"./versionNumber/text()"oi
         ),
-      unsuccessful:
+      unsuccessfully_deleted_launch_template_version_set:
         xpath(
           body,
           ~x"//DeleteLaunchTemplateVersionsResponse/unsuccessfullyDeletedLaunchTemplateVersionSet/item"l,
-          launch_template_id: ~x"./launchTemplateId/text()"os,
-          launch_template_name: ~x"./launchTemplateName/text()"os,
+          launch_template_id: ~x"./launchTemplateId/text()"o |> transform_by(&optional_text/1),
+          launch_template_name:
+            ~x"./launchTemplateName/text()"o |> transform_by(&optional_text/1),
           version_number: ~x"./versionNumber/text()"oi,
           response_error: [
             ~x"./responseError"o,
-            code: ~x"./code/text()"os,
-            message: ~x"./message/text()"os
+            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+            message: ~x"./message/text()"o |> transform_by(&optional_text/1)
           ]
         )
     }
@@ -3831,7 +4140,7 @@ defmodule AwsSDK.EC2 do
 
       AwsSDK.EC2.describe_tags(filters: [%{name: "resource-id", values: ["i-1234567890abcdef0"]}])
       #=> {:ok,
-      #=>  %{
+      #=>  %{body: %{
       #=>    tag_set: [
       #=>      %{
       #=>        resource_id: "i-1234567890abcdef0",
@@ -3841,10 +4150,11 @@ defmodule AwsSDK.EC2 do
       #=>      }
       #=>    ],
       #=>    next_token: nil
-      #=>  }}
+      #=>  }, headers: %{...}}}
   """
   @spec describe_tags(opts :: keyword()) ::
-          {:ok, %{tag_set: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{tag_set: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_tags(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_tags_response(opts)
@@ -3857,7 +4167,7 @@ defmodule AwsSDK.EC2 do
     params = put_filters(%{}, opts[:filters] || [])
 
     with {:ok, op} <- build_operation("DescribeTags", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       tags =
         xpath(body, ~x"//tagSet/item"l,
           resource_id: ~x"./resourceId/text()"s,
@@ -3867,7 +4177,17 @@ defmodule AwsSDK.EC2 do
         )
 
       {:ok,
-       %{tag_set: tags, next_token: xpath(body, ~x"//DescribeTagsResponse/nextToken/text()"os)}}
+       %{
+         body: %{
+           tag_set: tags,
+           next_token:
+             xpath(
+               body,
+               ~x"//DescribeTagsResponse/nextToken/text()"o |> transform_by(&optional_text/1)
+             )
+         },
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -4278,4 +4598,13 @@ defmodule AwsSDK.EC2 do
       end
     end)
   end
+
+  defp to_bool("true"), do: true
+  defp to_bool("false"), do: false
+  # An absent element is reported as absent, not as `false`.
+  defp to_bool(_), do: nil
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

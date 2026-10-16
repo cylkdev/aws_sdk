@@ -1,7 +1,7 @@
 defmodule AwsSDK.S3.XMLParser do
   @moduledoc false
 
-  import SweetXml, only: [sigil_x: 2, xpath: 2, xpath: 3]
+  import SweetXml, only: [sigil_x: 2, xpath: 2, xpath: 3, transform_by: 2]
 
   @doc """
   Parses a `CopyObjectResult` XML response.
@@ -16,7 +16,7 @@ defmodule AwsSDK.S3.XMLParser do
       #=>   last_modified: "2026-01-01T00:00:00.000Z",
       #=>   checksum_crc32: "",
       #=>   checksum_sha256: "",
-      #=>   checksum_type: ""
+      #=>   checksum_type: nil
       #=>   # ...one key per documented checksum algorithm
       #=> }
 
@@ -31,17 +31,61 @@ defmodule AwsSDK.S3.XMLParser do
         %{
           etag: xpath(doc, ~x"//CopyObjectResult/ETag/text()"s),
           last_modified: xpath(doc, ~x"//CopyObjectResult/LastModified/text()"s),
-          checksum_crc32: xpath(doc, ~x"//CopyObjectResult/ChecksumCRC32/text()"so),
-          checksum_crc32c: xpath(doc, ~x"//CopyObjectResult/ChecksumCRC32C/text()"so),
-          checksum_crc64nvme: xpath(doc, ~x"//CopyObjectResult/ChecksumCRC64NVME/text()"so),
-          checksum_sha1: xpath(doc, ~x"//CopyObjectResult/ChecksumSHA1/text()"so),
-          checksum_sha256: xpath(doc, ~x"//CopyObjectResult/ChecksumSHA256/text()"so),
-          checksum_sha512: xpath(doc, ~x"//CopyObjectResult/ChecksumSHA512/text()"so),
-          checksum_md5: xpath(doc, ~x"//CopyObjectResult/ChecksumMD5/text()"so),
-          checksum_xxhash64: xpath(doc, ~x"//CopyObjectResult/ChecksumXXHASH64/text()"so),
-          checksum_xxhash3: xpath(doc, ~x"//CopyObjectResult/ChecksumXXHASH3/text()"so),
-          checksum_xxhash128: xpath(doc, ~x"//CopyObjectResult/ChecksumXXHASH128/text()"so),
-          checksum_type: xpath(doc, ~x"//CopyObjectResult/ChecksumType/text()"so)
+          checksum_crc32:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumCRC32/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_crc32c:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumCRC32C/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_crc64nvme:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumCRC64NVME/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_sha1:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumSHA1/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_sha256:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumSHA256/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_sha512:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumSHA512/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_md5:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumMD5/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_xxhash64:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumXXHASH64/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_xxhash3:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumXXHASH3/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_xxhash128:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumXXHASH128/text()"o |> transform_by(&optional_text/1)
+            ),
+          checksum_type:
+            xpath(
+              doc,
+              ~x"//CopyObjectResult/ChecksumType/text()"o |> transform_by(&optional_text/1)
+            )
         }
 
       error ->
@@ -87,8 +131,8 @@ defmodule AwsSDK.S3.XMLParser do
         if(xpath(doc, ~x"//NotificationConfiguration/EventBridgeConfiguration"o), do: %{}),
       topic_configuration:
         xpath(doc, ~x"//NotificationConfiguration/TopicConfiguration"l,
-          id: ~x"./Id/text()"so,
-          topic: ~x"./Topic/text()"so,
+          id: ~x"./Id/text()"o |> transform_by(&optional_text/1),
+          topic: ~x"./Topic/text()"o |> transform_by(&optional_text/1),
           # The wire element is the singular `Event`, repeated.
           event: ~x"./Event/text()"sl,
           filter: [
@@ -97,16 +141,16 @@ defmodule AwsSDK.S3.XMLParser do
               ~x"./S3Key"o,
               filter_rule: [
                 ~x"./FilterRule"l,
-                name: ~x"./Name/text()"so,
-                value: ~x"./Value/text()"so
+                name: ~x"./Name/text()"o |> transform_by(&optional_text/1),
+                value: ~x"./Value/text()"o |> transform_by(&optional_text/1)
               ]
             ]
           ]
         ),
       queue_configuration:
         xpath(doc, ~x"//NotificationConfiguration/QueueConfiguration"l,
-          id: ~x"./Id/text()"so,
-          queue: ~x"./Queue/text()"so,
+          id: ~x"./Id/text()"o |> transform_by(&optional_text/1),
+          queue: ~x"./Queue/text()"o |> transform_by(&optional_text/1),
           event: ~x"./Event/text()"sl,
           filter: [
             ~x"./Filter"o,
@@ -114,8 +158,8 @@ defmodule AwsSDK.S3.XMLParser do
               ~x"./S3Key"o,
               filter_rule: [
                 ~x"./FilterRule"l,
-                name: ~x"./Name/text()"so,
-                value: ~x"./Value/text()"so
+                name: ~x"./Name/text()"o |> transform_by(&optional_text/1),
+                value: ~x"./Value/text()"o |> transform_by(&optional_text/1)
               ]
             ]
           ]
@@ -124,8 +168,8 @@ defmodule AwsSDK.S3.XMLParser do
       # `LambdaFunctionConfiguration` is the model name, not the XML name.
       cloud_function_configuration:
         xpath(doc, ~x"//NotificationConfiguration/CloudFunctionConfiguration"l,
-          id: ~x"./Id/text()"so,
-          cloud_function: ~x"./CloudFunction/text()"so,
+          id: ~x"./Id/text()"o |> transform_by(&optional_text/1),
+          cloud_function: ~x"./CloudFunction/text()"o |> transform_by(&optional_text/1),
           event: ~x"./Event/text()"sl,
           filter: [
             ~x"./Filter"o,
@@ -133,8 +177,8 @@ defmodule AwsSDK.S3.XMLParser do
               ~x"./S3Key"o,
               filter_rule: [
                 ~x"./FilterRule"l,
-                name: ~x"./Name/text()"so,
-                value: ~x"./Value/text()"so
+                name: ~x"./Name/text()"o |> transform_by(&optional_text/1),
+                value: ~x"./Value/text()"o |> transform_by(&optional_text/1)
               ]
             ]
           ]
@@ -157,13 +201,13 @@ defmodule AwsSDK.S3.XMLParser do
       #=>         name: "uploads",
       #=>         creation_date: "2026-01-01T00:00:00.000Z",
       #=>         bucket_region: "us-east-1",
-      #=>         bucket_arn: ""
+      #=>         bucket_arn: nil
       #=>       }
       #=>     ]
       #=>   },
       #=>   owner: %{id: "abc", display_name: "example"},
-      #=>   continuation_token: "",
-      #=>   prefix: ""
+      #=>   continuation_token: nil,
+      #=>   prefix: nil
       #=> }
 
   `<Buckets>` is a wrapper holding repeated `<Bucket>` elements, so the list
@@ -180,8 +224,8 @@ defmodule AwsSDK.S3.XMLParser do
           xpath(doc, ~x"//ListAllMyBucketsResult/Buckets/Bucket"l,
             name: ~x"./Name/text()"s,
             creation_date: ~x"./CreationDate/text()"s,
-            bucket_region: ~x"./BucketRegion/text()"so,
-            bucket_arn: ~x"./BucketArn/text()"so
+            bucket_region: ~x"./BucketRegion/text()"o |> transform_by(&optional_text/1),
+            bucket_arn: ~x"./BucketArn/text()"o |> transform_by(&optional_text/1)
           )
       },
       owner:
@@ -189,8 +233,13 @@ defmodule AwsSDK.S3.XMLParser do
           id: ~x"./ID/text()"s,
           display_name: ~x"./DisplayName/text()"s
         ),
-      continuation_token: xpath(doc, ~x"//ListAllMyBucketsResult/ContinuationToken/text()"so),
-      prefix: xpath(doc, ~x"//ListAllMyBucketsResult/Prefix/text()"so)
+      continuation_token:
+        xpath(
+          doc,
+          ~x"//ListAllMyBucketsResult/ContinuationToken/text()"o |> transform_by(&optional_text/1)
+        ),
+      prefix:
+        xpath(doc, ~x"//ListAllMyBucketsResult/Prefix/text()"o |> transform_by(&optional_text/1))
     }
   end
 
@@ -210,8 +259,8 @@ defmodule AwsSDK.S3.XMLParser do
       #=>   key_count: 1,
       #=>   max_keys: 1000,
       #=>   is_truncated: false,
-      #=>   continuation_token: "",
-      #=>   next_continuation_token: "",
+      #=>   continuation_token: nil,
+      #=>   next_continuation_token: nil,
       #=>   contents: [
       #=>     %{
       #=>       key: "reports/jan.csv",
@@ -241,15 +290,28 @@ defmodule AwsSDK.S3.XMLParser do
       key_count: xpath(doc, ~x"//ListBucketResult/KeyCount/text()"oi),
       max_keys: xpath(doc, ~x"//ListBucketResult/MaxKeys/text()"oi),
       is_truncated: to_bool(xpath(doc, ~x"//ListBucketResult/IsTruncated/text()"s)),
-      continuation_token: xpath(doc, ~x"//ListBucketResult/ContinuationToken/text()"so),
-      next_continuation_token: xpath(doc, ~x"//ListBucketResult/NextContinuationToken/text()"so),
-      delimiter: xpath(doc, ~x"//ListBucketResult/Delimiter/text()"so),
-      encoding_type: xpath(doc, ~x"//ListBucketResult/EncodingType/text()"so),
-      start_after: xpath(doc, ~x"//ListBucketResult/StartAfter/text()"so),
+      continuation_token:
+        xpath(
+          doc,
+          ~x"//ListBucketResult/ContinuationToken/text()"o |> transform_by(&optional_text/1)
+        ),
+      next_continuation_token:
+        xpath(
+          doc,
+          ~x"//ListBucketResult/NextContinuationToken/text()"o |> transform_by(&optional_text/1)
+        ),
+      delimiter:
+        xpath(doc, ~x"//ListBucketResult/Delimiter/text()"o |> transform_by(&optional_text/1)),
+      encoding_type:
+        xpath(doc, ~x"//ListBucketResult/EncodingType/text()"o |> transform_by(&optional_text/1)),
+      start_after:
+        xpath(doc, ~x"//ListBucketResult/StartAfter/text()"o |> transform_by(&optional_text/1)),
       # `CommonPrefixes` repeats inline rather than sitting in a wrapper, and
       # each one is a CommonPrefix structure, not a bare string.
       common_prefixes:
-        xpath(doc, ~x"//ListBucketResult/CommonPrefixes"l, prefix: ~x"./Prefix/text()"so),
+        xpath(doc, ~x"//ListBucketResult/CommonPrefixes"l,
+          prefix: ~x"./Prefix/text()"o |> transform_by(&optional_text/1)
+        ),
       contents:
         xpath(doc, ~x"//ListBucketResult/Contents"l,
           key: ~x"./Key/text()"s,
@@ -260,16 +322,17 @@ defmodule AwsSDK.S3.XMLParser do
           # On `Object` this is an array, unlike the singular String of the
           # same name on `ListPartsResult`.
           checksum_algorithm: ~x"./ChecksumAlgorithm/text()"sl,
-          checksum_type: ~x"./ChecksumType/text()"so,
+          checksum_type: ~x"./ChecksumType/text()"o |> transform_by(&optional_text/1),
           owner: [
             ~x"./Owner"o,
-            id: ~x"./ID/text()"so,
-            display_name: ~x"./DisplayName/text()"so
+            id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+            display_name: ~x"./DisplayName/text()"o |> transform_by(&optional_text/1)
           ],
           restore_status: [
             ~x"./RestoreStatus"o,
-            is_restore_in_progress: ~x"./IsRestoreInProgress/text()"so,
-            restore_expiry_date: ~x"./RestoreExpiryDate/text()"so
+            is_restore_in_progress:
+              ~x"./IsRestoreInProgress/text()"o |> transform_by(&optional_text/1),
+            restore_expiry_date: ~x"./RestoreExpiryDate/text()"o |> transform_by(&optional_text/1)
           ]
         )
     }
@@ -312,10 +375,10 @@ defmodule AwsSDK.S3.XMLParser do
       #=>   upload_id: "2~kTX",
       #=>   max_parts: 1000,
       #=>   is_truncated: false,
-      #=>   part_number_marker: "",
-      #=>   next_part_number_marker: "",
+      #=>   part_number_marker: nil,
+      #=>   next_part_number_marker: nil,
       #=>   storage_class: "STANDARD",
-      #=>   checksum_algorithm: "",
+      #=>   checksum_algorithm: nil,
       #=>   initiator: %{id: "abc", display_name: "example"},
       #=>   owner: %{id: "abc", display_name: "example"},
       #=>   parts: [
@@ -335,23 +398,37 @@ defmodule AwsSDK.S3.XMLParser do
       bucket: xpath(doc, ~x"//ListPartsResult/Bucket/text()"s),
       key: xpath(doc, ~x"//ListPartsResult/Key/text()"s),
       upload_id: xpath(doc, ~x"//ListPartsResult/UploadId/text()"s),
-      part_number_marker: xpath(doc, ~x"//ListPartsResult/PartNumberMarker/text()"so),
-      next_part_number_marker: xpath(doc, ~x"//ListPartsResult/NextPartNumberMarker/text()"so),
+      part_number_marker:
+        xpath(
+          doc,
+          ~x"//ListPartsResult/PartNumberMarker/text()"o |> transform_by(&optional_text/1)
+        ),
+      next_part_number_marker:
+        xpath(
+          doc,
+          ~x"//ListPartsResult/NextPartNumberMarker/text()"o |> transform_by(&optional_text/1)
+        ),
       max_parts: xpath(doc, ~x"//ListPartsResult/MaxParts/text()"oi),
       is_truncated: to_bool(xpath(doc, ~x"//ListPartsResult/IsTruncated/text()"s)),
-      storage_class: xpath(doc, ~x"//ListPartsResult/StorageClass/text()"so),
+      storage_class:
+        xpath(doc, ~x"//ListPartsResult/StorageClass/text()"o |> transform_by(&optional_text/1)),
       # Singular String here, unlike the array on an Object in ListObjectsV2.
-      checksum_algorithm: xpath(doc, ~x"//ListPartsResult/ChecksumAlgorithm/text()"so),
-      checksum_type: xpath(doc, ~x"//ListPartsResult/ChecksumType/text()"so),
+      checksum_algorithm:
+        xpath(
+          doc,
+          ~x"//ListPartsResult/ChecksumAlgorithm/text()"o |> transform_by(&optional_text/1)
+        ),
+      checksum_type:
+        xpath(doc, ~x"//ListPartsResult/ChecksumType/text()"o |> transform_by(&optional_text/1)),
       initiator:
         xpath(doc, ~x"//ListPartsResult/Initiator"o,
-          id: ~x"./ID/text()"so,
-          display_name: ~x"./DisplayName/text()"so
+          id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+          display_name: ~x"./DisplayName/text()"o |> transform_by(&optional_text/1)
         ),
       owner:
         xpath(doc, ~x"//ListPartsResult/Owner"o,
-          id: ~x"./ID/text()"so,
-          display_name: ~x"./DisplayName/text()"so
+          id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+          display_name: ~x"./DisplayName/text()"o |> transform_by(&optional_text/1)
         ),
       parts:
         xpath(doc, ~x"//ListPartsResult/Part"l,
@@ -359,16 +436,16 @@ defmodule AwsSDK.S3.XMLParser do
           last_modified: ~x"./LastModified/text()"s,
           etag: ~x"./ETag/text()"s,
           size: ~x"./Size/text()"oi,
-          checksum_crc32: ~x"./ChecksumCRC32/text()"so,
-          checksum_crc32c: ~x"./ChecksumCRC32C/text()"so,
-          checksum_crc64nvme: ~x"./ChecksumCRC64NVME/text()"so,
-          checksum_sha1: ~x"./ChecksumSHA1/text()"so,
-          checksum_sha256: ~x"./ChecksumSHA256/text()"so,
-          checksum_sha512: ~x"./ChecksumSHA512/text()"so,
-          checksum_md5: ~x"./ChecksumMD5/text()"so,
-          checksum_xxhash64: ~x"./ChecksumXXHASH64/text()"so,
-          checksum_xxhash3: ~x"./ChecksumXXHASH3/text()"so,
-          checksum_xxhash128: ~x"./ChecksumXXHASH128/text()"so
+          checksum_crc32: ~x"./ChecksumCRC32/text()"o |> transform_by(&optional_text/1),
+          checksum_crc32c: ~x"./ChecksumCRC32C/text()"o |> transform_by(&optional_text/1),
+          checksum_crc64nvme: ~x"./ChecksumCRC64NVME/text()"o |> transform_by(&optional_text/1),
+          checksum_sha1: ~x"./ChecksumSHA1/text()"o |> transform_by(&optional_text/1),
+          checksum_sha256: ~x"./ChecksumSHA256/text()"o |> transform_by(&optional_text/1),
+          checksum_sha512: ~x"./ChecksumSHA512/text()"o |> transform_by(&optional_text/1),
+          checksum_md5: ~x"./ChecksumMD5/text()"o |> transform_by(&optional_text/1),
+          checksum_xxhash64: ~x"./ChecksumXXHASH64/text()"o |> transform_by(&optional_text/1),
+          checksum_xxhash3: ~x"./ChecksumXXHASH3/text()"o |> transform_by(&optional_text/1),
+          checksum_xxhash128: ~x"./ChecksumXXHASH128/text()"o |> transform_by(&optional_text/1)
         )
     }
   end
@@ -397,16 +474,35 @@ defmodule AwsSDK.S3.XMLParser do
     %{
       etag: xpath(doc, ~x"//CopyPartResult/ETag/text()"s),
       last_modified: xpath(doc, ~x"//CopyPartResult/LastModified/text()"s),
-      checksum_crc32: xpath(doc, ~x"//CopyPartResult/ChecksumCRC32/text()"so),
-      checksum_crc32c: xpath(doc, ~x"//CopyPartResult/ChecksumCRC32C/text()"so),
-      checksum_crc64nvme: xpath(doc, ~x"//CopyPartResult/ChecksumCRC64NVME/text()"so),
-      checksum_sha1: xpath(doc, ~x"//CopyPartResult/ChecksumSHA1/text()"so),
-      checksum_sha256: xpath(doc, ~x"//CopyPartResult/ChecksumSHA256/text()"so),
-      checksum_sha512: xpath(doc, ~x"//CopyPartResult/ChecksumSHA512/text()"so),
-      checksum_md5: xpath(doc, ~x"//CopyPartResult/ChecksumMD5/text()"so),
-      checksum_xxhash64: xpath(doc, ~x"//CopyPartResult/ChecksumXXHASH64/text()"so),
-      checksum_xxhash3: xpath(doc, ~x"//CopyPartResult/ChecksumXXHASH3/text()"so),
-      checksum_xxhash128: xpath(doc, ~x"//CopyPartResult/ChecksumXXHASH128/text()"so)
+      checksum_crc32:
+        xpath(doc, ~x"//CopyPartResult/ChecksumCRC32/text()"o |> transform_by(&optional_text/1)),
+      checksum_crc32c:
+        xpath(doc, ~x"//CopyPartResult/ChecksumCRC32C/text()"o |> transform_by(&optional_text/1)),
+      checksum_crc64nvme:
+        xpath(
+          doc,
+          ~x"//CopyPartResult/ChecksumCRC64NVME/text()"o |> transform_by(&optional_text/1)
+        ),
+      checksum_sha1:
+        xpath(doc, ~x"//CopyPartResult/ChecksumSHA1/text()"o |> transform_by(&optional_text/1)),
+      checksum_sha256:
+        xpath(doc, ~x"//CopyPartResult/ChecksumSHA256/text()"o |> transform_by(&optional_text/1)),
+      checksum_sha512:
+        xpath(doc, ~x"//CopyPartResult/ChecksumSHA512/text()"o |> transform_by(&optional_text/1)),
+      checksum_md5:
+        xpath(doc, ~x"//CopyPartResult/ChecksumMD5/text()"o |> transform_by(&optional_text/1)),
+      checksum_xxhash64:
+        xpath(
+          doc,
+          ~x"//CopyPartResult/ChecksumXXHASH64/text()"o |> transform_by(&optional_text/1)
+        ),
+      checksum_xxhash3:
+        xpath(doc, ~x"//CopyPartResult/ChecksumXXHASH3/text()"o |> transform_by(&optional_text/1)),
+      checksum_xxhash128:
+        xpath(
+          doc,
+          ~x"//CopyPartResult/ChecksumXXHASH128/text()"o |> transform_by(&optional_text/1)
+        )
     }
   end
 
@@ -443,24 +539,72 @@ defmodule AwsSDK.S3.XMLParser do
           bucket: xpath(doc, ~x"//CompleteMultipartUploadResult/Bucket/text()"s),
           key: xpath(doc, ~x"//CompleteMultipartUploadResult/Key/text()"s),
           etag: xpath(doc, ~x"//CompleteMultipartUploadResult/ETag/text()"s),
-          checksum_crc32: xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumCRC32/text()"so),
+          checksum_crc32:
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumCRC32/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_crc32c:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumCRC32C/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumCRC32C/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_crc64nvme:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumCRC64NVME/text()"so),
-          checksum_sha1: xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumSHA1/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumCRC64NVME/text()"o
+              |> transform_by(&optional_text/1)
+            ),
+          checksum_sha1:
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumSHA1/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_sha256:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumSHA256/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumSHA256/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_sha512:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumSHA512/text()"so),
-          checksum_md5: xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumMD5/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumSHA512/text()"o
+              |> transform_by(&optional_text/1)
+            ),
+          checksum_md5:
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumMD5/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_xxhash64:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumXXHASH64/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumXXHASH64/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_xxhash3:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumXXHASH3/text()"so),
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumXXHASH3/text()"o
+              |> transform_by(&optional_text/1)
+            ),
           checksum_xxhash128:
-            xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumXXHASH128/text()"so),
-          checksum_type: xpath(doc, ~x"//CompleteMultipartUploadResult/ChecksumType/text()"so)
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumXXHASH128/text()"o
+              |> transform_by(&optional_text/1)
+            ),
+          checksum_type:
+            xpath(
+              doc,
+              ~x"//CompleteMultipartUploadResult/ChecksumType/text()"o
+              |> transform_by(&optional_text/1)
+            )
         }
 
       error ->
@@ -481,7 +625,9 @@ defmodule AwsSDK.S3.XMLParser do
         ErrorMessage.internal_server_error("s3 returned an error in a 200 response", %{
           code: code,
           message: xpath(doc, ~x"//Error/Message/text()"s),
-          request_id: xpath(doc, ~x"//Error/RequestId/text()"s)
+          request_id: xpath(doc, ~x"//Error/RequestId/text()"s),
+          host_id: xpath(doc, ~x"//Error/HostId/text()"o |> transform_by(&optional_text/1)),
+          resource: xpath(doc, ~x"//Error/Resource/text()"o |> transform_by(&optional_text/1))
         })
     end
   end
@@ -496,9 +642,10 @@ defmodule AwsSDK.S3.XMLParser do
       xml
       |> xpath(~x"//DeleteResult/Deleted"l,
         key: ~x"./Key/text()"s,
-        version_id: ~x"./VersionId/text()"so,
-        delete_marker: ~x"./DeleteMarker/text()"so,
-        delete_marker_version_id: ~x"./DeleteMarkerVersionId/text()"so
+        version_id: ~x"./VersionId/text()"o |> transform_by(&optional_text/1),
+        delete_marker: ~x"./DeleteMarker/text()"o |> transform_by(&optional_text/1),
+        delete_marker_version_id:
+          ~x"./DeleteMarkerVersionId/text()"o |> transform_by(&optional_text/1)
       )
       |> Enum.map(fn entry -> %{entry | delete_marker: to_bool(entry.delete_marker)} end)
 
@@ -507,14 +654,19 @@ defmodule AwsSDK.S3.XMLParser do
       error:
         xpath(xml, ~x"//DeleteResult/Error"l,
           key: ~x"./Key/text()"s,
-          version_id: ~x"./VersionId/text()"so,
-          code: ~x"./Code/text()"so,
-          message: ~x"./Message/text()"so
+          version_id: ~x"./VersionId/text()"o |> transform_by(&optional_text/1),
+          code: ~x"./Code/text()"o |> transform_by(&optional_text/1),
+          message: ~x"./Message/text()"o |> transform_by(&optional_text/1)
         )
     }
   end
 
   defp to_bool("true"), do: true
   defp to_bool("false"), do: false
-  defp to_bool(_), do: false
+  # An absent element is reported as absent, not as `false`.
+  defp to_bool(_), do: nil
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

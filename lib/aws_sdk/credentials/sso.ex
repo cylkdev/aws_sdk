@@ -28,7 +28,7 @@ defmodule AwsSDK.Credentials.SSO do
   def execute(%Operation{} = op) do
     case dispatch(op) do
       {:ok, _} = ok -> ok
-      {:error, %{reason: reason}} -> {:error, {:sso_transport_error, reason}}
+      {:error, %{error: error}} -> {:error, {:sso_transport_error, error}}
     end
   end
 

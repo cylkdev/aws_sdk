@@ -446,7 +446,7 @@ defmodule AwsSDK.ConformanceTest do
                launch_template_id: "lt-1",
                launch_template_name: "web",
                version_number: 2,
-               version_description: "",
+               version_description: nil,
                create_time: "2026-01-01T00:00:00Z",
                created_by: "arn:aws:iam::1:user/u",
                default_version: "false",
@@ -454,14 +454,14 @@ defmodule AwsSDK.ConformanceTest do
                launch_template_data: %{
                  image_id: "ami-1",
                  instance_type: "t3.micro",
-                 kernel_id: "",
-                 ram_disk_id: "",
-                 key_name: "",
-                 user_data: "",
-                 ebs_optimized: "",
-                 disable_api_termination: "",
-                 disable_api_stop: "",
-                 instance_initiated_shutdown_behavior: "",
+                 kernel_id: nil,
+                 ram_disk_id: nil,
+                 key_name: nil,
+                 user_data: nil,
+                 ebs_optimized: nil,
+                 disable_api_termination: nil,
+                 disable_api_stop: nil,
+                 instance_initiated_shutdown_behavior: nil,
                  security_group_id_set: [],
                  security_group_set: [],
                  iam_instance_profile: nil,
@@ -613,22 +613,18 @@ defmodule AwsSDK.ConformanceTest do
     """
 
     assert %{
-             successful: [
+             successfully_deleted_launch_template_version_set: [
                %{
                  launch_template_id: "lt-0a20c965061f64abc",
                  launch_template_name: "MyLaunchTemplate",
                  version_number: 3
                }
              ],
-             unsuccessful: []
+             unsuccessfully_deleted_launch_template_version_set: []
            } == AwsSDK.EC2.parse_delete_launch_template_versions_for_test(xml)
 
-    assert {:ok,
-            %{
-              launch_template_id: "lt-0a20c965061f64abc",
-              launch_template_name: "MyLaunchTemplate",
-              version_number: 3
-            }} == AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
+    assert {:ok, AwsSDK.EC2.parse_delete_launch_template_versions_for_test(xml)} ==
+             AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
   end
 
   test "DeleteLaunchTemplateVersions reads a version in the unsuccessful set as an error, not a success" do
@@ -654,8 +650,8 @@ defmodule AwsSDK.ConformanceTest do
     """
 
     assert %{
-             successful: [],
-             unsuccessful: [
+             successfully_deleted_launch_template_version_set: [],
+             unsuccessfully_deleted_launch_template_version_set: [
                %{
                  launch_template_id: "lt-0a20c965061f64abc",
                  launch_template_name: "MyLaunchTemplate",
@@ -670,15 +666,8 @@ defmodule AwsSDK.ConformanceTest do
 
     assert {:error,
             {:launch_template_version_not_deleted,
-             %{
-               launch_template_id: "lt-0a20c965061f64abc",
-               launch_template_name: "MyLaunchTemplate",
-               version_number: 2,
-               response_error: %{
-                 code: "launchTemplateVersionDoesNotExist",
-                 message: "The specified launch template version does not exist."
-               }
-             }}} == AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
+             AwsSDK.EC2.parse_delete_launch_template_versions_for_test(xml)}} ==
+             AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
   end
 
   test "DeleteLaunchTemplateVersions errors when the response carries the version in neither set" do
@@ -871,7 +860,7 @@ defmodule AwsSDK.ConformanceTest do
 
     assert instance.launch_template == %{
              launch_template_id: "lt-1",
-             launch_template_name: "",
+             launch_template_name: nil,
              version: "3"
            }
   end
@@ -1077,10 +1066,10 @@ defmodule AwsSDK.ConformanceTest do
     assert assoc.main == false
     # The associationState element is present, so it is a map (not nil); its
     # absent statusMessage is "" the way every other optional scalar reads.
-    assert assoc.association_state == %{state: "associated", status_message: ""}
+    assert assoc.association_state == %{state: "associated", status_message: nil}
     assert table.propagating_vgw_set == [%{gateway_id: "vgw-1"}]
     # Absent nextToken reads "" here, as it does in every EC2 parser.
-    assert parsed.next_token == ""
+    assert parsed.next_token == nil
   end
 
   test "DescribeKeyPairs keeps fingerprint, type, and tags" do
@@ -1146,6 +1135,97 @@ defmodule AwsSDK.ConformanceTest do
     assert parsed.next_token == "tok"
   end
 
+  test "RevokeSecurityGroupIngress reads the revoked rule set and unknown permissions" do
+    xml = """
+    <RevokeSecurityGroupIngressResponse><return>true</return>
+    <unknownIpPermissionSet/>
+    <revokedSecurityGroupRuleSet><item><securityGroupRuleId>sgr-9</securityGroupRuleId>
+    <groupId>sg-1</groupId><isEgress>false</isEgress><ipProtocol>tcp</ipProtocol>
+    <fromPort>22</fromPort><toPort>22</toPort><cidrIpv4>10.0.0.0/8</cidrIpv4></item>
+    </revokedSecurityGroupRuleSet></RevokeSecurityGroupIngressResponse>
+    """
+
+    parsed = AwsSDK.EC2.parse_sg_rule_result_for_test("RevokeSecurityGroupIngress", xml)
+
+    assert parsed.return == true
+    assert parsed.unknown_ip_permission_set == []
+    assert [rule] = parsed.revoked_security_group_rule_set
+    assert rule.security_group_rule_id == "sgr-9"
+    assert rule.is_egress == false
+    assert rule.from_port == 22
+  end
+
+  test "an EC2 response without <return> reports nil, not false" do
+    xml = "<RevokeSecurityGroupIngressResponse></RevokeSecurityGroupIngressResponse>"
+    parsed = AwsSDK.EC2.parse_sg_rule_result_for_test("RevokeSecurityGroupIngress", xml)
+    assert parsed.return == nil
+  end
+
+  test "an Auto Scaling group keeps Context and InstanceLifecyclePolicy" do
+    xml = """
+    <DescribeAutoScalingGroupsResponse><DescribeAutoScalingGroupsResult><AutoScalingGroups>
+    <member><AutoScalingGroupName>asg</AutoScalingGroupName><MinSize>1</MinSize><MaxSize>3</MaxSize>
+    <DesiredCapacity>2</DesiredCapacity><DefaultCooldown>300</DefaultCooldown>
+    <HealthCheckType>EC2</HealthCheckType><CreatedTime>2026-01-01T00:00:00Z</CreatedTime>
+    <Context>team-a</Context>
+    <InstanceLifecyclePolicy><RetentionTriggers>
+    <TerminateHookAbandon>retain</TerminateHookAbandon>
+    </RetentionTriggers></InstanceLifecyclePolicy>
+    </member></AutoScalingGroups></DescribeAutoScalingGroupsResult></DescribeAutoScalingGroupsResponse>
+    """
+
+    %{auto_scaling_groups: [group]} =
+      AwsSDK.AutoScaling.parse_describe_auto_scaling_groups_for_test(xml)
+
+    assert group.context == "team-a"
+    assert group.instance_lifecycle_policy.retention_triggers.terminate_hook_abandon == "retain"
+  end
+
+  test "an Auto Scaling override keeps InstanceRequirements nested" do
+    xml = """
+    <DescribeAutoScalingGroupsResponse><DescribeAutoScalingGroupsResult><AutoScalingGroups>
+    <member><AutoScalingGroupName>asg</AutoScalingGroupName><MinSize>1</MinSize><MaxSize>3</MaxSize>
+    <DesiredCapacity>2</DesiredCapacity><DefaultCooldown>300</DefaultCooldown>
+    <HealthCheckType>EC2</HealthCheckType><CreatedTime>2026-01-01T00:00:00Z</CreatedTime>
+    <MixedInstancesPolicy><LaunchTemplate>
+    <LaunchTemplateSpecification><LaunchTemplateId>lt-1</LaunchTemplateId></LaunchTemplateSpecification>
+    <Overrides><member><InstanceRequirements>
+    <VCpuCount><Min>2</Min><Max>8</Max></VCpuCount>
+    </InstanceRequirements></member></Overrides>
+    </LaunchTemplate></MixedInstancesPolicy>
+    </member></AutoScalingGroups></DescribeAutoScalingGroupsResult></DescribeAutoScalingGroupsResponse>
+    """
+
+    %{auto_scaling_groups: [group]} =
+      AwsSDK.AutoScaling.parse_describe_auto_scaling_groups_for_test(xml)
+
+    assert [override] = group.mixed_instances_policy.launch_template.overrides
+    assert %{min: 2, max: 8} = override.instance_requirements.v_cpu_count
+  end
+
+  test "an OIDC listener action keeps AuthenticationRequestExtraParams and certificate IsDefault" do
+    xml = """
+    <DescribeListenersResponse><DescribeListenersResult><Listeners><member>
+    <ListenerArn>arn:l</ListenerArn><LoadBalancerArn>arn:lb</LoadBalancerArn>
+    <Port>443</Port><Protocol>HTTPS</Protocol>
+    <Certificates><member><CertificateArn>arn:c</CertificateArn><IsDefault>true</IsDefault></member></Certificates>
+    <DefaultActions><member><Type>authenticate-oidc</Type>
+    <AuthenticateOidcConfig><Issuer>https://idp</Issuer>
+    <AuthenticationRequestExtraParams><entry><key>prompt</key><value>login</value></entry>
+    </AuthenticationRequestExtraParams></AuthenticateOidcConfig>
+    </member></DefaultActions>
+    </member></Listeners></DescribeListenersResult></DescribeListenersResponse>
+    """
+
+    %{listeners: [listener]} = AwsSDK.ElasticLoadBalancingV2.parse_describe_listeners(xml)
+
+    assert [%{certificate_arn: "arn:c", is_default: true}] = listener.certificates
+    assert [action] = listener.default_actions
+
+    assert [%{key: "prompt", value: "login"}] =
+             action.authenticate_oidc_config.authentication_request_extra_params
+  end
+
   test "DescribeSnapshots keeps the full snapshot shape" do
     xml = """
     <DescribeSnapshotsResponse><snapshotSet><item>
@@ -1209,7 +1289,7 @@ defmodule AwsSDK.ConformanceTest do
     # `primary` is a nested boolean, left as the wire string per the module's
     # convention (only the named top-level flags are coerced).
     assert primary_ip.primary == "true"
-    assert parsed.next_token == ""
+    assert parsed.next_token == nil
   end
 
   test "DescribeNetworkInterfaces yields nil for a detached interface's attachment" do
@@ -1257,7 +1337,7 @@ defmodule AwsSDK.ConformanceTest do
     assert inst_detail.impaired_since == "2026-08-05T11:00:00Z"
     assert [event] = status.events_set
     assert event.code == "system-reboot"
-    assert parsed.next_token == ""
+    assert parsed.next_token == nil
   end
 
   test "DescribeIamInstanceProfileAssociations keeps the nested profile" do
@@ -1362,14 +1442,14 @@ defmodule AwsSDK.ConformanceTest do
     assert [explanation] = analysis.explanation_set
     assert explanation.explanation_code == "ENI_SG_RULES_MISMATCH"
     assert explanation.network_interface.id == "eni-1"
-    assert explanation.security_groups == [%{id: "sg-1", arn: "", name: ""}]
+    assert explanation.security_groups == [%{id: "sg-1", arn: nil, name: nil}]
     assert explanation.port == 443
     assert [hop] = analysis.forward_path_component_set
     assert hop.sequence_number == 1
     assert hop.component.id == "i-1"
     assert hop.outbound_header.destination_port_ranges == [%{from: 443, to: 443}]
     assert hop.outbound_header.source_addresses == ["10.0.1.5/32"]
-    assert parsed.next_token == ""
+    assert parsed.next_token == nil
   end
 
   test "DeleteNetworkInsightsPath returns the deleted path id" do
@@ -1409,7 +1489,7 @@ defmodule AwsSDK.ConformanceTest do
     assert activity.activity_id == "act-1"
     assert activity.auto_scaling_group_name == "web-asg"
     assert activity.status_code == "Successful"
-    assert activity.status_message == ""
+    assert activity.status_message == nil
     assert activity.cause == "instance refresh"
     assert activity.progress == 100
     assert activity.details == ~s({"Subnet ID":"subnet-1"})

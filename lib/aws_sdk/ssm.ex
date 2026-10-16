@@ -94,23 +94,27 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.get_parameter("/app/prod/db-url")
       #=> {:ok,
       #=>  %{
-      #=>    parameter: %{
-      #=>      name: "/app/prod/db-url",
-      #=>      type: "String",
-      #=>      value: "postgres://db.internal:5432/app",
-      #=>      version: 3,
-      #=>      last_modified_date: 1.7e9,
-      #=>      arn: "arn:aws:ssm:us-east-1:123456789012:parameter/app/prod/db-url",
-      #=>      data_type: "text"
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        parameter: %{
+      #=>          name: "/app/prod/db-url",
+      #=>          type: "String",
+      #=>          value: "postgres://db.internal:5432/app",
+      #=>          version: 3,
+      #=>          last_modified_date: 1.7e9,
+      #=>          arn: "arn:aws:ssm:us-east-1:123456789012:parameter/app/prod/db-url",
+      #=>          data_type: "text"
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
       # SecureString values come back encrypted unless you ask otherwise.
       AwsSDK.SSM.get_parameter("/app/prod/db-password", with_decryption: true)
-      #=> {:ok, %{parameter: %{type: "SecureString", value: "s3cr3t"}}}
+      #=> {:ok, %{body: %{parameter: %{type: "SecureString", value: "s3cr3t"}}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec get_parameter(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{parameter: map()}} | {:error, term()}
+          {:ok, %{body: %{parameter: map()}, headers: map()}} | {:error, term()}
   def get_parameter(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_get_parameter_response(name, opts)
@@ -125,8 +129,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("WithDecryption", opts[:with_decryption])
 
     with {:ok, op} <- build_operation("GetParameter", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -143,17 +151,22 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.get_parameters(["/app/prod/db-url", "/app/prod/missing"])
       #=> {:ok,
       #=>  %{
-      #=>    parameters: [
-      #=>      %{name: "/app/prod/db-url", type: "String", value: "postgres://...", version: 3}
-      #=>    ],
-      #=>    invalid_parameters: ["/app/prod/missing"]
+      #=>    body:
+      #=>      %{
+      #=>        parameters: [
+      #=>          %{name: "/app/prod/db-url", type: "String", value: "postgres://...", version: 3}
+      #=>        ],
+      #=>        invalid_parameters: ["/app/prod/missing"]
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Names AWS could not resolve come back in `:invalid_parameters` rather than
   as an error, so check it before using the result.
   """
   @spec get_parameters(names :: [String.t()], opts :: keyword()) ::
-          {:ok, %{parameters: [map()], invalid_parameters: [String.t()]}} | {:error, term()}
+          {:ok, %{body: %{parameters: [map()], invalid_parameters: [String.t()]}, headers: map()}}
+          | {:error, term()}
   def get_parameters([_ | _] = names, opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_parameters_response(names, opts)
@@ -168,8 +181,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("WithDecryption", opts[:with_decryption])
 
     with {:ok, op} <- build_operation("GetParameters", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -192,18 +209,23 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.get_parameters_by_path("/app/prod/", recursive: true, with_decryption: true)
       #=> {:ok,
       #=>  %{
-      #=>    parameters: [
-      #=>      %{name: "/app/prod/db-url", type: "String", value: "postgres://...", version: 3},
-      #=>      %{name: "/app/prod/db-password", type: "SecureString", value: "s3cr3t", version: 1}
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>      %{
+      #=>        parameters: [
+      #=>          %{name: "/app/prod/db-url", type: "String", value: "postgres://...", version: 3},
+      #=>          %{name: "/app/prod/db-password", type: "SecureString", value: "s3cr3t", version: 1}
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Without `recursive: true` only parameters directly under the path are
   returned, not those in sub-paths.
   """
   @spec get_parameters_by_path(path :: String.t(), opts :: keyword()) ::
-          {:ok, %{parameters: [map()], next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{parameters: [map()], next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def get_parameters_by_path(path, opts \\ []) when is_binary(path) do
     if sandbox?(opts) do
       sandbox_get_parameters_by_path_response(path, opts)
@@ -222,8 +244,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("GetParametersByPath", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -253,18 +279,19 @@ defmodule AwsSDK.SSM do
         type: "String",
         overwrite: true
       )
-      #=> {:ok, %{version: 4, tier: "Standard"}}
+      #=> {:ok, %{body: %{version: 4, tier: "Standard"}, headers: %{x_amzn_request_id: "..."}}}
 
       AwsSDK.SSM.put_parameter("/app/prod/db-password", "s3cr3t",
         type: "SecureString",
         key_id: "alias/aws/ssm"
       )
-      #=> {:ok, %{version: 1, tier: "Standard"}}
+      #=> {:ok, %{body: %{version: 1, tier: "Standard"}, headers: %{x_amzn_request_id: "..."}}}
 
   Without `overwrite: true` AWS rejects a write to an existing name.
   """
   @spec put_parameter(name :: String.t(), value :: String.t(), opts :: keyword()) ::
-          {:ok, %{version: integer(), tier: String.t()}} | {:error, term()}
+          {:ok, %{body: %{version: integer(), tier: String.t()}, headers: map()}}
+          | {:error, term()}
   def put_parameter(name, value, opts \\ []) when is_binary(name) and is_binary(value) do
     if sandbox?(opts) do
       sandbox_put_parameter_response(name, value, opts)
@@ -287,8 +314,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("DataType", opts[:data_type])
 
     with {:ok, op} <- build_operation("PutParameter", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -298,10 +329,10 @@ defmodule AwsSDK.SSM do
   ## Examples
 
       AwsSDK.SSM.delete_parameter("/app/prod/db-url")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "..."}}}
   """
   @spec delete_parameter(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_parameter(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_parameter_response(name, opts)
@@ -312,8 +343,12 @@ defmodule AwsSDK.SSM do
 
   defp do_delete_parameter(name, opts) do
     with {:ok, op} <- build_operation("DeleteParameter", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -325,12 +360,20 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.delete_parameters(["/app/prod/db-url", "/app/prod/missing"])
       #=> {:ok,
       #=>  %{
-      #=>    deleted_parameters: ["/app/prod/db-url"],
-      #=>    invalid_parameters: ["/app/prod/missing"]
+      #=>    body:
+      #=>      %{
+      #=>        deleted_parameters: ["/app/prod/db-url"],
+      #=>        invalid_parameters: ["/app/prod/missing"]
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec delete_parameters(names :: [String.t()], opts :: keyword()) ::
-          {:ok, %{deleted_parameters: [String.t()], invalid_parameters: [String.t()]}}
+          {:ok,
+           %{
+             body: %{deleted_parameters: [String.t()], invalid_parameters: [String.t()]},
+             headers: map()
+           }}
           | {:error, term()}
   def delete_parameters([_ | _] = names, opts \\ []) do
     if sandbox?(opts) do
@@ -342,8 +385,12 @@ defmodule AwsSDK.SSM do
 
   defp do_delete_parameters(names, opts) do
     with {:ok, op} <- build_operation("DeleteParameters", %{"Names" => names}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -363,24 +410,29 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.describe_parameters(max_results: 50)
       #=> {:ok,
       #=>  %{
-      #=>    parameters: [
+      #=>    body:
       #=>      %{
-      #=>        name: "/app/prod/db-url",
-      #=>        type: "String",
-      #=>        version: 3,
-      #=>        last_modified_date: 1.7e9,
-      #=>        last_modified_user: "arn:aws:iam::123456789012:user/deploy",
-      #=>        tier: "Standard",
-      #=>        data_type: "text"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        parameters: [
+      #=>          %{
+      #=>            name: "/app/prod/db-url",
+      #=>            type: "String",
+      #=>            version: 3,
+      #=>            last_modified_date: 1.7e9,
+      #=>            last_modified_user: "arn:aws:iam::123456789012:user/deploy",
+      #=>            tier: "Standard",
+      #=>            data_type: "text"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Metadata only -- no `:value`. Use `get_parameter/2` to read a value.
   """
   @spec describe_parameters(opts :: keyword()) ::
-          {:ok, %{parameters: [map()], next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{parameters: [map()], next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_parameters(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_parameters_response(opts)
@@ -399,8 +451,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("Shared", opts[:shared])
 
     with {:ok, op} <- build_operation("DescribeParameters", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -427,28 +483,36 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.describe_instance_information(max_results: 50)
       #=> {:ok,
       #=>  %{
-      #=>    instance_information_list: [
+      #=>    body:
       #=>      %{
-      #=>        instance_id: "i-1234567890abcdef0",
-      #=>        ping_status: "Online",
-      #=>        last_ping_date_time: 1.7e9,
-      #=>        agent_version: "3.3.1611.0",
-      #=>        platform_type: "Linux",
-      #=>        platform_name: "Amazon Linux",
-      #=>        platform_version: "2023",
-      #=>        ip_address: "10.0.1.5",
-      #=>        computer_name: "ip-10-0-1-5.ec2.internal",
-      #=>        resource_type: "EC2Instance"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        instance_information_list: [
+      #=>          %{
+      #=>            instance_id: "i-1234567890abcdef0",
+      #=>            ping_status: "Online",
+      #=>            last_ping_date_time: 1.7e9,
+      #=>            agent_version: "3.3.1611.0",
+      #=>            platform_type: "Linux",
+      #=>            platform_name: "Amazon Linux",
+      #=>            platform_version: "2023",
+      #=>            ip_address: "10.0.1.5",
+      #=>            computer_name: "ip-10-0-1-5.ec2.internal",
+      #=>            resource_type: "EC2Instance"
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Only instances running the SSM agent and registered with Systems Manager
   appear here.
   """
   @spec describe_instance_information(opts :: keyword()) ::
-          {:ok, %{instance_information_list: [map()], next_token: String.t() | nil}}
+          {:ok,
+           %{
+             body: %{instance_information_list: [map()], next_token: String.t() | nil},
+             headers: map()
+           }}
           | {:error, term()}
   def describe_instance_information(opts \\ []) do
     if sandbox?(opts) do
@@ -467,8 +531,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("DescribeInstanceInformation", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -505,18 +573,22 @@ defmodule AwsSDK.SSM do
       )
       #=> {:ok,
       #=>  %{
-      #=>    command: %{
-      #=>      command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
-      #=>      document_name: "AWS-RunShellScript",
-      #=>      instance_ids: ["i-1234567890abcdef0"],
-      #=>      status: "Pending",
-      #=>      status_details: "Pending",
-      #=>      requested_date_time: 1.7e9,
-      #=>      expires_after: 1.7e9,
-      #=>      parameters: %{commands: ["systemctl restart app"]},
-      #=>      output_s3_bucket_name: "",
-      #=>      output_s3_key_prefix: ""
-      #=>    }
+      #=>    body:
+      #=>      %{
+      #=>        command: %{
+      #=>          command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
+      #=>          document_name: "AWS-RunShellScript",
+      #=>          instance_ids: ["i-1234567890abcdef0"],
+      #=>          status: "Pending",
+      #=>          status_details: "Pending",
+      #=>          requested_date_time: 1.7e9,
+      #=>          expires_after: 1.7e9,
+      #=>          parameters: %{commands: ["systemctl restart app"]},
+      #=>          output_s3_bucket_name: "",
+      #=>          output_s3_key_prefix: ""
+      #=>        }
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
 
   Poll the result with `get_command_invocation/3` using `:command_id`.
@@ -524,7 +596,7 @@ defmodule AwsSDK.SSM do
   use `send_command_by_targets/3`.
   """
   @spec send_command(instance_ids :: [String.t()], document_name :: String.t(), opts :: keyword()) ::
-          {:ok, %{command: map()}} | {:error, term()}
+          {:ok, %{body: %{command: map()}, headers: map()}} | {:error, term()}
   def send_command([_ | _] = instance_ids, document_name, opts \\ [])
       when is_binary(document_name) do
     if sandbox?(opts) do
@@ -552,8 +624,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("NotificationConfig", opts[:notification_config])
 
     with {:ok, op} <- build_operation("SendCommand", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -579,14 +655,19 @@ defmodule AwsSDK.SSM do
         "AWS-RunShellScript",
         parameters: %{"commands" => ["uptime"]}
       )
-      #=> {:ok, %{command: %{command_id: "0831e1a8-...", status: "Pending"}}}
+      #=> {:ok,
+      #=>  %{
+      #=>    body:
+      #=>      %{command: %{command_id: "0831e1a8-...", status: "Pending"}},
+      #=>    headers: %{x_amzn_request_id: "..."}
+      #=>  }}
   """
   @spec send_command_by_targets(
           targets :: [map()],
           document_name :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{command: map()}} | {:error, term()}
+          {:ok, %{body: %{command: map()}, headers: map()}} | {:error, term()}
   def send_command_by_targets([_ | _] = targets, document_name, opts \\ [])
       when is_binary(document_name) do
     if sandbox?(opts) do
@@ -617,8 +698,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("NotificationConfig", opts[:notification_config])
 
     with {:ok, op} <- build_operation("SendCommand", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -641,26 +726,30 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.get_command_invocation("0831e1a8-4c47-4c74-8f2a-EXAMPLE", "i-1234567890abcdef0")
       #=> {:ok,
       #=>  %{
-      #=>    command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
-      #=>    instance_id: "i-1234567890abcdef0",
-      #=>    document_name: "AWS-RunShellScript",
-      #=>    document_version: "$DEFAULT",
-      #=>    plugin_name: "aws:runShellScript",
-      #=>    response_code: 0,
-      #=>    execution_start_date_time: "2026-08-05T12:00:00.000Z",
-      #=>    execution_elapsed_time: "PT0.5S",
-      #=>    execution_end_date_time: "2026-08-05T12:00:01.000Z",
-      #=>    status: "Success",
-      #=>    status_details: "Success",
-      #=>    standard_output_content: "ok\\n",
-      #=>    standard_output_url: "",
-      #=>    standard_error_content: "",
-      #=>    standard_error_url: "",
-      #=>    cloud_watch_output_config: %{
-      #=>      cloud_watch_log_group_name: "",
-      #=>      cloud_watch_output_enabled: false
-      #=>    },
-      #=>    comment: ""
+      #=>    body:
+      #=>      %{
+      #=>        command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
+      #=>        instance_id: "i-1234567890abcdef0",
+      #=>        document_name: "AWS-RunShellScript",
+      #=>        document_version: "$DEFAULT",
+      #=>        plugin_name: "aws:runShellScript",
+      #=>        response_code: 0,
+      #=>        execution_start_date_time: "2026-08-05T12:00:00.000Z",
+      #=>        execution_elapsed_time: "PT0.5S",
+      #=>        execution_end_date_time: "2026-08-05T12:00:01.000Z",
+      #=>        status: "Success",
+      #=>        status_details: "Success",
+      #=>        standard_output_content: "ok\\n",
+      #=>        standard_output_url: "",
+      #=>        standard_error_content: "",
+      #=>        standard_error_url: "",
+      #=>        cloud_watch_output_config: %{
+      #=>          cloud_watch_log_group_name: "",
+      #=>          cloud_watch_output_enabled: false
+      #=>        },
+      #=>        comment: ""
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec get_command_invocation(
@@ -668,7 +757,7 @@ defmodule AwsSDK.SSM do
           instance_id :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def get_command_invocation(command_id, instance_id, opts \\ [])
       when is_binary(command_id) and is_binary(instance_id) do
     if sandbox?(opts) do
@@ -684,8 +773,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("PluginName", opts[:plugin_name])
 
     with {:ok, op} <- build_operation("GetCommandInvocation", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -708,27 +801,33 @@ defmodule AwsSDK.SSM do
       AwsSDK.SSM.list_command_invocations(command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE")
       #=> {:ok,
       #=>  %{
-      #=>    command_invocations: [
+      #=>    body:
       #=>      %{
-      #=>        command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
-      #=>        instance_id: "i-1234567890abcdef0",
-      #=>        instance_name: "",
-      #=>        document_name: "AWS-RunShellScript",
-      #=>        document_version: "$DEFAULT",
-      #=>        requested_date_time: 1.7e9,
-      #=>        status: "Success",
-      #=>        status_details: "Success",
-      #=>        command_plugins: [],
-      #=>        service_role: "",
-      #=>        notification_config: %{notification_arn: "", notification_events: [], notification_type: ""},
-      #=>        cloud_watch_output_config: %{cloud_watch_log_group_name: "", cloud_watch_output_enabled: false}
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>        command_invocations: [
+      #=>          %{
+      #=>            command_id: "0831e1a8-4c47-4c74-8f2a-EXAMPLE",
+      #=>            instance_id: "i-1234567890abcdef0",
+      #=>            instance_name: "",
+      #=>            document_name: "AWS-RunShellScript",
+      #=>            document_version: "$DEFAULT",
+      #=>            requested_date_time: 1.7e9,
+      #=>            status: "Success",
+      #=>            status_details: "Success",
+      #=>            command_plugins: [],
+      #=>            service_role: "",
+      #=>            notification_config: %{notification_arn: "", notification_events: [], notification_type: ""},
+      #=>            cloud_watch_output_config: %{cloud_watch_log_group_name: "", cloud_watch_output_enabled: false}
+      #=>          }
+      #=>        ],
+      #=>        next_token: nil
+      #=>      },
+      #=>    headers: %{x_amzn_request_id: "..."}
       #=>  }}
   """
   @spec list_command_invocations(opts :: keyword()) ::
-          {:ok, %{command_invocations: [map()], next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{command_invocations: [map()], next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_command_invocations(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_command_invocations_response(opts)
@@ -748,8 +847,12 @@ defmodule AwsSDK.SSM do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListCommandInvocations", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 

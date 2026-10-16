@@ -67,7 +67,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       ])
   """
 
-  import SweetXml, only: [xpath: 3, sigil_x: 2]
+  import SweetXml, only: [xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
   alias AwsSDK.Operation
@@ -107,30 +107,33 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_target_groups()
       #=> {:ok,
       #=>  %{
-      #=>    target_groups: [
-      #=>      %{
-      #=>        target_group_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067",
-      #=>        target_group_name: "web",
-      #=>        protocol: "HTTP",
-      #=>        protocol_version: "HTTP1",
-      #=>        port: 80,
-      #=>        vpc_id: "vpc-1a2b3c4d",
-      #=>        target_type: "instance",
-      #=>        ip_address_type: "ipv4",
-      #=>        health_check_enabled: "true",
-      #=>        health_check_protocol: "HTTP",
-      #=>        # A String, not an Integer -- "traffic-port" is a legal value.
-      #=>        health_check_port: "traffic-port",
-      #=>        health_check_path: "/health",
-      #=>        health_check_interval_seconds: 30,
-      #=>        health_check_timeout_seconds: 5,
-      #=>        healthy_threshold_count: 5,
-      #=>        unhealthy_threshold_count: 2,
-      #=>        load_balancer_arns: ["arn:aws:elasticloadbalancing:...:loadbalancer/app/web/50dc..."],
-      #=>        matcher: %{http_code: "200", grpc_code: ""}
-      #=>      }
-      #=>    ],
-      #=>    next_marker: nil
+      #=>    body: %{
+      #=>      target_groups: [
+      #=>        %{
+      #=>          target_group_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067",
+      #=>          target_group_name: "web",
+      #=>          protocol: "HTTP",
+      #=>          protocol_version: "HTTP1",
+      #=>          port: 80,
+      #=>          vpc_id: "vpc-1a2b3c4d",
+      #=>          target_type: "instance",
+      #=>          ip_address_type: "ipv4",
+      #=>          health_check_enabled: "true",
+      #=>          health_check_protocol: "HTTP",
+      #=>          # A String, not an Integer -- "traffic-port" is a legal value.
+      #=>          health_check_port: "traffic-port",
+      #=>          health_check_path: "/health",
+      #=>          health_check_interval_seconds: 30,
+      #=>          health_check_timeout_seconds: 5,
+      #=>          healthy_threshold_count: 5,
+      #=>          unhealthy_threshold_count: 2,
+      #=>          load_balancer_arns: ["arn:aws:elasticloadbalancing:...:loadbalancer/app/web/50dc..."],
+      #=>          matcher: %{http_code: "200", grpc_code: nil}
+      #=>        }
+      #=>      ],
+      #=>      next_marker: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   `:next_marker` is AWS's own member name for the pagination cursor; the
@@ -154,7 +157,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   ## Examples
 
       AwsSDK.ElasticLoadBalancingV2.describe_target_groups_by_names(["web"])
-      #=> {:ok, %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}}
+      #=> {:ok, %{body: %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
   Same response shape as `describe_target_groups/1`.
   """
@@ -178,7 +181,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_target_groups_by_arns([
         "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067"
       ])
-      #=> {:ok, %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}}
+      #=> {:ok, %{body: %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec describe_target_groups_by_arns(target_group_arns :: [String.t()], opts :: keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -200,7 +203,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_target_groups_by_load_balancer(
         "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188"
       )
-      #=> {:ok, %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}}
+      #=> {:ok, %{body: %{target_groups: [%{target_group_name: "web", port: 80}], next_marker: nil}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec describe_target_groups_by_load_balancer(
           load_balancer_arn :: String.t(),
@@ -225,8 +228,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       |> flatten_query()
 
     with {:ok, op} <- build_operation("DescribeTargetGroups", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_target_groups(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_target_groups(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -252,24 +259,27 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    target_health_descriptions: [
-      #=>      %{
-      #=>        target: %{
-      #=>          id: "i-1234567890abcdef0",
-      #=>          port: 80,
-      #=>          availability_zone: "us-east-1a",
-      #=>          quic_server_id: ""
-      #=>        },
-      #=>        health_check_port: "80",
-      #=>        target_health: %{
-      #=>          state: "unhealthy",
-      #=>          reason: "Target.Timeout",
-      #=>          description: "Request timed out"
-      #=>        },
-      #=>        anomaly_detection: nil,
-      #=>        administrative_override: nil
-      #=>      }
-      #=>    ]
+      #=>    body: %{
+      #=>      target_health_descriptions: [
+      #=>        %{
+      #=>          target: %{
+      #=>            id: "i-1234567890abcdef0",
+      #=>            port: 80,
+      #=>            availability_zone: "us-east-1a",
+      #=>            quic_server_id: nil
+      #=>          },
+      #=>          health_check_port: "80",
+      #=>          target_health: %{
+      #=>            state: "unhealthy",
+      #=>            reason: "Target.Timeout",
+      #=>            description: "Request timed out"
+      #=>          },
+      #=>          anomaly_detection: nil,
+      #=>          administrative_override: nil
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   `:target_health` and `:administrative_override` both carry
@@ -296,8 +306,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       })
 
     with {:ok, op} <- build_operation("DescribeTargetHealth", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_target_health(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_target_health(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -324,32 +338,35 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_load_balancers()
       #=> {:ok,
       #=>  %{
-      #=>    load_balancers: [
-      #=>      %{
-      #=>        load_balancer_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
-      #=>        load_balancer_name: "web",
-      #=>        dns_name: "web-1234567890.us-east-1.elb.amazonaws.com",
-      #=>        canonical_hosted_zone_id: "Z35SXDOTRQ7X7K",
-      #=>        created_time: "2026-01-01T00:00:00.000Z",
-      #=>        scheme: "internet-facing",
-      #=>        type: "application",
-      #=>        vpc_id: "vpc-1a2b3c4d",
-      #=>        ip_address_type: "ipv4",
-      #=>        security_groups: ["sg-1a2b3c4d"],
-      #=>        state: %{code: "active", reason: ""},
-      #=>        ipam_pools: nil,
-      #=>        availability_zones: [
-      #=>          %{
-      #=>            zone_name: "us-east-1a",
-      #=>            subnet_id: "subnet-9d4a7b6c",
-      #=>            outpost_id: "",
-      #=>            source_nat_ipv6_prefixes: [],
-      #=>            load_balancer_addresses: []
-      #=>          }
-      #=>        ]
-      #=>      }
-      #=>    ],
-      #=>    next_marker: nil
+      #=>    body: %{
+      #=>      load_balancers: [
+      #=>        %{
+      #=>          load_balancer_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
+      #=>          load_balancer_name: "web",
+      #=>          dns_name: "web-1234567890.us-east-1.elb.amazonaws.com",
+      #=>          canonical_hosted_zone_id: "Z35SXDOTRQ7X7K",
+      #=>          created_time: "2026-01-01T00:00:00.000Z",
+      #=>          scheme: "internet-facing",
+      #=>          type: "application",
+      #=>          vpc_id: "vpc-1a2b3c4d",
+      #=>          ip_address_type: "ipv4",
+      #=>          security_groups: ["sg-1a2b3c4d"],
+      #=>          state: %{code: "active", reason: nil},
+      #=>          ipam_pools: nil,
+      #=>          availability_zones: [
+      #=>            %{
+      #=>              zone_name: "us-east-1a",
+      #=>              subnet_id: "subnet-9d4a7b6c",
+      #=>              outpost_id: nil,
+      #=>              source_nat_ipv6_prefixes: [],
+      #=>              load_balancer_addresses: []
+      #=>            }
+      #=>          ]
+      #=>        }
+      #=>      ],
+      #=>      next_marker: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
   """
   @spec describe_load_balancers(opts :: keyword()) :: {:ok, map()} | {:error, term()}
@@ -371,8 +388,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       })
 
     with {:ok, op} <- build_operation("DescribeLoadBalancers", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_load_balancers(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_load_balancers(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -399,34 +420,37 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    listeners: [
-      #=>      %{
-      #=>        listener_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2",
-      #=>        load_balancer_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
-      #=>        port: 443,
-      #=>        protocol: "HTTPS",
-      #=>        ssl_policy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
-      #=>        alpn_policy: [],
-      #=>        certificates: [%{certificate_arn: "arn:aws:acm:...:certificate/abc", is_default: ""}],
-      #=>        mutual_authentication: %{mode: "off", trust_store_arn: ""},
-      #=>        default_actions: [
-      #=>          %{
-      #=>            type: "forward",
-      #=>            order: nil,
-      #=>            target_group_arn: "arn:aws:elasticloadbalancing:...:targetgroup/web/73e2d6bc24d8a067",
-      #=>            forward_config: %{
-      #=>              target_groups: [
-      #=>                %{target_group_arn: "arn:...:targetgroup/web/73e2d6bc24d8a067", weight: 1}
-      #=>              ],
-      #=>              target_group_stickiness_config: nil
-      #=>            },
-      #=>            redirect_config: nil,
-      #=>            fixed_response_config: nil
-      #=>          }
-      #=>        ]
-      #=>      }
-      #=>    ],
-      #=>    next_marker: nil
+      #=>    body: %{
+      #=>      listeners: [
+      #=>        %{
+      #=>          listener_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2",
+      #=>          load_balancer_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
+      #=>          port: 443,
+      #=>          protocol: "HTTPS",
+      #=>          ssl_policy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
+      #=>          alpn_policy: [],
+      #=>          certificates: [%{certificate_arn: "arn:aws:acm:...:certificate/abc", is_default: nil}],
+      #=>          mutual_authentication: %{mode: "off", trust_store_arn: nil},
+      #=>          default_actions: [
+      #=>            %{
+      #=>              type: "forward",
+      #=>              order: nil,
+      #=>              target_group_arn: "arn:aws:elasticloadbalancing:...:targetgroup/web/73e2d6bc24d8a067",
+      #=>              forward_config: %{
+      #=>                target_groups: [
+      #=>                  %{target_group_arn: "arn:...:targetgroup/web/73e2d6bc24d8a067", weight: 1}
+      #=>                ],
+      #=>                target_group_stickiness_config: nil
+      #=>              },
+      #=>              redirect_config: nil,
+      #=>              fixed_response_config: nil
+      #=>            }
+      #=>          ]
+      #=>        }
+      #=>      ],
+      #=>      next_marker: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
   """
   @spec describe_listeners(load_balancer_arn :: String.t(), opts :: keyword()) ::
@@ -460,7 +484,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_listeners_by_arns([
         "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2"
       ])
-      #=> {:ok, %{listeners: [%{port: 443, protocol: "HTTPS"}], next_marker: nil}}
+      #=> {:ok, %{body: %{listeners: [%{port: 443, protocol: "HTTPS"}], next_marker: nil}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
   Same response shape as `describe_listeners/2`.
   """
@@ -484,8 +508,9 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       |> flatten_query()
 
     with {:ok, op} <- build_operation("DescribeListeners", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_listeners(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_listeners(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -516,42 +541,45 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    rules: [
-      #=>      %{
-      #=>        rule_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17",
-      #=>        priority: "10",
-      #=>        is_default: false,
-      #=>        conditions: [
-      #=>          %{
-      #=>            field: "host-header",
-      #=>            values: ["a.example.com"],
-      #=>            regex_values: [],
-      #=>            host_header_config: %{values: ["a.example.com"], regex_values: []},
-      #=>            path_pattern_config: nil,
-      #=>            http_header_config: nil,
-      #=>            http_request_method_config: nil,
-      #=>            source_ip_config: nil,
-      #=>            query_string_config: nil
-      #=>          }
-      #=>        ],
-      #=>        actions: [
-      #=>          %{
-      #=>            type: "forward",
-      #=>            target_group_arn: "arn:...:targetgroup/web/73e2d6bc24d8a067",
-      #=>            forward_config: %{
-      #=>              target_groups: [
-      #=>                %{target_group_arn: "arn:...:targetgroup/blue/aaa", weight: 90},
-      #=>                %{target_group_arn: "arn:...:targetgroup/green/bbb", weight: 10}
-      #=>              ],
-      #=>              target_group_stickiness_config: %{enabled: "true", duration_seconds: 3600}
-      #=>            },
-      #=>            redirect_config: nil
-      #=>          }
-      #=>        ],
-      #=>        transforms: []
-      #=>      }
-      #=>    ],
-      #=>    next_marker: nil
+      #=>    body: %{
+      #=>      rules: [
+      #=>        %{
+      #=>          rule_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17",
+      #=>          priority: "10",
+      #=>          is_default: false,
+      #=>          conditions: [
+      #=>            %{
+      #=>              field: "host-header",
+      #=>              values: ["a.example.com"],
+      #=>              regex_values: [],
+      #=>              host_header_config: %{values: ["a.example.com"], regex_values: []},
+      #=>              path_pattern_config: nil,
+      #=>              http_header_config: nil,
+      #=>              http_request_method_config: nil,
+      #=>              source_ip_config: nil,
+      #=>              query_string_config: nil
+      #=>            }
+      #=>          ],
+      #=>          actions: [
+      #=>            %{
+      #=>              type: "forward",
+      #=>              target_group_arn: "arn:...:targetgroup/web/73e2d6bc24d8a067",
+      #=>              forward_config: %{
+      #=>                target_groups: [
+      #=>                  %{target_group_arn: "arn:...:targetgroup/blue/aaa", weight: 90},
+      #=>                  %{target_group_arn: "arn:...:targetgroup/green/bbb", weight: 10}
+      #=>                ],
+      #=>                target_group_stickiness_config: %{enabled: "true", duration_seconds: 3600}
+      #=>              },
+      #=>              redirect_config: nil
+      #=>            }
+      #=>          ],
+      #=>          transforms: []
+      #=>        }
+      #=>      ],
+      #=>      next_marker: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   Each condition keeps its typed `*_config` sub-map, so you can tell which
@@ -590,7 +618,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       AwsSDK.ElasticLoadBalancingV2.describe_rules_by_arns([
         "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17"
       ])
-      #=> {:ok, %{rules: [%{priority: "10", is_default: false}], next_marker: nil}}
+      #=> {:ok, %{body: %{rules: [%{priority: "10", is_default: false}], next_marker: nil}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
   Same response shape as `describe_rules/2`, but sends `RuleArns` instead of
   `ListenerArn`.
@@ -615,8 +643,9 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       |> flatten_query()
 
     with {:ok, op} <- build_operation("DescribeRules", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_rules(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_describe_rules(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -674,26 +703,29 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    rules: [
-      #=>      %{
-      #=>        rule_arn: "arn:aws:elasticloadbalancing:...:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17",
-      #=>        priority: "10",
-      #=>        is_default: false,
-      #=>        conditions: [%{field: "host-header", values: ["a.example.com"]}],
-      #=>        actions: [
-      #=>          %{
-      #=>            type: "forward",
-      #=>            forward_config: %{
-      #=>              target_groups: [
-      #=>                %{target_group_arn: "arn:...:targetgroup/blue/aaa", weight: 90},
-      #=>                %{target_group_arn: "arn:...:targetgroup/green/bbb", weight: 10}
-      #=>              ]
+      #=>    body: %{
+      #=>      rules: [
+      #=>        %{
+      #=>          rule_arn: "arn:aws:elasticloadbalancing:...:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17",
+      #=>          priority: "10",
+      #=>          is_default: false,
+      #=>          conditions: [%{field: "host-header", values: ["a.example.com"]}],
+      #=>          actions: [
+      #=>            %{
+      #=>              type: "forward",
+      #=>              forward_config: %{
+      #=>                target_groups: [
+      #=>                  %{target_group_arn: "arn:...:targetgroup/blue/aaa", weight: 90},
+      #=>                  %{target_group_arn: "arn:...:targetgroup/green/bbb", weight: 10}
+      #=>                ]
+      #=>              }
       #=>            }
-      #=>          }
-      #=>        ],
-      #=>        transforms: []
-      #=>      }
-      #=>    ]
+      #=>          ],
+      #=>          transforms: []
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   `ModifyRule` returns the rule as it now stands, with no `:next_marker`.
@@ -719,8 +751,8 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       })
 
     with {:ok, op} <- build_operation("ModifyRule", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_modify_rule(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok, %{body: parse_modify_rule(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -758,21 +790,24 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    listeners: [
-      #=>      %{
-      #=>        listener_arn: "arn:aws:elasticloadbalancing:...:listener/app/web/50dc6c/f2f7dc",
-      #=>        load_balancer_arn: "arn:aws:elasticloadbalancing:...:loadbalancer/app/web/50dc6c",
-      #=>        port: 443,
-      #=>        protocol: "HTTPS",
-      #=>        ssl_policy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
-      #=>        alpn_policy: [],
-      #=>        certificates: [%{certificate_arn: "arn:aws:acm:..."}],
-      #=>        mutual_authentication: %{mode: "off"},
-      #=>        default_actions: [
-      #=>          %{type: "fixed-response", fixed_response_config: %{status_code: "503"}}
-      #=>        ]
-      #=>      }
-      #=>    ]
+      #=>    body: %{
+      #=>      listeners: [
+      #=>        %{
+      #=>          listener_arn: "arn:aws:elasticloadbalancing:...:listener/app/web/50dc6c/f2f7dc",
+      #=>          load_balancer_arn: "arn:aws:elasticloadbalancing:...:loadbalancer/app/web/50dc6c",
+      #=>          port: 443,
+      #=>          protocol: "HTTPS",
+      #=>          ssl_policy: "ELBSecurityPolicy-TLS13-1-2-2021-06",
+      #=>          alpn_policy: [],
+      #=>          certificates: [%{certificate_arn: "arn:aws:acm:..."}],
+      #=>          mutual_authentication: %{mode: "off"},
+      #=>          default_actions: [
+      #=>            %{type: "fixed-response", fixed_response_config: %{status_code: "503"}}
+      #=>          ]
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   `ModifyListener` returns the listener as it now stands, with no
@@ -807,8 +842,9 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       })
 
     with {:ok, op} <- build_operation("ModifyListener", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_modify_listener(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{body: parse_modify_listener(body), headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -869,19 +905,21 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
           ~x"./TargetGroups/member"l,
           target_group_arn: ~x"./TargetGroupArn/text()"s,
           target_group_name: ~x"./TargetGroupName/text()"s,
-          protocol: ~x"./Protocol/text()"os,
-          protocol_version: ~x"./ProtocolVersion/text()"os,
+          protocol: ~x"./Protocol/text()"o |> transform_by(&optional_text/1),
+          protocol_version: ~x"./ProtocolVersion/text()"o |> transform_by(&optional_text/1),
           port: ~x"./Port/text()"oi,
-          vpc_id: ~x"./VpcId/text()"os,
-          target_type: ~x"./TargetType/text()"os,
-          ip_address_type: ~x"./IpAddressType/text()"os,
+          vpc_id: ~x"./VpcId/text()"o |> transform_by(&optional_text/1),
+          target_type: ~x"./TargetType/text()"o |> transform_by(&optional_text/1),
+          ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
           target_control_port: ~x"./TargetControlPort/text()"oi,
-          health_check_enabled: ~x"./HealthCheckEnabled/text()"os,
-          health_check_protocol: ~x"./HealthCheckProtocol/text()"os,
+          health_check_enabled:
+            ~x"./HealthCheckEnabled/text()"o |> transform_by(&optional_text/1),
+          health_check_protocol:
+            ~x"./HealthCheckProtocol/text()"o |> transform_by(&optional_text/1),
           # HealthCheckPort is documented as a String, not an Integer -- it
           # carries "traffic-port" as well as a number.
-          health_check_port: ~x"./HealthCheckPort/text()"os,
-          health_check_path: ~x"./HealthCheckPath/text()"os,
+          health_check_port: ~x"./HealthCheckPort/text()"o |> transform_by(&optional_text/1),
+          health_check_path: ~x"./HealthCheckPath/text()"o |> transform_by(&optional_text/1),
           health_check_interval_seconds: ~x"./HealthCheckIntervalSeconds/text()"oi,
           health_check_timeout_seconds: ~x"./HealthCheckTimeoutSeconds/text()"oi,
           healthy_threshold_count: ~x"./HealthyThresholdCount/text()"oi,
@@ -889,16 +927,16 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
           load_balancer_arns: ~x"./LoadBalancerArns/member/text()"sl,
           matcher: [
             ~x"./Matcher"o,
-            http_code: ~x"./HttpCode/text()"os,
-            grpc_code: ~x"./GrpcCode/text()"os
+            http_code: ~x"./HttpCode/text()"o |> transform_by(&optional_text/1),
+            grpc_code: ~x"./GrpcCode/text()"o |> transform_by(&optional_text/1)
           ]
         ],
-        next_marker: ~x"./NextMarker/text()"s
+        next_marker: ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)
       )
 
     %{
       target_groups: result.target_groups,
-      next_marker: nilify(result.next_marker)
+      next_marker: result.next_marker
     }
   end
 
@@ -912,20 +950,21 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
             ~x"./Target"o,
             id: ~x"./Id/text()"s,
             port: ~x"./Port/text()"oi,
-            availability_zone: ~x"./AvailabilityZone/text()"os,
-            quic_server_id: ~x"./QuicServerId/text()"os
+            availability_zone: ~x"./AvailabilityZone/text()"o |> transform_by(&optional_text/1),
+            quic_server_id: ~x"./QuicServerId/text()"o |> transform_by(&optional_text/1)
           ],
-          health_check_port: ~x"./HealthCheckPort/text()"os,
+          health_check_port: ~x"./HealthCheckPort/text()"o |> transform_by(&optional_text/1),
           anomaly_detection: [
             ~x"./AnomalyDetection"o,
-            result: ~x"./Result/text()"os,
-            mitigation_in_effect: ~x"./MitigationInEffect/text()"os
+            result: ~x"./Result/text()"o |> transform_by(&optional_text/1),
+            mitigation_in_effect:
+              ~x"./MitigationInEffect/text()"o |> transform_by(&optional_text/1)
           ],
           administrative_override: [
             ~x"./AdministrativeOverride"o,
-            state: ~x"./State/text()"os,
-            reason: ~x"./Reason/text()"os,
-            description: ~x"./Description/text()"os
+            state: ~x"./State/text()"o |> transform_by(&optional_text/1),
+            reason: ~x"./Reason/text()"o |> transform_by(&optional_text/1),
+            description: ~x"./Description/text()"o |> transform_by(&optional_text/1)
           ],
           target_health: [
             ~x"./TargetHealth"o,
@@ -934,8 +973,8 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
             # (Elb.InternalError) from the target's own (Target.Timeout,
             # Target.ResponseCodeMismatch, ...). Both it and `Description` are
             # documented Required: No, and are absent when the state is healthy.
-            reason: ~x"./Reason/text()"os,
-            description: ~x"./Description/text()"os
+            reason: ~x"./Reason/text()"o |> transform_by(&optional_text/1),
+            description: ~x"./Description/text()"o |> transform_by(&optional_text/1)
           ]
         ]
       )
@@ -952,50 +991,55 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
           load_balancer_arn: ~x"./LoadBalancerArn/text()"s,
           load_balancer_name: ~x"./LoadBalancerName/text()"s,
           dns_name: ~x"./DNSName/text()"s,
-          canonical_hosted_zone_id: ~x"./CanonicalHostedZoneId/text()"os,
-          created_time: ~x"./CreatedTime/text()"os,
+          canonical_hosted_zone_id:
+            ~x"./CanonicalHostedZoneId/text()"o |> transform_by(&optional_text/1),
+          created_time: ~x"./CreatedTime/text()"o |> transform_by(&optional_text/1),
           scheme: ~x"./Scheme/text()"s,
           type: ~x"./Type/text()"s,
           vpc_id: ~x"./VpcId/text()"s,
-          ip_address_type: ~x"./IpAddressType/text()"os,
-          customer_owned_ipv4_pool: ~x"./CustomerOwnedIpv4Pool/text()"os,
+          ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
+          customer_owned_ipv4_pool:
+            ~x"./CustomerOwnedIpv4Pool/text()"o |> transform_by(&optional_text/1),
           # AWS documents these two as Strings carrying "on"/"off", not Booleans.
-          enable_prefix_for_ipv6_source_nat: ~x"./EnablePrefixForIpv6SourceNat/text()"os,
+          enable_prefix_for_ipv6_source_nat:
+            ~x"./EnablePrefixForIpv6SourceNat/text()"o |> transform_by(&optional_text/1),
           enforce_security_group_inbound_rules_on_private_link_traffic:
-            ~x"./EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic/text()"os,
+            ~x"./EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic/text()"o
+            |> transform_by(&optional_text/1),
           security_groups: ~x"./SecurityGroups/member/text()"sl,
           state: [
             ~x"./State"o,
             code: ~x"./Code/text()"s,
-            reason: ~x"./Reason/text()"os
+            reason: ~x"./Reason/text()"o |> transform_by(&optional_text/1)
           ],
           ipam_pools: [
             ~x"./IpamPools"o,
-            ipv4_ipam_pool_id: ~x"./Ipv4IpamPoolId/text()"os
+            ipv4_ipam_pool_id: ~x"./Ipv4IpamPoolId/text()"o |> transform_by(&optional_text/1)
           ],
           availability_zones: [
             ~x"./AvailabilityZones/member"l,
-            zone_name: ~x"./ZoneName/text()"os,
-            subnet_id: ~x"./SubnetId/text()"os,
-            outpost_id: ~x"./OutpostId/text()"os,
+            zone_name: ~x"./ZoneName/text()"o |> transform_by(&optional_text/1),
+            subnet_id: ~x"./SubnetId/text()"o |> transform_by(&optional_text/1),
+            outpost_id: ~x"./OutpostId/text()"o |> transform_by(&optional_text/1),
             source_nat_ipv6_prefixes: ~x"./SourceNatIpv6Prefixes/member/text()"sl,
             load_balancer_addresses: [
               ~x"./LoadBalancerAddresses/member"l,
-              ip_address: ~x"./IpAddress/text()"os,
-              allocation_id: ~x"./AllocationId/text()"os,
+              ip_address: ~x"./IpAddress/text()"o |> transform_by(&optional_text/1),
+              allocation_id: ~x"./AllocationId/text()"o |> transform_by(&optional_text/1),
               # Casing is irregular here: IpAddress but PrivateIPv4Address /
               # IPv6Address.
-              private_ipv4_address: ~x"./PrivateIPv4Address/text()"os,
-              ipv6_address: ~x"./IPv6Address/text()"os
+              private_ipv4_address:
+                ~x"./PrivateIPv4Address/text()"o |> transform_by(&optional_text/1),
+              ipv6_address: ~x"./IPv6Address/text()"o |> transform_by(&optional_text/1)
             ]
           ]
         ],
-        next_marker: ~x"./NextMarker/text()"s
+        next_marker: ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)
       )
 
     %{
       load_balancers: result.load_balancers,
-      next_marker: nilify(result.next_marker)
+      next_marker: result.next_marker
     }
   end
 
@@ -1004,12 +1048,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     result =
       xpath(body, ~x"//DescribeListenersResult"e,
         listeners: [~x"./Listeners/member"l | listener_fields()],
-        next_marker: ~x"./NextMarker/text()"s
+        next_marker: ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)
       )
 
     %{
-      listeners: result.listeners,
-      next_marker: nilify(result.next_marker)
+      listeners: Enum.map(result.listeners, &coerce_listener/1),
+      next_marker: result.next_marker
     }
   end
 
@@ -1020,7 +1064,14 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
         listeners: [~x"./Listeners/member"l | listener_fields()]
       )
 
-    %{listeners: result.listeners}
+    %{listeners: Enum.map(result.listeners, &coerce_listener/1)}
+  end
+
+  # A certificate's IsDefault is a boolean in the AWS model.
+  defp coerce_listener(listener) do
+    Map.update!(listener, :certificates, fn certificates ->
+      Enum.map(certificates, &Map.update!(&1, :is_default, fn v -> boolish(v) end))
+    end)
   end
 
   # Shared by DescribeListeners and ModifyListener — both return
@@ -1031,21 +1082,25 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       load_balancer_arn: ~x"./LoadBalancerArn/text()"s,
       port: ~x"./Port/text()"oi,
       protocol: ~x"./Protocol/text()"s,
-      ssl_policy: ~x"./SslPolicy/text()"os,
+      ssl_policy: ~x"./SslPolicy/text()"o |> transform_by(&optional_text/1),
       alpn_policy: ~x"./AlpnPolicy/member/text()"sl,
       certificates: [
         ~x"./Certificates/member"l,
-        # `IsDefault` is documented as omitted from DescribeListeners
-        # output, so it is not parsed here.
-        certificate_arn: ~x"./CertificateArn/text()"os
+        certificate_arn: ~x"./CertificateArn/text()"o |> transform_by(&optional_text/1),
+        # Documented as omitted from DescribeListeners output, but parsed so
+        # it is not dropped wherever AWS does return it.
+        is_default: ~x"./IsDefault/text()"o |> transform_by(&optional_text/1)
       ],
       mutual_authentication: [
         ~x"./MutualAuthentication"o,
-        mode: ~x"./Mode/text()"os,
-        trust_store_arn: ~x"./TrustStoreArn/text()"os,
-        ignore_client_certificate_expiry: ~x"./IgnoreClientCertificateExpiry/text()"os,
-        trust_store_association_status: ~x"./TrustStoreAssociationStatus/text()"os,
-        advertise_trust_store_ca_names: ~x"./AdvertiseTrustStoreCaNames/text()"os
+        mode: ~x"./Mode/text()"o |> transform_by(&optional_text/1),
+        trust_store_arn: ~x"./TrustStoreArn/text()"o |> transform_by(&optional_text/1),
+        ignore_client_certificate_expiry:
+          ~x"./IgnoreClientCertificateExpiry/text()"o |> transform_by(&optional_text/1),
+        trust_store_association_status:
+          ~x"./TrustStoreAssociationStatus/text()"o |> transform_by(&optional_text/1),
+        advertise_trust_store_ca_names:
+          ~x"./AdvertiseTrustStoreCaNames/text()"o |> transform_by(&optional_text/1)
       ],
       default_actions: [~x"./DefaultActions/member"l | action_fields()]
     ]
@@ -1087,7 +1142,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       ],
       http_header_config: [
         ~x"./HttpHeaderConfig"o,
-        http_header_name: ~x"./HttpHeaderName/text()"os,
+        http_header_name: ~x"./HttpHeaderName/text()"o |> transform_by(&optional_text/1),
         values: ~x"./Values/member/text()"sl,
         regex_values: ~x"./RegexValues/member/text()"sl
       ],
@@ -1098,7 +1153,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       source_ip_config: [
         ~x"./SourceIpConfig"o,
         values: ~x"./Values/member/text()"sl,
-        ip_address_type: ~x"./IpAddressType/text()"os
+        ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1)
       ],
       query_string_config: [
         ~x"./QueryStringConfig"o,
@@ -1106,8 +1161,8 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
         # Key/Value structures rather than plain strings.
         values: [
           ~x"./Values/member"l,
-          key: ~x"./Key/text()"os,
-          value: ~x"./Value/text()"os
+          key: ~x"./Key/text()"o |> transform_by(&optional_text/1),
+          value: ~x"./Value/text()"o |> transform_by(&optional_text/1)
         ]
       ]
     ]
@@ -1119,7 +1174,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     [
       type: ~x"./Type/text()"s,
       order: ~x"./Order/text()"oi,
-      target_group_arn: ~x"./TargetGroupArn/text()"s,
+      target_group_arn: ~x"./TargetGroupArn/text()"o |> transform_by(&optional_text/1),
       forward_config: [
         ~x"./ForwardConfig"o,
         target_groups: [
@@ -1129,56 +1184,69 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
         ],
         target_group_stickiness_config: [
           ~x"./TargetGroupStickinessConfig"o,
-          enabled: ~x"./Enabled/text()"os,
+          enabled: ~x"./Enabled/text()"o |> transform_by(&optional_text/1),
           duration_seconds: ~x"./DurationSeconds/text()"oi
         ]
       ],
       redirect_config: [
         ~x"./RedirectConfig"o,
-        status_code: ~x"./StatusCode/text()"os,
-        protocol: ~x"./Protocol/text()"os,
-        host: ~x"./Host/text()"os,
+        status_code: ~x"./StatusCode/text()"o |> transform_by(&optional_text/1),
+        protocol: ~x"./Protocol/text()"o |> transform_by(&optional_text/1),
+        host: ~x"./Host/text()"o |> transform_by(&optional_text/1),
         # Port here is a String, not an Integer.
-        port: ~x"./Port/text()"os,
-        path: ~x"./Path/text()"os,
-        query: ~x"./Query/text()"os
+        port: ~x"./Port/text()"o |> transform_by(&optional_text/1),
+        path: ~x"./Path/text()"o |> transform_by(&optional_text/1),
+        query: ~x"./Query/text()"o |> transform_by(&optional_text/1)
       ],
       fixed_response_config: [
         ~x"./FixedResponseConfig"o,
-        status_code: ~x"./StatusCode/text()"os,
-        content_type: ~x"./ContentType/text()"os,
-        message_body: ~x"./MessageBody/text()"os
+        status_code: ~x"./StatusCode/text()"o |> transform_by(&optional_text/1),
+        content_type: ~x"./ContentType/text()"o |> transform_by(&optional_text/1),
+        message_body: ~x"./MessageBody/text()"o |> transform_by(&optional_text/1)
       ],
       authenticate_oidc_config: [
         ~x"./AuthenticateOidcConfig"o,
-        issuer: ~x"./Issuer/text()"os,
-        authorization_endpoint: ~x"./AuthorizationEndpoint/text()"os,
-        token_endpoint: ~x"./TokenEndpoint/text()"os,
-        user_info_endpoint: ~x"./UserInfoEndpoint/text()"os,
-        client_id: ~x"./ClientId/text()"os,
-        session_cookie_name: ~x"./SessionCookieName/text()"os,
-        scope: ~x"./Scope/text()"os,
+        issuer: ~x"./Issuer/text()"o |> transform_by(&optional_text/1),
+        authorization_endpoint:
+          ~x"./AuthorizationEndpoint/text()"o |> transform_by(&optional_text/1),
+        token_endpoint: ~x"./TokenEndpoint/text()"o |> transform_by(&optional_text/1),
+        user_info_endpoint: ~x"./UserInfoEndpoint/text()"o |> transform_by(&optional_text/1),
+        client_id: ~x"./ClientId/text()"o |> transform_by(&optional_text/1),
+        session_cookie_name: ~x"./SessionCookieName/text()"o |> transform_by(&optional_text/1),
+        scope: ~x"./Scope/text()"o |> transform_by(&optional_text/1),
         session_timeout: ~x"./SessionTimeout/text()"oi,
-        on_unauthenticated_request: ~x"./OnUnauthenticatedRequest/text()"os
+        authentication_request_extra_params: [
+          ~x"./AuthenticationRequestExtraParams/entry"l,
+          key: ~x"./key/text()"o |> transform_by(&optional_text/1),
+          value: ~x"./value/text()"o |> transform_by(&optional_text/1)
+        ],
+        on_unauthenticated_request:
+          ~x"./OnUnauthenticatedRequest/text()"o |> transform_by(&optional_text/1)
       ],
       authenticate_cognito_config: [
         ~x"./AuthenticateCognitoConfig"o,
-        user_pool_arn: ~x"./UserPoolArn/text()"os,
-        user_pool_client_id: ~x"./UserPoolClientId/text()"os,
-        user_pool_domain: ~x"./UserPoolDomain/text()"os,
-        session_cookie_name: ~x"./SessionCookieName/text()"os,
-        scope: ~x"./Scope/text()"os,
+        user_pool_arn: ~x"./UserPoolArn/text()"o |> transform_by(&optional_text/1),
+        user_pool_client_id: ~x"./UserPoolClientId/text()"o |> transform_by(&optional_text/1),
+        user_pool_domain: ~x"./UserPoolDomain/text()"o |> transform_by(&optional_text/1),
+        session_cookie_name: ~x"./SessionCookieName/text()"o |> transform_by(&optional_text/1),
+        scope: ~x"./Scope/text()"o |> transform_by(&optional_text/1),
         session_timeout: ~x"./SessionTimeout/text()"oi,
-        on_unauthenticated_request: ~x"./OnUnauthenticatedRequest/text()"os
+        authentication_request_extra_params: [
+          ~x"./AuthenticationRequestExtraParams/entry"l,
+          key: ~x"./key/text()"o |> transform_by(&optional_text/1),
+          value: ~x"./value/text()"o |> transform_by(&optional_text/1)
+        ],
+        on_unauthenticated_request:
+          ~x"./OnUnauthenticatedRequest/text()"o |> transform_by(&optional_text/1)
       ],
       jwt_validation_config: [
         ~x"./JwtValidationConfig"o,
-        issuer: ~x"./Issuer/text()"os,
-        jwks_endpoint: ~x"./JwksEndpoint/text()"os,
+        issuer: ~x"./Issuer/text()"o |> transform_by(&optional_text/1),
+        jwks_endpoint: ~x"./JwksEndpoint/text()"o |> transform_by(&optional_text/1),
         additional_claims: [
           ~x"./AdditionalClaims/member"l,
-          name: ~x"./Name/text()"os,
-          format: ~x"./Format/text()"os,
+          name: ~x"./Name/text()"o |> transform_by(&optional_text/1),
+          format: ~x"./Format/text()"o |> transform_by(&optional_text/1),
           values: ~x"./Values/member/text()"sl
         ]
       ]
@@ -1192,16 +1260,16 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
         ~x"./HostHeaderRewriteConfig"o,
         rewrites: [
           ~x"./Rewrites/member"l,
-          regex: ~x"./Regex/text()"os,
-          replace: ~x"./Replace/text()"os
+          regex: ~x"./Regex/text()"o |> transform_by(&optional_text/1),
+          replace: ~x"./Replace/text()"o |> transform_by(&optional_text/1)
         ]
       ],
       url_rewrite_config: [
         ~x"./UrlRewriteConfig"o,
         rewrites: [
           ~x"./Rewrites/member"l,
-          regex: ~x"./Regex/text()"os,
-          replace: ~x"./Replace/text()"os
+          regex: ~x"./Regex/text()"o |> transform_by(&optional_text/1),
+          replace: ~x"./Replace/text()"o |> transform_by(&optional_text/1)
         ]
       ]
     ]
@@ -1212,12 +1280,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     result =
       xpath(body, ~x"//DescribeRulesResult"e, [
         {:rules, [~x"./Rules/member"l | rule_fields()]},
-        {:next_marker, ~x"./NextMarker/text()"s}
+        {:next_marker, ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)}
       ])
 
     %{
       rules: normalize_rules(result.rules),
-      next_marker: nilify(result.next_marker)
+      next_marker: result.next_marker
     }
   end
 
@@ -1229,27 +1297,15 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     %{rules: normalize_rules(result.rules)}
   end
 
-  # XPath yields strings and empty strings; give callers real booleans
-  # and nil-free absent values.
+  # XPath yields strings; give callers real booleans.
   defp normalize_rules(rules) do
-    Enum.map(rules, fn rule ->
-      rule
-      |> Map.update!(:is_default, &boolish/1)
-      |> Map.update!(:actions, fn actions ->
-        Enum.map(actions, fn action ->
-          Map.update!(action, :target_group_arn, &nilify/1)
-        end)
-      end)
-    end)
+    Enum.map(rules, &Map.update!(&1, :is_default, fn v -> boolish(v) end))
   end
 
   defp boolish("true"), do: true
   defp boolish("false"), do: false
   defp boolish(""), do: nil
   defp boolish(other), do: other
-
-  defp nilify(""), do: nil
-  defp nilify(other), do: other
 
   # ---------------------------------------------------------------------------
   # Sandbox delegation
@@ -1364,4 +1420,8 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       end
     end)
   end
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

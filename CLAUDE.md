@@ -48,14 +48,20 @@ Activate with `sandbox: [enabled: true]` on any per-call opts (or set `config :a
 2. **Names preserved.** Each key is the `snake_case` of the AWS member name and nothing else. No renaming (`<ipAddress>` is `:ip_address`, not `:public_ip_address`), no synthesized keys.
 3. **Lists preserved.** `<xxxSet><item>...</item></xxxSet>` emits `xxx_set: [%{...}]` — the `Set` suffix is part of the member name and is kept; `<item>` is the list element, not a key. A `<entry><key/><value/></entry>` map-encoding stays a list of `%{key:, value:}`.
 4. **Nothing dropped.** Every documented member is parsed, including `next_token` and other pagination fields. No hand-picked field subsets, no `fn _ -> {:ok, %{}} end` callbacks that discard the body.
-5. **Envelope dropped.** The outer `<XxxResponse>`/`<XxxResult>` wrapper and the `RequestId` metadata layer are not surfaced. This is the only exception to rule 4.
+5. **Body and headers both returned.** Every operation returns `{:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}`. The outer `<XxxResponse>`/`<XxxResult>` wrapper is not surfaced in `:body`; the request id arrives in `:headers` (`:x_amzn_request_id`). A public function that makes several calls returns each call's result under its own key, never merged.
 
 Leaf-value **type coercion is expected**: cast numeric members to integers, booleans to booleans, and timestamps to `DateTime` per the AWS model — that changes values, not shape. `AwsSDK.STS` parsing `Expiration` into a `DateTime` and `AwsSDK.IdentityCenter` JSON-decoding the `inline_policy` string are both this, not reshaping.
+
+Absent optional scalars are `nil`, never `""`: read them with `~x"./Foo/text()"o |> transform_by(&optional_text/1)` (each XML module defines `optional_text/1`), not `os`.
 
 For XML services, nest with an anchored keyword block and an optional (`o`) anchor, so an absent sub-structure is `nil` rather than a map of empty strings:
 
 ```elixir
-placement: [~x"./placement"o, group_name: ~x"./groupName/text()"os, tenancy: ~x"./tenancy/text()"os]
+placement: [
+  ~x"./placement"o,
+  group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+  tenancy: ~x"./tenancy/text()"o |> transform_by(&optional_text/1)
+]
 ```
 
 Always anchor selectors to their result element (`~x"//ListPartsResult/Part"l`, not `~x"//Part"l`) — S3 responses in particular can carry an `<Error>` body on a 200.
@@ -73,6 +79,8 @@ Response deserialization is delegated to `ExUtils.Serializer.deserialize/1` (fro
 ### Configuration
 
 `AwsSDK.Config` resolves each key from per-call opts, then the application environment (`:aws_sdk`), then a built-in source chain. Key config keys: `:region`, `:access_key_id`, `:secret_access_key`, `:sandbox` (a keyword list with `:enabled`).
+
+Credential providers return the fields the signer reads at the top level and nest everything else they received under their own key (`:sts_assume_role`, `:imds`, `:ecs`, `:sso`, `:process_output`, `:profile`, `:profile_files`, `:credential_chain`). Those nested facts pass through `AwsSDK.Credentials.Secrets.strip/1` first, which removes secret keys (secret keys, session tokens, SSO access/refresh tokens, client secrets, the IMDS token, credential-process stdout), because they are cached and can reach error terms and logs.
 
 Passing `profile: "name"` in per-call opts resolves every credential key and the region from that named shared-config profile, skipping the built-in chains entirely — so nothing is read from the system or application environment. Precedence is **explicit key opt > `:profile` > app env > built-in defaults**.
 

@@ -82,12 +82,12 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.create_log_group("/aws/app/prod")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   AWS returns an empty body, and rejects a name that already exists.
   """
   @spec create_log_group(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_log_group(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_create_log_group_response(name, opts)
@@ -103,8 +103,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("tags", opts[:tags])
 
     with {:ok, op} <- build_operation("CreateLogGroup", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -114,12 +118,12 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.delete_log_group("/aws/app/prod")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Deletes every stream and event in the group.
   """
   @spec delete_log_group(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_log_group(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_log_group_response(name, opts)
@@ -130,8 +134,12 @@ defmodule AwsSDK.Logs do
 
   defp do_delete_log_group(name, opts) do
     with {:ok, op} <- build_operation("DeleteLogGroup", %{"logGroupName" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -149,23 +157,28 @@ defmodule AwsSDK.Logs do
       AwsSDK.Logs.describe_log_groups(log_group_name_prefix: "/aws/app/")
       #=> {:ok,
       #=>  %{
-      #=>    log_groups: [
-      #=>      %{
-      #=>        log_group_name: "/aws/app/prod",
-      #=>        arn: "arn:aws:logs:us-east-1:123456789012:log-group:/aws/app/prod:*",
-      #=>        creation_time: 1_767_225_600_000,
-      #=>        retention_in_days: 30,
-      #=>        metric_filter_count: 0,
-      #=>        stored_bytes: 1_048_576
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      log_groups: [
+      #=>        %{
+      #=>          log_group_name: "/aws/app/prod",
+      #=>          arn: "arn:aws:logs:us-east-1:123456789012:log-group:/aws/app/prod:*",
+      #=>          creation_time: 1_767_225_600_000,
+      #=>          retention_in_days: 30,
+      #=>          metric_filter_count: 0,
+      #=>          stored_bytes: 1_048_576
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   `:retention_in_days` is absent when the group never expires.
   """
   @spec describe_log_groups(opts :: keyword()) ::
-          {:ok, %{log_groups: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{log_groups: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_log_groups(opts \\ []) do
     if sandbox?(opts) do
       sandbox_describe_log_groups_response(opts)
@@ -182,8 +195,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("nextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("DescribeLogGroups", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -193,12 +210,12 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.put_retention_policy("/aws/app/prod", 30)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   AWS accepts only specific values (1, 3, 5, 7, 14, 30, 60, 90, ...).
   """
   @spec put_retention_policy(name :: String.t(), days :: pos_integer(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def put_retention_policy(name, days, opts \\ []) when is_binary(name) and is_integer(days) do
     if sandbox?(opts) do
       sandbox_put_retention_policy_response(name, days, opts)
@@ -211,8 +228,12 @@ defmodule AwsSDK.Logs do
     data = %{"logGroupName" => name, "retentionInDays" => days}
 
     with {:ok, op} <- build_operation("PutRetentionPolicy", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -222,12 +243,12 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.delete_retention_policy("/aws/app/prod")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Events in the group then never expire.
   """
   @spec delete_retention_policy(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_retention_policy(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_retention_policy_response(name, opts)
@@ -238,8 +259,12 @@ defmodule AwsSDK.Logs do
 
   defp do_delete_retention_policy(name, opts) do
     with {:ok, op} <- build_operation("DeleteRetentionPolicy", %{"logGroupName" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -251,10 +276,10 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.create_log_stream("/aws/app/prod", "instance/i-1234567890abcdef0")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
   """
   @spec create_log_stream(group :: String.t(), stream :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_log_stream(group, stream, opts \\ []) when is_binary(group) and is_binary(stream) do
     if sandbox?(opts) do
       sandbox_create_log_stream_response(group, stream, opts)
@@ -267,8 +292,12 @@ defmodule AwsSDK.Logs do
     data = %{"logGroupName" => group, "logStreamName" => stream}
 
     with {:ok, op} <- build_operation("CreateLogStream", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -278,10 +307,10 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.delete_log_stream("/aws/app/prod", "instance/i-1234567890abcdef0")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
   """
   @spec delete_log_stream(group :: String.t(), stream :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_log_stream(group, stream, opts \\ []) when is_binary(group) and is_binary(stream) do
     if sandbox?(opts) do
       sandbox_delete_log_stream_response(group, stream, opts)
@@ -294,8 +323,12 @@ defmodule AwsSDK.Logs do
     data = %{"logGroupName" => group, "logStreamName" => stream}
 
     with {:ok, op} <- build_operation("DeleteLogStream", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -318,24 +351,30 @@ defmodule AwsSDK.Logs do
       )
       #=> {:ok,
       #=>  %{
-      #=>    log_streams: [
-      #=>      %{
-      #=>        log_stream_name: "instance/i-1234567890abcdef0",
-      #=>        arn: "arn:aws:logs:us-east-1:123456789012:log-group:/aws/app/prod:log-stream:instance/i-1234567890abcdef0",
-      #=>        creation_time: 1_767_225_600_000,
-      #=>        first_event_timestamp: 1_767_225_601_000,
-      #=>        last_event_timestamp: 1_767_229_200_000,
-      #=>        last_ingestion_time: 1_767_229_201_000,
-      #=>        upload_sequence_token: "49590..."
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      log_streams: [
+      #=>        %{
+      #=>          log_stream_name: "instance/i-1234567890abcdef0",
+      #=>          arn: "arn:aws:logs:us-east-1:123456789012:log-group:/aws/app/prod:log-stream:instance/i-1234567890abcdef0",
+      #=>          creation_time: 1_767_225_600_000,
+      #=>          first_event_timestamp: 1_767_225_601_000,
+      #=>          last_event_timestamp: 1_767_229_200_000,
+      #=>          last_ingestion_time: 1_767_229_201_000,
+      #=>          upload_sequence_token: "49590..."
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Timestamps are milliseconds since the epoch, as AWS sends them.
   """
   @spec describe_log_streams(group :: String.t(), opts :: keyword()) ::
-          {:ok, %{log_streams: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{log_streams: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def describe_log_streams(group, opts \\ []) when is_binary(group) do
     if sandbox?(opts) do
       sandbox_describe_log_streams_response(group, opts)
@@ -354,8 +393,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("nextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("DescribeLogStreams", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -379,8 +422,12 @@ defmodule AwsSDK.Logs do
       ])
       #=> {:ok,
       #=>  %{
-      #=>    next_sequence_token: "49590...",
-      #=>    rejected_log_events_info: nil
+      #=>    body:
+      #=>    %{
+      #=>      next_sequence_token: "49590...",
+      #=>      rejected_log_events_info: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Events must be in ascending timestamp order. Events AWS refuses are
@@ -392,7 +439,7 @@ defmodule AwsSDK.Logs do
           events :: list(map()),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def put_log_events(group, stream, [_ | _] = events, opts \\ [])
       when is_binary(group) and is_binary(stream) do
     if sandbox?(opts) do
@@ -410,8 +457,12 @@ defmodule AwsSDK.Logs do
     }
 
     with {:ok, op} <- build_operation("PutLogEvents", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -433,22 +484,28 @@ defmodule AwsSDK.Logs do
       )
       #=> {:ok,
       #=>  %{
-      #=>    events: [
-      #=>      %{
-      #=>        timestamp: 1_767_229_200_000,
-      #=>        message: "boot complete",
-      #=>        ingestion_time: 1_767_229_200_500
-      #=>      }
-      #=>    ],
-      #=>    next_forward_token: "f/37...",
-      #=>    next_backward_token: "b/37..."
+      #=>    body:
+      #=>    %{
+      #=>      events: [
+      #=>        %{
+      #=>          timestamp: 1_767_229_200_000,
+      #=>          message: "boot complete",
+      #=>          ingestion_time: 1_767_229_200_500
+      #=>        }
+      #=>      ],
+      #=>      next_forward_token: "f/37...",
+      #=>      next_backward_token: "b/37..."
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Both tokens are always returned; paging past the end yields the same token
   and an empty `:events`, which is how you detect the end.
   """
   @spec get_log_events(group :: String.t(), stream :: String.t(), opts :: keyword()) ::
-          {:ok, %{events: list(map()), next_forward_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{events: list(map()), next_forward_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def get_log_events(group, stream, opts \\ []) when is_binary(group) and is_binary(stream) do
     if sandbox?(opts) do
       sandbox_get_log_events_response(group, stream, opts)
@@ -467,8 +524,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("nextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("GetLogEvents", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -492,24 +553,29 @@ defmodule AwsSDK.Logs do
       )
       #=> {:ok,
       #=>  %{
-      #=>    events: [
-      #=>      %{
-      #=>        log_stream_name: "instance/i-1234567890abcdef0",
-      #=>        timestamp: 1_767_229_100_000,
-      #=>        message: "ERROR database unreachable",
-      #=>        ingestion_time: 1_767_229_100_500,
-      #=>        event_id: "37201234567890123456789012345678901234567890123456789012"
-      #=>      }
-      #=>    ],
-      #=>    searched_log_streams: [],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      events: [
+      #=>        %{
+      #=>          log_stream_name: "instance/i-1234567890abcdef0",
+      #=>          timestamp: 1_767_229_100_000,
+      #=>          message: "ERROR database unreachable",
+      #=>          ingestion_time: 1_767_229_100_500,
+      #=>          event_id: "37201234567890123456789012345678901234567890123456789012"
+      #=>        }
+      #=>      ],
+      #=>      searched_log_streams: [],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Unlike `get_log_events/3`, this searches every stream in the group, so each
   event carries its `:log_stream_name`.
   """
   @spec filter_log_events(group :: String.t(), opts :: keyword()) ::
-          {:ok, %{events: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{events: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def filter_log_events(group, opts \\ []) when is_binary(group) do
     if sandbox?(opts) do
       sandbox_filter_log_events_response(group, opts)
@@ -529,8 +595,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("nextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("FilterLogEvents", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -559,7 +629,7 @@ defmodule AwsSDK.Logs do
         1_767_229_200,
         "fields @timestamp, @message | filter @message like /ERROR/ | limit 20"
       )
-      #=> {:ok, %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}}
+      #=> {:ok, %{body: %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Returns immediately with a query ID; poll `get_query_results/2` until the
   status is terminal.
@@ -571,7 +641,7 @@ defmodule AwsSDK.Logs do
           query :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{query_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{query_id: String.t()}, headers: map()}} | {:error, term()}
   def start_query(group, start_time, end_time, query, opts \\ [])
       when is_binary(group) and is_integer(start_time) and is_integer(end_time) and
              is_binary(query) do
@@ -595,7 +665,7 @@ defmodule AwsSDK.Logs do
         1_767_229_200,
         "fields @timestamp, @message | filter @message like /ERROR/"
       )
-      #=> {:ok, %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}}
+      #=> {:ok, %{body: %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Returns immediately with a query ID; poll `get_query_results/2` until the
   status is terminal.
@@ -609,7 +679,7 @@ defmodule AwsSDK.Logs do
           query :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{query_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{query_id: String.t()}, headers: map()}} | {:error, term()}
   def start_query_for_log_groups([_ | _] = groups, start_time, end_time, query, opts \\ []) do
     if sandbox?(opts) do
       sandbox_start_query_for_log_groups_response(groups, start_time, end_time, query, opts)
@@ -632,7 +702,7 @@ defmodule AwsSDK.Logs do
         1_767_229_200,
         "fields @timestamp, @message"
       )
-      #=> {:ok, %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}}
+      #=> {:ok, %{body: %{query_id: "12ab3456-12ab-123a-789e-1234567890ab"}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Returns immediately with a query ID; poll `get_query_results/2` until the
   status is terminal.
@@ -647,7 +717,7 @@ defmodule AwsSDK.Logs do
           query :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, %{query_id: String.t()}} | {:error, term()}
+          {:ok, %{body: %{query_id: String.t()}, headers: map()}} | {:error, term()}
   def start_query_by_identifiers([_ | _] = identifiers, start_time, end_time, query, opts \\ []) do
     if sandbox?(opts) do
       sandbox_start_query_by_identifiers_response(identifiers, start_time, end_time, query, opts)
@@ -667,8 +737,12 @@ defmodule AwsSDK.Logs do
       |> maybe_put("limit", opts[:limit])
 
     with {:ok, op} <- build_operation("StartQuery", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -680,14 +754,18 @@ defmodule AwsSDK.Logs do
       AwsSDK.Logs.get_query_results("12ab3456-12ab-123a-789e-1234567890ab")
       #=> {:ok,
       #=>  %{
-      #=>    status: "Complete",
-      #=>    results: [
-      #=>      [
-      #=>        %{field: "@timestamp", value: "2026-01-01 00:00:00.000"},
-      #=>        %{field: "@message", value: "ERROR database unreachable"}
-      #=>      ]
-      #=>    ],
-      #=>    statistics: %{records_matched: 1.0, records_scanned: 5000.0, bytes_scanned: 1.2e6}
+      #=>    body:
+      #=>    %{
+      #=>      status: "Complete",
+      #=>      results: [
+      #=>        [
+      #=>          %{field: "@timestamp", value: "2026-01-01 00:00:00.000"},
+      #=>          %{field: "@message", value: "ERROR database unreachable"}
+      #=>        ]
+      #=>      ],
+      #=>      statistics: %{records_matched: 1.0, records_scanned: 5000.0, bytes_scanned: 1.2e6}
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Each row is a list of field/value pairs, not a map -- Insights columns are
@@ -695,7 +773,7 @@ defmodule AwsSDK.Logs do
   `"Complete"`, `"Failed"`, `"Cancelled"` or `"Timeout"`.
   """
   @spec get_query_results(query_id :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def get_query_results(query_id, opts \\ []) when is_binary(query_id) do
     if sandbox?(opts) do
       sandbox_get_query_results_response(query_id, opts)
@@ -706,8 +784,12 @@ defmodule AwsSDK.Logs do
 
   defp do_get_query_results(query_id, opts) do
     with {:ok, op} <- build_operation("GetQueryResults", %{"queryId" => query_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -717,12 +799,12 @@ defmodule AwsSDK.Logs do
   ## Examples
 
       AwsSDK.Logs.stop_query("12ab3456-12ab-123a-789e-1234567890ab")
-      #=> {:ok, %{success: true}}
+      #=> {:ok, %{body: %{success: true}, headers: %{x_amzn_request_id: "...", ...}}}
 
   `:success` is false when the query had already finished.
   """
   @spec stop_query(query_id :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def stop_query(query_id, opts \\ []) when is_binary(query_id) do
     if sandbox?(opts) do
       sandbox_stop_query_response(query_id, opts)
@@ -733,8 +815,12 @@ defmodule AwsSDK.Logs do
 
   defp do_stop_query(query_id, opts) do
     with {:ok, op} <- build_operation("StopQuery", %{"queryId" => query_id}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 

@@ -50,7 +50,7 @@ defmodule AwsSDK.AutoScaling do
       ])
   """
 
-  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2]
+  import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Operation
 
@@ -85,63 +85,66 @@ defmodule AwsSDK.AutoScaling do
       AwsSDK.AutoScaling.describe_auto_scaling_groups(names: ["web-asg"])
       #=> {:ok,
       #=>  %{
-      #=>    auto_scaling_groups: [
-      #=>      %{
-      #=>        auto_scaling_group_name: "web-asg",
-      #=>        auto_scaling_group_arn: "arn:aws:autoscaling:us-east-1:123456789012:autoScalingGroup:uuid:autoScalingGroupName/web-asg",
-      #=>        min_size: 1,
-      #=>        max_size: 6,
-      #=>        desired_capacity: 3,
-      #=>        default_cooldown: 300,
-      #=>        health_check_type: "ELB",
-      #=>        health_check_grace_period: 300,
-      #=>        created_time: "2026-01-01T00:00:00.000Z",
-      #=>        new_instances_protected_from_scale_in: false,
-      #=>        availability_zones: ["us-east-1a", "us-east-1b"],
-      #=>        target_group_arns: ["arn:aws:elasticloadbalancing:...:targetgroup/web/abc"],
-      #=>        launch_template: %{
-      #=>          launch_template_id: "lt-0a1b2c3d4e5f6789a",
-      #=>          launch_template_name: "web",
-      #=>          version: "$Latest"
-      #=>        },
-      #=>        mixed_instances_policy: %{
-      #=>          instances_distribution: %{
-      #=>            on_demand_base_capacity: 1,
-      #=>            on_demand_percentage_above_base_capacity: 0,
-      #=>            spot_allocation_strategy: "capacity-optimized",
-      #=>            spot_max_price: ""
-      #=>          },
+      #=>    body: %{
+      #=>      auto_scaling_groups: [
+      #=>        %{
+      #=>          auto_scaling_group_name: "web-asg",
+      #=>          auto_scaling_group_arn: "arn:aws:autoscaling:us-east-1:123456789012:autoScalingGroup:uuid:autoScalingGroupName/web-asg",
+      #=>          min_size: 1,
+      #=>          max_size: 6,
+      #=>          desired_capacity: 3,
+      #=>          default_cooldown: 300,
+      #=>          health_check_type: "ELB",
+      #=>          health_check_grace_period: 300,
+      #=>          created_time: "2026-01-01T00:00:00.000Z",
+      #=>          new_instances_protected_from_scale_in: false,
+      #=>          availability_zones: ["us-east-1a", "us-east-1b"],
+      #=>          target_group_arns: ["arn:aws:elasticloadbalancing:...:targetgroup/web/abc"],
       #=>          launch_template: %{
-      #=>            launch_template_specification: %{
-      #=>              launch_template_id: "lt-0a1b2c3d4e5f6789a",
-      #=>              launch_template_name: "web",
-      #=>              version: "$Latest"
+      #=>            launch_template_id: "lt-0a1b2c3d4e5f6789a",
+      #=>            launch_template_name: "web",
+      #=>            version: "$Latest"
+      #=>          },
+      #=>          mixed_instances_policy: %{
+      #=>            instances_distribution: %{
+      #=>              on_demand_base_capacity: 1,
+      #=>              on_demand_percentage_above_base_capacity: 0,
+      #=>              spot_allocation_strategy: "capacity-optimized",
+      #=>              spot_max_price: nil
       #=>            },
-      #=>            overrides: [
-      #=>              %{instance_type: "t3.small", weighted_capacity: "2"}
-      #=>            ]
-      #=>          }
-      #=>        },
-      #=>        instances: [
-      #=>          %{
-      #=>            instance_id: "i-1234567890abcdef0",
-      #=>            instance_type: "t3.small",
-      #=>            availability_zone: "us-east-1a",
-      #=>            lifecycle_state: "InService",
-      #=>            health_status: "Healthy",
-      #=>            protected_from_scale_in: false,
       #=>            launch_template: %{
-      #=>              launch_template_id: "lt-0a1b2c3d4e5f6789a",
-      #=>              version: "3"
+      #=>              launch_template_specification: %{
+      #=>                launch_template_id: "lt-0a1b2c3d4e5f6789a",
+      #=>                launch_template_name: "web",
+      #=>                version: "$Latest"
+      #=>              },
+      #=>              overrides: [
+      #=>                %{instance_type: "t3.small", weighted_capacity: "2"}
+      #=>              ]
       #=>            }
-      #=>          }
-      #=>        ],
-      #=>        tags: [
-      #=>          %{key: "Name", value: "web", propagate_at_launch: "true"}
-      #=>        ]
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>          },
+      #=>          instances: [
+      #=>            %{
+      #=>              instance_id: "i-1234567890abcdef0",
+      #=>              instance_type: "t3.small",
+      #=>              availability_zone: "us-east-1a",
+      #=>              lifecycle_state: "InService",
+      #=>              health_status: "Healthy",
+      #=>              protected_from_scale_in: false,
+      #=>              launch_template: %{
+      #=>                launch_template_id: "lt-0a1b2c3d4e5f6789a",
+      #=>                version: "3"
+      #=>              }
+      #=>            }
+      #=>          ],
+      #=>          tags: [
+      #=>            %{key: "Name", value: "web", propagate_at_launch: "true"}
+      #=>          ]
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   `:mixed_instances_policy` keeps AWS's two levels: `:instances_distribution`
@@ -168,8 +171,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("DescribeAutoScalingGroups", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_auto_scaling_groups(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_auto_scaling_groups(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -189,23 +196,26 @@ defmodule AwsSDK.AutoScaling do
       AwsSDK.AutoScaling.describe_auto_scaling_instances(instance_ids: ["i-1234567890abcdef0"])
       #=> {:ok,
       #=>  %{
-      #=>    auto_scaling_instances: [
-      #=>      %{
-      #=>        instance_id: "i-1234567890abcdef0",
-      #=>        auto_scaling_group_name: "web-asg",
-      #=>        availability_zone: "us-east-1a",
-      #=>        lifecycle_state: "InService",
-      #=>        health_status: "HEALTHY",
-      #=>        instance_type: "t3.small",
-      #=>        protected_from_scale_in: false,
-      #=>        launch_template: %{
-      #=>          launch_template_id: "lt-0a1b2c3d4e5f6789a",
-      #=>          launch_template_name: "web",
-      #=>          version: "3"
+      #=>    body: %{
+      #=>      auto_scaling_instances: [
+      #=>        %{
+      #=>          instance_id: "i-1234567890abcdef0",
+      #=>          auto_scaling_group_name: "web-asg",
+      #=>          availability_zone: "us-east-1a",
+      #=>          lifecycle_state: "InService",
+      #=>          health_status: "HEALTHY",
+      #=>          instance_type: "t3.small",
+      #=>          protected_from_scale_in: false,
+      #=>          launch_template: %{
+      #=>            launch_template_id: "lt-0a1b2c3d4e5f6789a",
+      #=>            launch_template_name: "web",
+      #=>            version: "3"
+      #=>          }
       #=>        }
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
   """
   @spec describe_auto_scaling_instances(keyword) :: {:ok, map} | {:error, term}
@@ -226,8 +236,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("DescribeAutoScalingInstances", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_auto_scaling_instances(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_auto_scaling_instances(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -247,39 +261,42 @@ defmodule AwsSDK.AutoScaling do
       AwsSDK.AutoScaling.describe_instance_refreshes("web-asg")
       #=> {:ok,
       #=>  %{
-      #=>    instance_refreshes: [
-      #=>      %{
-      #=>        instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE",
-      #=>        auto_scaling_group_name: "web-asg",
-      #=>        status: "InProgress",
-      #=>        status_reason: "Waiting for instances to warm up",
-      #=>        start_time: "2026-01-01T00:00:00Z",
-      #=>        end_time: "",
-      #=>        percentage_complete: 33,
-      #=>        instances_to_update: 2,
-      #=>        strategy: "Rolling",
-      #=>        preferences: %{
-      #=>          min_healthy_percentage: 90,
-      #=>          instance_warmup: 300,
-      #=>          skip_matching: "false",
-      #=>          checkpoint_percentages: [],
-      #=>          alarm_specification: nil
-      #=>        },
-      #=>        progress_details: %{
-      #=>          live_pool_progress: %{instances_to_update: 2, percentage_complete: 33},
-      #=>          warm_pool_progress: nil
-      #=>        },
-      #=>        rollback_details: nil,
-      #=>        desired_configuration: %{
-      #=>          launch_template: %{
-      #=>            launch_template_id: "lt-0a1b2c3d4e5f6789a",
-      #=>            version: "4"
+      #=>    body: %{
+      #=>      instance_refreshes: [
+      #=>        %{
+      #=>          instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE",
+      #=>          auto_scaling_group_name: "web-asg",
+      #=>          status: "InProgress",
+      #=>          status_reason: "Waiting for instances to warm up",
+      #=>          start_time: "2026-01-01T00:00:00Z",
+      #=>          end_time: nil,
+      #=>          percentage_complete: 33,
+      #=>          instances_to_update: 2,
+      #=>          strategy: "Rolling",
+      #=>          preferences: %{
+      #=>            min_healthy_percentage: 90,
+      #=>            instance_warmup: 300,
+      #=>            skip_matching: "false",
+      #=>            checkpoint_percentages: [],
+      #=>            alarm_specification: nil
       #=>          },
-      #=>          mixed_instances_policy: nil
+      #=>          progress_details: %{
+      #=>            live_pool_progress: %{instances_to_update: 2, percentage_complete: 33},
+      #=>            warm_pool_progress: nil
+      #=>          },
+      #=>          rollback_details: nil,
+      #=>          desired_configuration: %{
+      #=>            launch_template: %{
+      #=>              launch_template_id: "lt-0a1b2c3d4e5f6789a",
+      #=>              version: "4"
+      #=>            },
+      #=>            mixed_instances_policy: nil
+      #=>          }
       #=>        }
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
   """
   @spec describe_instance_refreshes(String.t(), keyword) :: {:ok, map} | {:error, term}
@@ -302,8 +319,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("DescribeInstanceRefreshes", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_instance_refreshes(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_instance_refreshes(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -326,23 +347,26 @@ defmodule AwsSDK.AutoScaling do
       AwsSDK.AutoScaling.describe_scaling_activities("web-asg", max_records: 10)
       #=> {:ok,
       #=>  %{
-      #=>    activities: [
-      #=>      %{
-      #=>        activity_id: "act-0abc",
-      #=>        auto_scaling_group_name: "web-asg",
-      #=>        description: "Terminating EC2 instance: i-0abc",
-      #=>        cause: "At 2026-08-05T12:00:00Z an instance refresh replaced instances",
-      #=>        start_time: "2026-08-05T12:00:00Z",
-      #=>        end_time: "2026-08-05T12:05:00Z",
-      #=>        status_code: "Successful",
-      #=>        status_message: "",
-      #=>        progress: 100,
-      #=>        details: "{...}",
-      #=>        auto_scaling_group_state: "",
-      #=>        auto_scaling_group_arn: "arn:aws:autoscaling:..."
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body: %{
+      #=>      activities: [
+      #=>        %{
+      #=>          activity_id: "act-0abc",
+      #=>          auto_scaling_group_name: "web-asg",
+      #=>          description: "Terminating EC2 instance: i-0abc",
+      #=>          cause: "At 2026-08-05T12:00:00Z an instance refresh replaced instances",
+      #=>          start_time: "2026-08-05T12:00:00Z",
+      #=>          end_time: "2026-08-05T12:05:00Z",
+      #=>          status_code: "Successful",
+      #=>          status_message: nil,
+      #=>          progress: 100,
+      #=>          details: "{...}",
+      #=>          auto_scaling_group_state: nil,
+      #=>          auto_scaling_group_arn: "arn:aws:autoscaling:..."
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
   """
   @spec describe_scaling_activities(String.t(), keyword) :: {:ok, map} | {:error, term}
@@ -366,8 +390,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("DescribeScalingActivities", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_describe_scaling_activities(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_describe_scaling_activities(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -389,7 +417,7 @@ defmodule AwsSDK.AutoScaling do
       AwsSDK.AutoScaling.start_instance_refresh("web-asg",
         preferences: %{min_healthy_percentage: 90, instance_warmup: 300}
       )
-      #=> {:ok, %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}}
+      #=> {:ok, %{body: %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec start_instance_refresh(String.t(), keyword) :: {:ok, map} | {:error, term}
   def start_instance_refresh(auto_scaling_group_name, opts \\ [])
@@ -411,8 +439,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("StartInstanceRefresh", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_start_instance_refresh(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_start_instance_refresh(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -424,7 +456,7 @@ defmodule AwsSDK.AutoScaling do
   ## Examples
 
       AwsSDK.AutoScaling.cancel_instance_refresh("web-asg")
-      #=> {:ok, %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}}
+      #=> {:ok, %{body: %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec cancel_instance_refresh(String.t(), keyword) :: {:ok, map} | {:error, term}
   def cancel_instance_refresh(auto_scaling_group_name, opts \\ [])
@@ -440,8 +472,12 @@ defmodule AwsSDK.AutoScaling do
     params = flatten_query(%{"AutoScalingGroupName" => auto_scaling_group_name})
 
     with {:ok, op} <- build_operation("CancelInstanceRefresh", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_cancel_instance_refresh(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_cancel_instance_refresh(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -453,7 +489,7 @@ defmodule AwsSDK.AutoScaling do
   ## Examples
 
       AwsSDK.AutoScaling.rollback_instance_refresh("web-asg")
-      #=> {:ok, %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}}
+      #=> {:ok, %{body: %{instance_refresh_id: "08b91cf7-8ec8-4d1b-9f0b-EXAMPLE"}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec rollback_instance_refresh(String.t(), keyword) :: {:ok, map} | {:error, term}
   def rollback_instance_refresh(auto_scaling_group_name, opts \\ [])
@@ -469,8 +505,12 @@ defmodule AwsSDK.AutoScaling do
     params = flatten_query(%{"AutoScalingGroupName" => auto_scaling_group_name})
 
     with {:ok, op} <- build_operation("RollbackInstanceRefresh", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_rollback_instance_refresh(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_rollback_instance_refresh(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -499,7 +539,7 @@ defmodule AwsSDK.AutoScaling do
         "CONTINUE",
         instance_id: "i-1234567890abcdef0"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
   AWS returns an empty result for this operation.
   """
@@ -550,8 +590,8 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("CompleteLifecycleAction", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{body: %{}, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -578,7 +618,7 @@ defmodule AwsSDK.AutoScaling do
         "web-asg",
         instance_id: "i-1234567890abcdef0"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec record_lifecycle_action_heartbeat(
           lifecycle_hook_name :: String.t(),
@@ -612,8 +652,8 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("RecordLifecycleActionHeartbeat", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{body: %{}, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -629,13 +669,13 @@ defmodule AwsSDK.AutoScaling do
   ## Examples
 
       AwsSDK.AutoScaling.set_instance_health("i-1234567890abcdef0", "Unhealthy")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
       # Keep the group's grace period from masking the change.
       AwsSDK.AutoScaling.set_instance_health("i-1234567890abcdef0", "Unhealthy",
         should_respect_grace_period: false
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec set_instance_health(String.t(), String.t(), keyword) :: {:ok, map} | {:error, term}
   def set_instance_health(instance_id, health_status, opts \\ [])
@@ -656,8 +696,8 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("SetInstanceHealth", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{body: %{}, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -677,17 +717,20 @@ defmodule AwsSDK.AutoScaling do
       )
       #=> {:ok,
       #=>  %{
-      #=>    activity: %{
-      #=>      activity_id: "e54ff599-bf05-4076-8b95-EXAMPLE",
-      #=>      auto_scaling_group_name: "web-asg",
-      #=>      cause: "At 2026-01-01T00:00:00Z an instance was taken out of service in response to a user request, shrinking the capacity from 3 to 2.",
-      #=>      description: "Terminating EC2 instance: i-1234567890abcdef0",
-      #=>      details: "{\"Subnet ID\":\"subnet-9d4a7b6c\",\"Availability Zone\":\"us-east-1a\"}",
-      #=>      status_code: "InProgress",
-      #=>      start_time: "2026-01-01T00:00:00.000Z",
-      #=>      end_time: "",
-      #=>      progress: 0
-      #=>    }
+      #=>    body: %{
+      #=>      activity: %{
+      #=>        activity_id: "e54ff599-bf05-4076-8b95-EXAMPLE",
+      #=>        auto_scaling_group_name: "web-asg",
+      #=>        cause: "At 2026-01-01T00:00:00Z an instance was taken out of service in response to a user request, shrinking the capacity from 3 to 2.",
+      #=>        description: "Terminating EC2 instance: i-1234567890abcdef0",
+      #=>        details: "{\"Subnet ID\":\"subnet-9d4a7b6c\",\"Availability Zone\":\"us-east-1a\"}",
+      #=>        status_code: "InProgress",
+      #=>        start_time: "2026-01-01T00:00:00.000Z",
+      #=>        end_time: nil,
+      #=>        progress: 0
+      #=>      }
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
       #=>  }}
 
   The second argument decides whether the group's desired capacity shrinks
@@ -728,8 +771,12 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("TerminateInstanceInAutoScalingGroup", params, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, parse_terminate_instance_in_auto_scaling_group(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: parse_terminate_instance_in_auto_scaling_group(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -745,11 +792,11 @@ defmodule AwsSDK.AutoScaling do
   ## Examples
 
       AwsSDK.AutoScaling.set_desired_capacity("web-asg", 5)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
 
       # Let the group's cooldown gate the change.
       AwsSDK.AutoScaling.set_desired_capacity("web-asg", 5, honor_cooldown: true)
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
   """
   @spec set_desired_capacity(String.t(), integer, keyword) :: {:ok, map} | {:error, term}
   def set_desired_capacity(auto_scaling_group_name, desired_capacity, opts \\ [])
@@ -770,8 +817,8 @@ defmodule AwsSDK.AutoScaling do
       })
 
     with {:ok, op} <- build_operation("SetDesiredCapacity", params, opts),
-         {:ok, %{body: _body}} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{body: %{}, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -851,44 +898,55 @@ defmodule AwsSDK.AutoScaling do
           new_instances_protected_from_scale_in: ~x"./NewInstancesProtectedFromScaleIn/text()"s,
           termination_policies: ~x"./TerminationPolicies/member/text()"sl,
           availability_zone_ids: ~x"./AvailabilityZoneIds/member/text()"sl,
-          capacity_rebalance: ~x"./CapacityRebalance/text()"os,
+          capacity_rebalance: ~x"./CapacityRebalance/text()"o |> transform_by(&optional_text/1),
           # Required: No -- must not use a plain integer cast.
           default_instance_warmup: ~x"./DefaultInstanceWarmup/text()"oi,
           max_instance_lifetime: ~x"./MaxInstanceLifetime/text()"oi,
           predicted_capacity: ~x"./PredictedCapacity/text()"oi,
           warm_pool_size: ~x"./WarmPoolSize/text()"oi,
-          deletion_protection: ~x"./DeletionProtection/text()"os,
-          desired_capacity_type: ~x"./DesiredCapacityType/text()"os,
-          placement_group: ~x"./PlacementGroup/text()"os,
-          status: ~x"./Status/text()"os,
+          deletion_protection: ~x"./DeletionProtection/text()"o |> transform_by(&optional_text/1),
+          desired_capacity_type:
+            ~x"./DesiredCapacityType/text()"o |> transform_by(&optional_text/1),
+          placement_group: ~x"./PlacementGroup/text()"o |> transform_by(&optional_text/1),
+          status: ~x"./Status/text()"o |> transform_by(&optional_text/1),
+          context: ~x"./Context/text()"o |> transform_by(&optional_text/1),
+          instance_lifecycle_policy: [
+            ~x"./InstanceLifecyclePolicy"o,
+            retention_triggers: [
+              ~x"./RetentionTriggers"o,
+              terminate_hook_abandon:
+                ~x"./TerminateHookAbandon/text()"o |> transform_by(&optional_text/1)
+            ]
+          ],
           suspended_processes: [
             ~x"./SuspendedProcesses/member"l,
-            process_name: ~x"./ProcessName/text()"os,
-            suspension_reason: ~x"./SuspensionReason/text()"os
+            process_name: ~x"./ProcessName/text()"o |> transform_by(&optional_text/1),
+            suspension_reason: ~x"./SuspensionReason/text()"o |> transform_by(&optional_text/1)
           ],
           enabled_metrics: [
             ~x"./EnabledMetrics/member"l,
-            metric: ~x"./Metric/text()"os,
-            granularity: ~x"./Granularity/text()"os
+            metric: ~x"./Metric/text()"o |> transform_by(&optional_text/1),
+            granularity: ~x"./Granularity/text()"o |> transform_by(&optional_text/1)
           ],
           tags: [
             ~x"./Tags/member"l,
-            key: ~x"./Key/text()"os,
-            value: ~x"./Value/text()"os,
-            resource_id: ~x"./ResourceId/text()"os,
-            resource_type: ~x"./ResourceType/text()"os,
-            propagate_at_launch: ~x"./PropagateAtLaunch/text()"os
+            key: ~x"./Key/text()"o |> transform_by(&optional_text/1),
+            value: ~x"./Value/text()"o |> transform_by(&optional_text/1),
+            resource_id: ~x"./ResourceId/text()"o |> transform_by(&optional_text/1),
+            resource_type: ~x"./ResourceType/text()"o |> transform_by(&optional_text/1),
+            propagate_at_launch: ~x"./PropagateAtLaunch/text()"o |> transform_by(&optional_text/1)
           ],
           traffic_sources: [
             ~x"./TrafficSources/member"l,
             identifier: ~x"./Identifier/text()"s,
-            type: ~x"./Type/text()"os
+            type: ~x"./Type/text()"o |> transform_by(&optional_text/1)
           ],
           launch_template: [
             ~x"./LaunchTemplate"o,
-            launch_template_id: ~x"./LaunchTemplateId/text()"os,
-            launch_template_name: ~x"./LaunchTemplateName/text()"os,
-            version: ~x"./Version/text()"os
+            launch_template_id: ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+            launch_template_name:
+              ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+            version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
           ],
           instance_maintenance_policy: [
             ~x"./InstanceMaintenancePolicy"o,
@@ -898,16 +956,19 @@ defmodule AwsSDK.AutoScaling do
           ],
           availability_zone_distribution: [
             ~x"./AvailabilityZoneDistribution"o,
-            capacity_distribution_strategy: ~x"./CapacityDistributionStrategy/text()"os
+            capacity_distribution_strategy:
+              ~x"./CapacityDistributionStrategy/text()"o |> transform_by(&optional_text/1)
           ],
           availability_zone_impairment_policy: [
             ~x"./AvailabilityZoneImpairmentPolicy"o,
-            impaired_zone_health_check_behavior: ~x"./ImpairedZoneHealthCheckBehavior/text()"os,
-            zonal_shift_enabled: ~x"./ZonalShiftEnabled/text()"os
+            impaired_zone_health_check_behavior:
+              ~x"./ImpairedZoneHealthCheckBehavior/text()"o |> transform_by(&optional_text/1),
+            zonal_shift_enabled: ~x"./ZonalShiftEnabled/text()"o |> transform_by(&optional_text/1)
           ],
           capacity_reservation_specification: [
             ~x"./CapacityReservationSpecification"o,
-            capacity_reservation_preference: ~x"./CapacityReservationPreference/text()"os,
+            capacity_reservation_preference:
+              ~x"./CapacityReservationPreference/text()"o |> transform_by(&optional_text/1),
             capacity_reservation_target: [
               ~x"./CapacityReservationTarget"o,
               capacity_reservation_ids: ~x"./CapacityReservationIds/member/text()"sl,
@@ -920,45 +981,131 @@ defmodule AwsSDK.AutoScaling do
             ~x"./WarmPoolConfiguration"o,
             max_group_prepared_capacity: ~x"./MaxGroupPreparedCapacity/text()"oi,
             min_size: ~x"./MinSize/text()"oi,
-            pool_state: ~x"./PoolState/text()"os,
-            status: ~x"./Status/text()"os,
+            pool_state: ~x"./PoolState/text()"o |> transform_by(&optional_text/1),
+            status: ~x"./Status/text()"o |> transform_by(&optional_text/1),
             instance_reuse_policy: [
               ~x"./InstanceReusePolicy"o,
-              reuse_on_scale_in: ~x"./ReuseOnScaleIn/text()"os
+              reuse_on_scale_in: ~x"./ReuseOnScaleIn/text()"o |> transform_by(&optional_text/1)
             ]
           ],
           mixed_instances_policy: [
             ~x"./MixedInstancesPolicy"o,
             instances_distribution: [
               ~x"./InstancesDistribution"o,
-              on_demand_allocation_strategy: ~x"./OnDemandAllocationStrategy/text()"os,
+              on_demand_allocation_strategy:
+                ~x"./OnDemandAllocationStrategy/text()"o |> transform_by(&optional_text/1),
               on_demand_base_capacity: ~x"./OnDemandBaseCapacity/text()"oi,
               on_demand_percentage_above_base_capacity:
                 ~x"./OnDemandPercentageAboveBaseCapacity/text()"oi,
-              spot_allocation_strategy: ~x"./SpotAllocationStrategy/text()"os,
+              spot_allocation_strategy:
+                ~x"./SpotAllocationStrategy/text()"o |> transform_by(&optional_text/1),
               spot_instance_pools: ~x"./SpotInstancePools/text()"oi,
               # SpotMaxPrice is a String in the model despite looking numeric.
-              spot_max_price: ~x"./SpotMaxPrice/text()"os
+              spot_max_price: ~x"./SpotMaxPrice/text()"o |> transform_by(&optional_text/1)
             ],
             launch_template: [
               ~x"./LaunchTemplate"o,
               launch_template_specification: [
                 ~x"./LaunchTemplateSpecification"o,
-                launch_template_id: ~x"./LaunchTemplateId/text()"os,
-                launch_template_name: ~x"./LaunchTemplateName/text()"os,
-                version: ~x"./Version/text()"os
+                launch_template_id:
+                  ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+                launch_template_name:
+                  ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+                version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
               ],
               overrides: [
                 ~x"./Overrides/member"l,
-                instance_type: ~x"./InstanceType/text()"os,
-                image_id: ~x"./ImageId/text()"os,
+                instance_type: ~x"./InstanceType/text()"o |> transform_by(&optional_text/1),
+                image_id: ~x"./ImageId/text()"o |> transform_by(&optional_text/1),
                 # String in the model, not an integer.
-                weighted_capacity: ~x"./WeightedCapacity/text()"os,
+                weighted_capacity:
+                  ~x"./WeightedCapacity/text()"o |> transform_by(&optional_text/1),
+                instance_requirements: [
+                  ~x"./InstanceRequirements"o,
+                  v_cpu_count: [
+                    ~x"./VCpuCount"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  memory_mi_b: [
+                    ~x"./MemoryMiB"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  cpu_manufacturers: ~x"./CpuManufacturers/member/text()"sl,
+                  memory_gi_b_per_v_cpu: [
+                    ~x"./MemoryGiBPerVCpu"o,
+                    min: ~x"./Min/text()"of,
+                    max: ~x"./Max/text()"of
+                  ],
+                  excluded_instance_types: ~x"./ExcludedInstanceTypes/member/text()"sl,
+                  instance_generations: ~x"./InstanceGenerations/member/text()"sl,
+                  spot_max_price_percentage_over_lowest_price:
+                    ~x"./SpotMaxPricePercentageOverLowestPrice/text()"oi,
+                  max_spot_price_as_percentage_of_optimal_on_demand_price:
+                    ~x"./MaxSpotPriceAsPercentageOfOptimalOnDemandPrice/text()"oi,
+                  on_demand_max_price_percentage_over_lowest_price:
+                    ~x"./OnDemandMaxPricePercentageOverLowestPrice/text()"oi,
+                  bare_metal: ~x"./BareMetal/text()"o |> transform_by(&optional_text/1),
+                  burstable_performance:
+                    ~x"./BurstablePerformance/text()"o |> transform_by(&optional_text/1),
+                  require_hibernate_support:
+                    ~x"./RequireHibernateSupport/text()"o |> transform_by(&optional_text/1),
+                  network_interface_count: [
+                    ~x"./NetworkInterfaceCount"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  local_storage: ~x"./LocalStorage/text()"o |> transform_by(&optional_text/1),
+                  local_storage_types: ~x"./LocalStorageTypes/member/text()"sl,
+                  total_local_storage_g_b: [
+                    ~x"./TotalLocalStorageGB"o,
+                    min: ~x"./Min/text()"of,
+                    max: ~x"./Max/text()"of
+                  ],
+                  baseline_ebs_bandwidth_mbps: [
+                    ~x"./BaselineEbsBandwidthMbps"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  accelerator_types: ~x"./AcceleratorTypes/member/text()"sl,
+                  accelerator_count: [
+                    ~x"./AcceleratorCount"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  accelerator_manufacturers: ~x"./AcceleratorManufacturers/member/text()"sl,
+                  accelerator_names: ~x"./AcceleratorNames/member/text()"sl,
+                  accelerator_total_memory_mi_b: [
+                    ~x"./AcceleratorTotalMemoryMiB"o,
+                    min: ~x"./Min/text()"oi,
+                    max: ~x"./Max/text()"oi
+                  ],
+                  network_bandwidth_gbps: [
+                    ~x"./NetworkBandwidthGbps"o,
+                    min: ~x"./Min/text()"of,
+                    max: ~x"./Max/text()"of
+                  ],
+                  allowed_instance_types: ~x"./AllowedInstanceTypes/member/text()"sl,
+                  baseline_performance_factors: [
+                    ~x"./BaselinePerformanceFactors"o,
+                    cpu: [
+                      ~x"./Cpu"o,
+                      references: [
+                        ~x"./References/member"l,
+                        instance_family:
+                          ~x"./InstanceFamily/text()"o |> transform_by(&optional_text/1)
+                      ]
+                    ]
+                  ]
+                ],
                 launch_template_specification: [
                   ~x"./LaunchTemplateSpecification"o,
-                  launch_template_id: ~x"./LaunchTemplateId/text()"os,
-                  launch_template_name: ~x"./LaunchTemplateName/text()"os,
-                  version: ~x"./Version/text()"os
+                  launch_template_id:
+                    ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+                  launch_template_name:
+                    ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+                  version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
                 ]
               ]
             ]
@@ -968,22 +1115,25 @@ defmodule AwsSDK.AutoScaling do
             instance_id: ~x"./InstanceId/text()"s,
             instance_type: ~x"./InstanceType/text()"s,
             availability_zone: ~x"./AvailabilityZone/text()"s,
-            availability_zone_id: ~x"./AvailabilityZoneId/text()"os,
-            image_id: ~x"./ImageId/text()"os,
-            weighted_capacity: ~x"./WeightedCapacity/text()"os,
+            availability_zone_id:
+              ~x"./AvailabilityZoneId/text()"o |> transform_by(&optional_text/1),
+            image_id: ~x"./ImageId/text()"o |> transform_by(&optional_text/1),
+            weighted_capacity: ~x"./WeightedCapacity/text()"o |> transform_by(&optional_text/1),
             lifecycle_state: ~x"./LifecycleState/text()"s,
             health_status: ~x"./HealthStatus/text()"s,
             launch_configuration_name: ~x"./LaunchConfigurationName/text()"s,
             protected_from_scale_in: ~x"./ProtectedFromScaleIn/text()"s,
             launch_template: [
               ~x"./LaunchTemplate"o,
-              launch_template_id: ~x"./LaunchTemplateId/text()"os,
-              launch_template_name: ~x"./LaunchTemplateName/text()"os,
-              version: ~x"./Version/text()"os
+              launch_template_id:
+                ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+              launch_template_name:
+                ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+              version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
             ]
           ]
         ],
-        next_token: ~x"./NextToken/text()"s
+        next_token: ~x"./NextToken/text()"o |> transform_by(&optional_text/1)
       )
 
     groups =
@@ -997,7 +1147,7 @@ defmodule AwsSDK.AutoScaling do
         end)
       end)
 
-    %{auto_scaling_groups: groups, next_token: nilify(result.next_token)}
+    %{auto_scaling_groups: groups, next_token: result.next_token}
   end
 
   defp boolish("true"), do: true
@@ -1018,18 +1168,20 @@ defmodule AwsSDK.AutoScaling do
           launch_configuration_name: ~x"./LaunchConfigurationName/text()"s,
           instance_type: ~x"./InstanceType/text()"s,
           protected_from_scale_in: ~x"./ProtectedFromScaleIn/text()"s,
-          availability_zone_id: ~x"./AvailabilityZoneId/text()"os,
-          image_id: ~x"./ImageId/text()"os,
+          availability_zone_id:
+            ~x"./AvailabilityZoneId/text()"o |> transform_by(&optional_text/1),
+          image_id: ~x"./ImageId/text()"o |> transform_by(&optional_text/1),
           # String in the model, not an integer.
-          weighted_capacity: ~x"./WeightedCapacity/text()"os,
+          weighted_capacity: ~x"./WeightedCapacity/text()"o |> transform_by(&optional_text/1),
           launch_template: [
             ~x"./LaunchTemplate"o,
-            launch_template_id: ~x"./LaunchTemplateId/text()"os,
-            launch_template_name: ~x"./LaunchTemplateName/text()"os,
-            version: ~x"./Version/text()"os
+            launch_template_id: ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+            launch_template_name:
+              ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+            version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
           ]
         ],
-        next_token: ~x"./NextToken/text()"s
+        next_token: ~x"./NextToken/text()"o |> transform_by(&optional_text/1)
       )
 
     instances =
@@ -1037,7 +1189,7 @@ defmodule AwsSDK.AutoScaling do
         Map.update!(i, :protected_from_scale_in, &(&1 === "true"))
       end)
 
-    %{auto_scaling_instances: instances, next_token: nilify(result.next_token)}
+    %{auto_scaling_instances: instances, next_token: result.next_token}
   end
 
   @doc false
@@ -1050,21 +1202,23 @@ defmodule AwsSDK.AutoScaling do
           ~x"./Activities/member"l,
           activity_id: ~x"./ActivityId/text()"s,
           auto_scaling_group_name: ~x"./AutoScalingGroupName/text()"s,
-          description: ~x"./Description/text()"os,
-          cause: ~x"./Cause/text()"os,
-          start_time: ~x"./StartTime/text()"os,
-          end_time: ~x"./EndTime/text()"os,
-          status_code: ~x"./StatusCode/text()"os,
-          status_message: ~x"./StatusMessage/text()"os,
+          description: ~x"./Description/text()"o |> transform_by(&optional_text/1),
+          cause: ~x"./Cause/text()"o |> transform_by(&optional_text/1),
+          start_time: ~x"./StartTime/text()"o |> transform_by(&optional_text/1),
+          end_time: ~x"./EndTime/text()"o |> transform_by(&optional_text/1),
+          status_code: ~x"./StatusCode/text()"o |> transform_by(&optional_text/1),
+          status_message: ~x"./StatusMessage/text()"o |> transform_by(&optional_text/1),
           progress: ~x"./Progress/text()"oi,
-          details: ~x"./Details/text()"os,
-          auto_scaling_group_state: ~x"./AutoScalingGroupState/text()"os,
-          auto_scaling_group_arn: ~x"./AutoScalingGroupARN/text()"os
+          details: ~x"./Details/text()"o |> transform_by(&optional_text/1),
+          auto_scaling_group_state:
+            ~x"./AutoScalingGroupState/text()"o |> transform_by(&optional_text/1),
+          auto_scaling_group_arn:
+            ~x"./AutoScalingGroupARN/text()"o |> transform_by(&optional_text/1)
         ],
-        next_token: ~x"./NextToken/text()"s
+        next_token: ~x"./NextToken/text()"o |> transform_by(&optional_text/1)
       )
 
-    %{activities: result.activities, next_token: nilify(result.next_token)}
+    %{activities: result.activities, next_token: result.next_token}
   end
 
   defp parse_describe_instance_refreshes(body) do
@@ -1085,14 +1239,15 @@ defmodule AwsSDK.AutoScaling do
           # dropping the data silently.
           preferences: [
             ~x"./Preferences"o,
-            auto_rollback: ~x"./AutoRollback/text()"os,
+            auto_rollback: ~x"./AutoRollback/text()"o |> transform_by(&optional_text/1),
             min_healthy_percentage: ~x"./MinHealthyPercentage/text()"oi,
             max_healthy_percentage: ~x"./MaxHealthyPercentage/text()"oi,
             instance_warmup: ~x"./InstanceWarmup/text()"oi,
             checkpoint_delay: ~x"./CheckpointDelay/text()"oi,
-            skip_matching: ~x"./SkipMatching/text()"os,
-            scale_in_protected_instances: ~x"./ScaleInProtectedInstances/text()"os,
-            standby_instances: ~x"./StandbyInstances/text()"os,
+            skip_matching: ~x"./SkipMatching/text()"o |> transform_by(&optional_text/1),
+            scale_in_protected_instances:
+              ~x"./ScaleInProtectedInstances/text()"o |> transform_by(&optional_text/1),
+            standby_instances: ~x"./StandbyInstances/text()"o |> transform_by(&optional_text/1),
             bake_time: ~x"./BakeTime/text()"oi,
             checkpoint_percentages: ~x"./CheckpointPercentages/member/text()"sl,
             alarm_specification: [
@@ -1100,7 +1255,7 @@ defmodule AwsSDK.AutoScaling do
               alarms: ~x"./Alarms/member/text()"sl
             ]
           ],
-          strategy: ~x"./Strategy/text()"os,
+          strategy: ~x"./Strategy/text()"o |> transform_by(&optional_text/1),
           progress_details: [
             ~x"./ProgressDetails"o,
             live_pool_progress: [
@@ -1118,59 +1273,147 @@ defmodule AwsSDK.AutoScaling do
             ~x"./RollbackDetails"o,
             instances_to_update_on_rollback: ~x"./InstancesToUpdateOnRollback/text()"oi,
             percentage_complete_on_rollback: ~x"./PercentageCompleteOnRollback/text()"oi,
-            rollback_reason: ~x"./RollbackReason/text()"os,
-            rollback_start_time: ~x"./RollbackStartTime/text()"os
+            rollback_reason: ~x"./RollbackReason/text()"o |> transform_by(&optional_text/1),
+            rollback_start_time: ~x"./RollbackStartTime/text()"o |> transform_by(&optional_text/1)
           ],
           desired_configuration: [
             ~x"./DesiredConfiguration"o,
             launch_template: [
               ~x"./LaunchTemplate"o,
-              launch_template_id: ~x"./LaunchTemplateId/text()"os,
-              launch_template_name: ~x"./LaunchTemplateName/text()"os,
-              version: ~x"./Version/text()"os
+              launch_template_id:
+                ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+              launch_template_name:
+                ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+              version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
             ],
             mixed_instances_policy: [
               ~x"./MixedInstancesPolicy"o,
               instances_distribution: [
                 ~x"./InstancesDistribution"o,
-                on_demand_allocation_strategy: ~x"./OnDemandAllocationStrategy/text()"os,
+                on_demand_allocation_strategy:
+                  ~x"./OnDemandAllocationStrategy/text()"o |> transform_by(&optional_text/1),
                 on_demand_base_capacity: ~x"./OnDemandBaseCapacity/text()"oi,
                 on_demand_percentage_above_base_capacity:
                   ~x"./OnDemandPercentageAboveBaseCapacity/text()"oi,
-                spot_allocation_strategy: ~x"./SpotAllocationStrategy/text()"os,
+                spot_allocation_strategy:
+                  ~x"./SpotAllocationStrategy/text()"o |> transform_by(&optional_text/1),
                 spot_instance_pools: ~x"./SpotInstancePools/text()"oi,
-                spot_max_price: ~x"./SpotMaxPrice/text()"os
+                spot_max_price: ~x"./SpotMaxPrice/text()"o |> transform_by(&optional_text/1)
               ],
               launch_template: [
                 ~x"./LaunchTemplate"o,
                 launch_template_specification: [
                   ~x"./LaunchTemplateSpecification"o,
-                  launch_template_id: ~x"./LaunchTemplateId/text()"os,
-                  launch_template_name: ~x"./LaunchTemplateName/text()"os,
-                  version: ~x"./Version/text()"os
+                  launch_template_id:
+                    ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+                  launch_template_name:
+                    ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+                  version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
                 ],
                 overrides: [
                   ~x"./Overrides/member"l,
-                  instance_type: ~x"./InstanceType/text()"os,
-                  image_id: ~x"./ImageId/text()"os,
-                  weighted_capacity: ~x"./WeightedCapacity/text()"os,
+                  instance_type: ~x"./InstanceType/text()"o |> transform_by(&optional_text/1),
+                  image_id: ~x"./ImageId/text()"o |> transform_by(&optional_text/1),
+                  weighted_capacity:
+                    ~x"./WeightedCapacity/text()"o |> transform_by(&optional_text/1),
+                  instance_requirements: [
+                    ~x"./InstanceRequirements"o,
+                    v_cpu_count: [
+                      ~x"./VCpuCount"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    memory_mi_b: [
+                      ~x"./MemoryMiB"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    cpu_manufacturers: ~x"./CpuManufacturers/member/text()"sl,
+                    memory_gi_b_per_v_cpu: [
+                      ~x"./MemoryGiBPerVCpu"o,
+                      min: ~x"./Min/text()"of,
+                      max: ~x"./Max/text()"of
+                    ],
+                    excluded_instance_types: ~x"./ExcludedInstanceTypes/member/text()"sl,
+                    instance_generations: ~x"./InstanceGenerations/member/text()"sl,
+                    spot_max_price_percentage_over_lowest_price:
+                      ~x"./SpotMaxPricePercentageOverLowestPrice/text()"oi,
+                    max_spot_price_as_percentage_of_optimal_on_demand_price:
+                      ~x"./MaxSpotPriceAsPercentageOfOptimalOnDemandPrice/text()"oi,
+                    on_demand_max_price_percentage_over_lowest_price:
+                      ~x"./OnDemandMaxPricePercentageOverLowestPrice/text()"oi,
+                    bare_metal: ~x"./BareMetal/text()"o |> transform_by(&optional_text/1),
+                    burstable_performance:
+                      ~x"./BurstablePerformance/text()"o |> transform_by(&optional_text/1),
+                    require_hibernate_support:
+                      ~x"./RequireHibernateSupport/text()"o |> transform_by(&optional_text/1),
+                    network_interface_count: [
+                      ~x"./NetworkInterfaceCount"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    local_storage: ~x"./LocalStorage/text()"o |> transform_by(&optional_text/1),
+                    local_storage_types: ~x"./LocalStorageTypes/member/text()"sl,
+                    total_local_storage_g_b: [
+                      ~x"./TotalLocalStorageGB"o,
+                      min: ~x"./Min/text()"of,
+                      max: ~x"./Max/text()"of
+                    ],
+                    baseline_ebs_bandwidth_mbps: [
+                      ~x"./BaselineEbsBandwidthMbps"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    accelerator_types: ~x"./AcceleratorTypes/member/text()"sl,
+                    accelerator_count: [
+                      ~x"./AcceleratorCount"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    accelerator_manufacturers: ~x"./AcceleratorManufacturers/member/text()"sl,
+                    accelerator_names: ~x"./AcceleratorNames/member/text()"sl,
+                    accelerator_total_memory_mi_b: [
+                      ~x"./AcceleratorTotalMemoryMiB"o,
+                      min: ~x"./Min/text()"oi,
+                      max: ~x"./Max/text()"oi
+                    ],
+                    network_bandwidth_gbps: [
+                      ~x"./NetworkBandwidthGbps"o,
+                      min: ~x"./Min/text()"of,
+                      max: ~x"./Max/text()"of
+                    ],
+                    allowed_instance_types: ~x"./AllowedInstanceTypes/member/text()"sl,
+                    baseline_performance_factors: [
+                      ~x"./BaselinePerformanceFactors"o,
+                      cpu: [
+                        ~x"./Cpu"o,
+                        references: [
+                          ~x"./References/member"l,
+                          instance_family:
+                            ~x"./InstanceFamily/text()"o |> transform_by(&optional_text/1)
+                        ]
+                      ]
+                    ]
+                  ],
                   launch_template_specification: [
                     ~x"./LaunchTemplateSpecification"o,
-                    launch_template_id: ~x"./LaunchTemplateId/text()"os,
-                    launch_template_name: ~x"./LaunchTemplateName/text()"os,
-                    version: ~x"./Version/text()"os
+                    launch_template_id:
+                      ~x"./LaunchTemplateId/text()"o |> transform_by(&optional_text/1),
+                    launch_template_name:
+                      ~x"./LaunchTemplateName/text()"o |> transform_by(&optional_text/1),
+                    version: ~x"./Version/text()"o |> transform_by(&optional_text/1)
                   ]
                 ]
               ]
             ]
           ]
         ],
-        next_token: ~x"./NextToken/text()"s
+        next_token: ~x"./NextToken/text()"o |> transform_by(&optional_text/1)
       )
 
     %{
       instance_refreshes: result.instance_refreshes,
-      next_token: nilify(result.next_token)
+      next_token: result.next_token
     }
   end
 
@@ -1205,17 +1448,16 @@ defmodule AwsSDK.AutoScaling do
         progress: ~x"./Progress/text()"oi,
         status_code: ~x"./StatusCode/text()"s,
         start_time: ~x"./StartTime/text()"s,
-        end_time: ~x"./EndTime/text()"os,
-        status_message: ~x"./StatusMessage/text()"os,
-        auto_scaling_group_arn: ~x"./AutoScalingGroupARN/text()"os,
-        auto_scaling_group_state: ~x"./AutoScalingGroupState/text()"os
+        end_time: ~x"./EndTime/text()"o |> transform_by(&optional_text/1),
+        status_message: ~x"./StatusMessage/text()"o |> transform_by(&optional_text/1),
+        auto_scaling_group_arn:
+          ~x"./AutoScalingGroupARN/text()"o |> transform_by(&optional_text/1),
+        auto_scaling_group_state:
+          ~x"./AutoScalingGroupState/text()"o |> transform_by(&optional_text/1)
       )
 
     %{activity: activity}
   end
-
-  defp nilify(""), do: nil
-  defp nilify(other), do: other
 
   # ---------------------------------------------------------------------------
   # Sandbox delegation
@@ -1336,4 +1578,8 @@ defmodule AwsSDK.AutoScaling do
       end
     end)
   end
+
+  # An absent element has no text node; report it as nil rather than "".
+  defp optional_text(nil), do: nil
+  defp optional_text(chars), do: List.to_string(chars)
 end

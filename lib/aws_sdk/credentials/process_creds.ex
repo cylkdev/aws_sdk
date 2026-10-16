@@ -26,7 +26,9 @@ defmodule AwsSDK.Credentials.ProcessCreds do
           secret_access_key: String.t(),
           security_token: String.t() | nil,
           expires_at: DateTime.t() | nil,
-          source: atom
+          source: atom,
+          process_output: map,
+          process: map
         }
 
   @doc """
@@ -42,11 +44,13 @@ defmodule AwsSDK.Credentials.ProcessCreds do
       #=>    secret_access_key: "...",
       #=>    security_token: "IQoJb3JpZ2luX2VjEJr...",
       #=>    expires_at: ~U[2026-01-01 01:00:00Z],
-      #=>    source: :credential_process
+      #=>    source: :credential_process,
+      #=>    process_output: %{"Version" => 1, "AccessKeyId" => "ASIA1EXAMPLE", ...},
+      #=>    process: %{command: "aws-vault", stdout: "{...}", stderr: "", exit_status: 0, ...}
       #=>  }}
 
       AwsSDK.Credentials.ProcessCreds.run("false", :credential_process)
-      #=> {:error, :no_credentials}
+      #=> {:error, {:credential_process_failed, 1, %{command: "false", stdout: "", stderr: "", exit_status: 1, args: []}}}
 
   Runs the command and reads AWS's documented JSON contract from stdout
   (`Version`, `AccessKeyId`, `SecretAccessKey`, `SessionToken`,
@@ -57,24 +61,67 @@ defmodule AwsSDK.Credentials.ProcessCreds do
   def run(command, source) when is_binary(command) and is_atom(source) do
     [bin | args] = OptionParser.split(command)
 
-    case System.cmd(bin, args, stderr_to_stdout: true) do
-      {output, 0} -> parse(output, source)
-      {output, status} -> {:error, {:credential_process_failed, status, String.trim(output)}}
+    case cmd(bin, args) do
+      %{exit_status: 0} = result -> parse(result, source)
+      %{exit_status: status} = result -> {:error, {:credential_process_failed, status, result}}
     end
   rescue
-    err -> {:error, {:credential_process_failed, :exception, Exception.message(err)}}
+    err -> {:error, {:credential_process_failed, :exception, err}}
   end
 
-  defp parse(output, source) do
-    case decode_json(output) do
+  @doc """
+  Runs `bin` with `args` and returns stdout and stderr as separate facts.
+
+  `System.cmd/3` can only capture stderr by merging it into stdout, so the
+  command runs under `sh` with stderr redirected to a temporary file, which
+  is read back and removed. `:stderr` is `{:error, reason}` if that file
+  could not be read. Requires a POSIX `sh`.
+
+  ## Examples
+
+      AwsSDK.Credentials.ProcessCreds.cmd("ls", ["/nope"])
+      #=> %{command: "ls", args: ["/nope"], stdout: "",
+      #=>   stderr: "ls: /nope: No such file or directory\n", exit_status: 1}
+  """
+  @spec cmd(String.t(), [String.t()]) :: %{
+          command: String.t(),
+          args: [String.t()],
+          stdout: binary,
+          stderr: binary | {:error, File.posix()},
+          exit_status: non_neg_integer
+        }
+  def cmd(bin, args) do
+    stderr_path =
+      Path.join(System.tmp_dir!(), "aws_sdk_stderr_#{System.unique_integer([:positive])}")
+
+    try do
+      {stdout, status} =
+        System.cmd("sh", ["-c", ~s(exec "$0" "$@" 2>"$AWS_SDK_STDERR_PATH"), bin | args],
+          env: [{"AWS_SDK_STDERR_PATH", stderr_path}]
+        )
+
+      stderr =
+        case File.read(stderr_path) do
+          {:ok, contents} -> contents
+          {:error, _} = error -> error
+        end
+
+      %{command: bin, args: args, stdout: stdout, stderr: stderr, exit_status: status}
+    after
+      File.rm(stderr_path)
+    end
+  end
+
+  defp parse(result, source) do
+    case decode_json(result.stdout) do
       {:ok, %{"Version" => 1} = body} ->
-        build(body, source)
+        build(body, result, source)
 
       {:ok, body} ->
-        {:error, {:credential_process_invalid, {:unsupported_version, body["Version"]}}}
+        {:error, {:credential_process_invalid, {:unsupported_version, body["Version"]}, result}}
 
       {:error, reason} ->
-        {:error, {:credential_process_invalid, reason}}
+        {:error, {:credential_process_invalid, reason, result}}
     end
   end
 
@@ -84,24 +131,29 @@ defmodule AwsSDK.Credentials.ProcessCreds do
     err -> {:error, Exception.message(err)}
   end
 
-  defp build(body, source) do
-    with {:ok, ak} <- fetch_string(body, "AccessKeyId"),
-         {:ok, sk} <- fetch_string(body, "SecretAccessKey") do
+  defp build(body, result, source) do
+    with {:ok, ak} <- fetch_string(body, "AccessKeyId", result),
+         {:ok, sk} <- fetch_string(body, "SecretAccessKey", result) do
       {:ok,
        %{
          access_key_id: ak,
          secret_access_key: sk,
          security_token: optional_string(body, "SessionToken"),
          expires_at: parse_expiration(body["Expiration"]),
-         source: source
+         source: source,
+         # The process's full JSON output, including `Version` and any
+         # fields beyond the documented ones.
+         process_output: AwsSDK.Credentials.Secrets.strip(body),
+         # The raw run: command, args, stdout, stderr and exit status.
+         process: AwsSDK.Credentials.Secrets.strip(result)
        }}
     end
   end
 
-  defp fetch_string(body, key) do
+  defp fetch_string(body, key, result) do
     case Map.get(body, key) do
       v when is_binary(v) and v !== "" -> {:ok, v}
-      _ -> {:error, {:missing_field, key}}
+      _ -> {:error, {:credential_process_invalid, {:missing_field, key}, result}}
     end
   end
 

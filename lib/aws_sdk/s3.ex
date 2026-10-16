@@ -119,8 +119,6 @@ defmodule AwsSDK.S3 do
     Signer
   }
 
-  alias ExUtils.Serializer
-
   @service "s3"
   @sixty_four_mib 64 * 1_024 * 1_024
   @one_gib 1 * 1_024 * 1_024 * 1_024
@@ -146,32 +144,36 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.list_buckets()
-      {:ok, [%{name: "my-bucket", creation_date: "2024-01-01T00:00:00.000Z"}]}
+      {:ok, %{body: %{buckets: %{bucket: [%{name: "my-bucket", ...}]}, ...}, headers: %{...}}}
 
   ## Examples
 
       AwsSDK.S3.list_buckets()
       #=> {:ok,
       #=>  %{
-      #=>    buckets: %{
-      #=>      bucket: [
-      #=>        %{
-      #=>          name: "uploads-bucket",
-      #=>          creation_date: "2026-01-01T00:00:00.000Z",
-      #=>          bucket_region: "us-east-1",
-      #=>          bucket_arn: ""
-      #=>        }
-      #=>      ]
+      #=>    body: %{
+      #=>      buckets: %{
+      #=>        bucket: [
+      #=>          %{
+      #=>            name: "uploads-bucket",
+      #=>            creation_date: "2026-01-01T00:00:00.000Z",
+      #=>            bucket_region: "us-east-1",
+      #=>            bucket_arn: nil
+      #=>          }
+      #=>        ]
+      #=>      },
+      #=>      owner: %{id: "abc123...", display_name: "example"},
+      #=>      continuation_token: nil,
+      #=>      prefix: nil
       #=>    },
-      #=>    owner: %{id: "abc123...", display_name: "example"},
-      #=>    continuation_token: "",
-      #=>    prefix: ""
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   `<Buckets>` is a wrapper element holding repeated `<Bucket>` entries, so
   the list sits under `buckets.bucket`.
   """
-  @spec list_buckets(opts :: keyword()) :: {:ok, list()} | {:error, term()}
+  @spec list_buckets(opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_buckets(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_buckets_response(opts)
@@ -206,11 +208,11 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.create_bucket("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
       # Outside us-east-1 the region must be declared in the body.
       AwsSDK.S3.create_bucket("uploads-bucket", region: "eu-west-1")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
   """
   @spec create_bucket(bucket :: binary(), opts :: keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -245,7 +247,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.delete_bucket("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   The bucket must be empty.
   """
@@ -290,7 +292,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.head_bucket("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
       AwsSDK.S3.head_bucket("does-not-exist")
       #=> {:error, %ErrorMessage{code: :not_found, message: "resource not found."}}
@@ -351,14 +353,14 @@ defmodule AwsSDK.S3 do
       AwsSDK.S3.put_object("uploads-bucket", "reports/jan.csv", "id,total\n1,42\n",
         content_type: "text/csv"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
       # Server-side encryption with a KMS key.
       AwsSDK.S3.put_object("uploads-bucket", "secret.txt", "...",
         server_side_encryption: "aws:kms",
         ssekms_key_id: "arn:aws:kms:us-east-1:123456789012:key/abc"
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   S3 returns the ETag in a header rather than a body, so the result map is
   empty on success.
@@ -407,12 +409,11 @@ defmodule AwsSDK.S3 do
       AwsSDK.S3.head_object("uploads-bucket", "reports/jan.csv")
       #=> {:ok,
       #=>  %{
-      #=>    headers: [
-      #=>      {"content-length", "18"},
-      #=>      {"content-type", "text/csv"},
-      #=>      {"etag", "\"9a0364b9e99bb480dd25e1f0284c8555\""},
-      #=>      {"last-modified", "Thu, 01 Jan 2026 00:00:00 GMT"}
-      #=>    ]
+      #=>    content_length: "18",
+      #=>    content_type: "text/csv",
+      #=>    etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
+      #=>    last_modified: "Thu, 01 Jan 2026 00:00:00 GMT",
+      #=>    ...
       #=>  }}
 
   Metadata only -- HEAD never returns the body. Use this to check existence
@@ -450,17 +451,17 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.delete_object("my-bucket", "my-key")
-      {:ok, ""}
+      {:ok, %{x_amz_delete_marker: "true", x_amz_version_id: "3HL4kqtJ..."}}
 
   ## Examples
 
       AwsSDK.S3.delete_object("uploads-bucket", "reports/jan.csv")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_version_id: "null", ...}}
 
   Deleting a key that does not exist also succeeds; S3 treats it as a no-op.
   """
   @spec delete_object(bucket :: binary(), key :: binary(), opts :: keyword()) ::
-          {:ok, term()} | {:error, term()}
+          {:ok, map()} | {:error, term()}
   def delete_object(bucket, key, opts \\ []) do
     if sandbox?(opts) do
       sandbox_delete_object_response(bucket, key, opts)
@@ -487,15 +488,18 @@ defmodule AwsSDK.S3 do
       AwsSDK.S3.delete_objects("my-bucket", ["a.txt", %{key: "b.txt", version_id: "v1"}])
       #=> {:ok,
       #=>  %{
-      #=>    deleted: [
-      #=>      %{key: "a.txt", version_id: "", delete_marker: false, delete_marker_version_id: ""},
-      #=>      %{key: "b.txt", version_id: "v1", delete_marker: false, delete_marker_version_id: ""}
-      #=>    ],
-      #=>    error: []
+      #=>    body: %{
+      #=>      deleted: [
+      #=>        %{key: "a.txt", version_id: nil, delete_marker: false, delete_marker_version_id: nil},
+      #=>        %{key: "b.txt", version_id: "v1", delete_marker: false, delete_marker_version_id: nil}
+      #=>      ],
+      #=>      error: []
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
   """
   @spec delete_objects(bucket :: String.t(), objects :: [String.t() | map()], opts :: keyword()) ::
-          {:ok, %{deleted: [map()], error: [map()]}} | {:error, term()}
+          {:ok, %{body: %{deleted: [map()], error: [map()]}, headers: map()}} | {:error, term()}
   def delete_objects(bucket, [_ | _] = objects, opts \\ []) when is_binary(bucket) do
     if sandbox?(opts) do
       sandbox_delete_objects_response(bucket, objects, opts)
@@ -526,23 +530,23 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.get_object("my-bucket", "my-key")
-      {:ok, <<binary_content>>}
+      {:ok, %{body: <<binary_content>>, headers: %{content_type: "text/plain", etag: "..."}}}
 
   ## Examples
 
       AwsSDK.S3.get_object("uploads-bucket", "reports/jan.csv")
-      #=> {:ok, %{body: "id,total\n1,42\n", headers: [{"content-type", "text/csv"}]}}
+      #=> {:ok, %{body: "id,total\n1,42\n", headers: %{content_type: "text/csv", ...}}}
 
       # Fetch a byte range.
       AwsSDK.S3.get_object("uploads-bucket", "big.bin", range: "bytes=0-1023")
-      #=> {:ok, %{body: <<...1024 bytes...>>, headers: [...]}}
+      #=> {:ok, %{body: <<...1024 bytes...>>, headers: %{content_range: "bytes 0-1023/4096", ...}}}
 
       # Stream to disk instead of buffering in memory.
       AwsSDK.S3.get_object("uploads-bucket", "big.bin", stream_to: "/tmp/big.bin")
-      #=> {:ok, %{path: "/tmp/big.bin", headers: [...]}}
+      #=> {:ok, %{path: "/tmp/big.bin", headers: %{...}}}
   """
   @spec get_object(bucket :: binary(), key :: binary(), opts :: keyword()) ::
-          {:ok, binary()} | {:error, term()}
+          {:ok, %{body: binary() | term(), headers: map()}} | {:error, term()}
   def get_object(bucket, key, opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_object_response(bucket, key, opts)
@@ -580,33 +584,36 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.list_objects("my-bucket")
-      {:ok, [%{key: "my-key", size: "1234", ...}]}
+      {:ok, %{body: %{contents: [%{key: "my-key", size: 1234, ...}], ...}, headers: %{...}}}
 
   ## Examples
 
       AwsSDK.S3.list_objects("uploads-bucket", prefix: "reports/", delimiter: "/")
       #=> {:ok,
       #=>  %{
-      #=>    name: "uploads-bucket",
-      #=>    prefix: "reports/",
-      #=>    delimiter: "/",
-      #=>    key_count: 1,
-      #=>    max_keys: 1000,
-      #=>    is_truncated: false,
-      #=>    continuation_token: nil,
-      #=>    next_continuation_token: nil,
-      #=>    contents: [
-      #=>      %{
-      #=>        key: "reports/jan.csv",
-      #=>        last_modified: "2026-01-01T00:00:00.000Z",
-      #=>        etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
-      #=>        size: 18,
-      #=>        storage_class: "STANDARD",
-      #=>        owner: nil,
-      #=>        restore_status: nil
-      #=>      }
-      #=>    ],
-      #=>    common_prefixes: [%{prefix: "reports/2025/"}]
+      #=>    body: %{
+      #=>      name: "uploads-bucket",
+      #=>      prefix: "reports/",
+      #=>      delimiter: "/",
+      #=>      key_count: 1,
+      #=>      max_keys: 1000,
+      #=>      is_truncated: false,
+      #=>      continuation_token: nil,
+      #=>      next_continuation_token: nil,
+      #=>      contents: [
+      #=>        %{
+      #=>          key: "reports/jan.csv",
+      #=>          last_modified: "2026-01-01T00:00:00.000Z",
+      #=>          etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
+      #=>          size: 18,
+      #=>          storage_class: "STANDARD",
+      #=>          owner: nil,
+      #=>          restore_status: nil
+      #=>        }
+      #=>      ],
+      #=>      common_prefixes: [%{prefix: "reports/2025/"}]
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   Each `:common_prefixes` entry is a `CommonPrefix` structure with a
@@ -614,7 +621,7 @@ defmodule AwsSDK.S3 do
   `:next_continuation_token` back as `:continuation_token`.
   """
   @spec list_objects(bucket :: binary(), opts :: keyword()) ::
-          {:ok, list()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def list_objects(bucket, opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_objects_response(bucket, opts)
@@ -648,17 +655,20 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.copy_object("dest-bucket", "dest-key", "src-bucket", "src-key")
-      {:ok, %{etag: "...", last_modified: "..."}}
+      {:ok, %{body: %{etag: "...", last_modified: "..."}, headers: %{x_amz_version_id: "...", ...}}}
 
   ## Examples
 
       AwsSDK.S3.copy_object("archive-bucket", "2026/jan.csv", "uploads-bucket", "reports/jan.csv")
       #=> {:ok,
       #=>  %{
-      #=>    etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
-      #=>    last_modified: "2026-02-01T00:00:00.000Z",
-      #=>    checksum_crc32: nil,
-      #=>    checksum_sha256: nil
+      #=>    body: %{
+      #=>      etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
+      #=>      last_modified: "2026-02-01T00:00:00.000Z",
+      #=>      checksum_crc32: nil,
+      #=>      checksum_sha256: nil
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   Arguments are destination first, then source. Single-request copy is
@@ -841,7 +851,7 @@ defmodule AwsSDK.S3 do
 
   ## Examples
 
-      {:ok, %{upload_id: upload_id}} =
+      {:ok, %{body: %{upload_id: upload_id}}} =
         AwsSDK.S3.create_multipart_upload("uploads-bucket", "big.bin")
 
       AwsSDK.S3.presign_part("uploads-bucket", "big.bin", upload_id, 1, expires_in: 3600)
@@ -891,7 +901,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.create_multipart_upload("my-bucket", "my-key")
-      {:ok, %{upload_id: "...", bucket: "my-bucket", key: "my-key"}}
+      {:ok, %{body: %{upload_id: "...", bucket: "my-bucket", key: "my-key"}, headers: %{...}}}
 
   ## Examples
 
@@ -900,9 +910,12 @@ defmodule AwsSDK.S3 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    bucket: "uploads-bucket",
-      #=>    key: "big.bin",
-      #=>    upload_id: "2~kTXQPYyIB8aQ0uQ8sYqLpXQ0nD8fEXAMPLE"
+      #=>    body: %{
+      #=>      bucket: "uploads-bucket",
+      #=>      key: "big.bin",
+      #=>      upload_id: "2~kTXQPYyIB8aQ0uQ8sYqLpXQ0nD8fEXAMPLE"
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   An upload holds storage until completed or aborted; pair this with
@@ -944,12 +957,12 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.abort_multipart_upload("my-bucket", "my-key", "upload-id")
-      {:ok, %{}}
+      {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   ## Examples
 
       AwsSDK.S3.abort_multipart_upload("uploads-bucket", "big.bin", upload_id)
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   Frees the parts already uploaded. Safe to call after a partial failure.
   """
@@ -997,7 +1010,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.upload_part("uploads-bucket", "big.bin", upload_id, 1, part_body)
-      #=> {:ok, %{etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"", part_number: 1}}
+      #=> {:ok, %{etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"", x_amz_request_id: "...", ...}}
 
   Keep every `:etag` -- `complete_multipart_upload/4` needs the full list.
   Each part must be at least 5 MB except the last.
@@ -1042,31 +1055,34 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.list_parts("my-bucket", "my-key", "upload-id")
-      {:ok, %{parts: [%{part_number: "1", size: "5242880", etag: "..."}], ...}}
+      {:ok, %{body: %{parts: [%{part_number: 1, size: 5242880, etag: "..."}], ...}, headers: %{...}}}
 
   ## Examples
 
       AwsSDK.S3.list_parts("uploads-bucket", "big.bin", upload_id)
       #=> {:ok,
       #=>  %{
-      #=>    bucket: "uploads-bucket",
-      #=>    key: "big.bin",
-      #=>    upload_id: "2~kTXQPYyIB8aQ0uQ8sYqLpXQ0nD8fEXAMPLE",
-      #=>    max_parts: 1000,
-      #=>    is_truncated: false,
-      #=>    part_number_marker: nil,
-      #=>    next_part_number_marker: nil,
-      #=>    storage_class: "STANDARD",
-      #=>    initiator: %{id: "abc123...", display_name: "example"},
-      #=>    owner: %{id: "abc123...", display_name: "example"},
-      #=>    parts: [
-      #=>      %{
-      #=>        part_number: 1,
-      #=>        size: 5_242_880,
-      #=>        etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
-      #=>        last_modified: "2026-01-01T00:00:00.000Z"
-      #=>      }
-      #=>    ]
+      #=>    body: %{
+      #=>      bucket: "uploads-bucket",
+      #=>      key: "big.bin",
+      #=>      upload_id: "2~kTXQPYyIB8aQ0uQ8sYqLpXQ0nD8fEXAMPLE",
+      #=>      max_parts: 1000,
+      #=>      is_truncated: false,
+      #=>      part_number_marker: nil,
+      #=>      next_part_number_marker: nil,
+      #=>      storage_class: "STANDARD",
+      #=>      initiator: %{id: "abc123...", display_name: "example"},
+      #=>      owner: %{id: "abc123...", display_name: "example"},
+      #=>      parts: [
+      #=>        %{
+      #=>          part_number: 1,
+      #=>          size: 5_242_880,
+      #=>          etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
+      #=>          last_modified: "2026-01-01T00:00:00.000Z"
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   Useful for resuming: fetch the parts already stored, then upload only the
@@ -1115,7 +1131,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.copy_part("dest-bucket", "dest-key", "src-bucket", "src-key", "upload-id", 1, 0..1048575)
-      {:ok, %{etag: "...", last_modified: "..."}}
+      {:ok, %{body: %{etag: "...", last_modified: "..."}, headers: %{x_amz_version_id: "...", ...}}}
 
   ## Examples
 
@@ -1130,8 +1146,11 @@ defmodule AwsSDK.S3 do
       )
       #=> {:ok,
       #=>  %{
-      #=>    etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
-      #=>    last_modified: "2026-02-01T00:00:00.000Z"
+      #=>    body: %{
+      #=>      etag: "\"9a0364b9e99bb480dd25e1f0284c8555\"",
+      #=>      last_modified: "2026-02-01T00:00:00.000Z"
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   Copies a byte range server-side, so the data never passes through this
@@ -1220,7 +1239,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.copy_parts("dest-bucket", "dest-key", "src-bucket", "src-key", "upload-id", 67_108_864)
-      {:ok, [{1, "etag1"}, {2, "etag2"}]}
+      {:ok, [{%{body: %{etag: "etag1", ...}, headers: %{...}}, 1}, ...]}
 
   ## Examples
 
@@ -1234,12 +1253,14 @@ defmodule AwsSDK.S3 do
       )
       #=> {:ok,
       #=>  [
-      #=>    %{part_number: 1, etag: "\"9a0364...\""},
-      #=>    %{part_number: 2, etag: "\"b1c2d3...\""}
+      #=>    {%{body: %{etag: "\"9a0364...\"", ...}, headers: %{...}}, 1},
+      #=>    {%{body: %{etag: "\"b1c2d3...\"", ...}, headers: %{...}}, 2}
       #=>  ]}
 
-  Splits the source by the given byte size and copies each range. Feed the
-  result straight to `complete_multipart_upload/4`.
+  Splits the source by the given byte size and copies each range. Each
+  element is `{copy_part_result, part_number}`. If any part fails, returns
+  `{:error, %{copied: [successful elements], failed: [{error, part_number}]}}`
+  so the parts that did copy are not lost.
   """
   @spec copy_parts(
           dest_bucket :: binary(),
@@ -1249,7 +1270,7 @@ defmodule AwsSDK.S3 do
           upload_id :: binary(),
           content_length :: integer(),
           opts :: keyword()
-        ) :: {:ok, list()} | {:error, list()}
+        ) :: {:ok, list()} | {:error, %{copied: list(), failed: list()}}
   def copy_parts(
         dest_bucket,
         dest_key,
@@ -1313,21 +1334,40 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.copy_object_multipart("dest-bucket", "dest-key", "src-bucket", "src-key")
-      {:ok, %{location: "...", bucket: "dest-bucket", key: "dest-key", etag: "..."}}
+      {:ok,
+       %{
+         head_object: %{content_length: "...", ...},
+         create_multipart_upload: %{body: %{upload_id: "...", ...}, headers: %{...}},
+         copy_parts: [{%{body: %{etag: "..."}, headers: %{...}}, 1}, ...],
+         complete_multipart_upload: %{complete_multipart_upload: %{body: %{etag: "..."}, headers: %{...}}}
+       }}
 
   ## Examples
 
       AwsSDK.S3.copy_object_multipart("archive-bucket", "2026/big.bin", "uploads-bucket", "big.bin")
       #=> {:ok,
       #=>  %{
-      #=>    location: "https://archive-bucket.s3.us-east-1.amazonaws.com/2026/big.bin",
-      #=>    bucket: "archive-bucket",
-      #=>    key: "2026/big.bin",
-      #=>    etag: "\"9a0364b9e99bb480dd25e1f0284c8555-2\""
+      #=>    head_object: %{content_length: "104857600", ...},
+      #=>    create_multipart_upload: %{body: %{upload_id: "2~kTXQ...", ...}, headers: %{...}},
+      #=>    copy_parts: [{%{body: %{etag: "\"9a03...\""}, headers: %{...}}, 1}, ...],
+      #=>    complete_multipart_upload: %{
+      #=>      complete_multipart_upload: %{
+      #=>        body: %{
+      #=>          location: "https://archive-bucket.s3.us-east-1.amazonaws.com/2026/big.bin",
+      #=>          bucket: "archive-bucket",
+      #=>          key: "2026/big.bin",
+      #=>          etag: "\"9a0364b9e99bb480dd25e1f0284c8555-2\""
+      #=>        },
+      #=>        headers: %{x_amz_version_id: "...", ...}
+      #=>      }
+      #=>    }
       #=>  }}
 
-  Runs the whole create/copy-parts/complete cycle, aborting the upload if
-  any part fails. Use this for objects over 5 GB, which `copy_object/5`
+  Runs the whole head/create/copy-parts/complete cycle and returns each
+  call's result under its own key. If copying or completing fails, the upload
+  is aborted and the result is `{:error, %{...}}` holding every call made: the
+  failing call's `{:error, _}` under its key and the abort's result under
+  `:abort_multipart_upload`. Use this for objects over 5 GB, which `copy_object/5`
   cannot handle. The trailing `-2` on the ETag is the part count.
   """
   @spec copy_object_multipart(
@@ -1384,7 +1424,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.complete_multipart_upload("my-bucket", "my-key", "upload-id", [{1, "etag1"}, {2, "etag2"}])
-      {:ok, %{location: "...", bucket: "my-bucket", key: "my-key", etag: "..."}}
+      {:ok, %{complete_multipart_upload: %{body: %{location: "...", etag: "...", ...}, headers: %{...}}}}
 
   ## Examples
 
@@ -1394,11 +1434,22 @@ defmodule AwsSDK.S3 do
       ])
       #=> {:ok,
       #=>  %{
-      #=>    location: "https://uploads-bucket.s3.us-east-1.amazonaws.com/big.bin",
-      #=>    bucket: "uploads-bucket",
-      #=>    key: "big.bin",
-      #=>    etag: "\"9a0364b9e99bb480dd25e1f0284c8555-2\""
+      #=>    complete_multipart_upload: %{
+      #=>      body: %{
+      #=>        location: "https://uploads-bucket.s3.us-east-1.amazonaws.com/big.bin",
+      #=>        bucket: "uploads-bucket",
+      #=>        key: "big.bin",
+      #=>        etag: "\"9a0364b9e99bb480dd25e1f0284c8555-2\""
+      #=>      },
+      #=>      headers: %{x_amz_version_id: "...", ...}
+      #=>    }
       #=>  }}
+
+  Each call made is reported under its own key: `:complete_multipart_upload`
+  always, `:list_parts` (every page) when `:max_size` is set, and
+  `:head_object` when `:content_type` is set. A failed validation's
+  `ErrorMessage` details carry those same call results (plus
+  `:delete_object` when `on_content_type_mismatch: :delete` ran).
 
   Parts must be listed in ascending `:part_number` order. This operation can
   return a 200 whose body is an `<Error>`; that is surfaced as
@@ -1428,12 +1479,18 @@ defmodule AwsSDK.S3 do
   the EventBridge rule level via event patterns. Existing notification configurations
   (SNS, SQS, Lambda) are preserved.
 
-  Idempotent — returns `{:ok, %{}}` if EventBridge is already enabled.
+  Returns `%{get_bucket_notification_configuration: %{body: ..., headers: ...}, put_bucket_notification_configuration: %{headers: ...}}`.
+  Idempotent — if EventBridge is already enabled, no PUT is made and the
+  `:put_bucket_notification_configuration` key is absent.
 
   ## Examples
 
       AwsSDK.S3.enable_event_bridge("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok,
+      #=>  %{
+      #=>    get_bucket_notification_configuration: %{body: %{...}, headers: %{...}},
+      #=>    put_bucket_notification_configuration: %{headers: %{x_amz_request_id: "...", ...}}
+      #=>  }}
 
   Required before an EventBridge rule built with
   `AwsSDK.EventBridge.s3_object_created_pattern/1` will match anything.
@@ -1456,12 +1513,18 @@ defmodule AwsSDK.S3 do
 
   Other notification configurations (SNS, SQS, Lambda) are preserved.
 
-  Idempotent — returns `{:ok, %{}}` if EventBridge is not currently enabled.
+  Returns `%{get_bucket_notification_configuration: %{body: ..., headers: ...}, put_bucket_notification_configuration: %{headers: ...}}`.
+  Idempotent — if EventBridge is not currently enabled, no PUT is made and the
+  `:put_bucket_notification_configuration` key is absent.
 
   ## Examples
 
       AwsSDK.S3.disable_event_bridge("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok,
+      #=>  %{
+      #=>    get_bucket_notification_configuration: %{body: %{...}, headers: %{...}},
+      #=>    put_bucket_notification_configuration: %{headers: %{x_amz_request_id: "...", ...}}
+      #=>  }}
 
   Writes an empty configuration, so this also clears any topic, queue or
   Lambda notifications on the bucket.
@@ -1490,19 +1553,22 @@ defmodule AwsSDK.S3 do
       AwsSDK.S3.get_notification_configuration("uploads-bucket")
       #=> {:ok,
       #=>  %{
-      #=>    event_bridge_configuration: %{},
-      #=>    topic_configuration: [],
-      #=>    queue_configuration: [
-      #=>      %{
-      #=>        id: "uploads-to-sqs",
-      #=>        queue: "arn:aws:sqs:us-east-1:123456789012:uploads",
-      #=>        event: ["s3:ObjectCreated:*"],
-      #=>        filter: %{
-      #=>          s3_key: %{filter_rule: [%{name: "prefix", value: "incoming/"}]}
+      #=>    body: %{
+      #=>      event_bridge_configuration: %{},
+      #=>      topic_configuration: [],
+      #=>      queue_configuration: [
+      #=>        %{
+      #=>          id: "uploads-to-sqs",
+      #=>          queue: "arn:aws:sqs:us-east-1:123456789012:uploads",
+      #=>          event: ["s3:ObjectCreated:*"],
+      #=>          filter: %{
+      #=>            s3_key: %{filter_rule: [%{name: "prefix", value: "incoming/"}]}
+      #=>          }
       #=>        }
-      #=>      }
-      #=>    ],
-      #=>    cloud_function_configuration: []
+      #=>      ],
+      #=>      cloud_function_configuration: []
+      #=>    },
+      #=>    headers: %{x_amz_request_id: "...", ...}
       #=>  }}
 
   `:event_bridge_configuration` is `%{}` when EventBridge is enabled and
@@ -1566,7 +1632,7 @@ defmodule AwsSDK.S3 do
         block_public_policy: true,
         restrict_public_buckets: true
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   Only the flags you pass are sent; omitted flags are left at their current
   value rather than being reset to false.
@@ -1620,14 +1686,14 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.put_bucket_encryption("uploads-bucket")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
       AwsSDK.S3.put_bucket_encryption("uploads-bucket",
         sse_algorithm: "aws:kms",
         kms_master_key_id: "arn:aws:kms:us-east-1:123456789012:key/abc",
         bucket_key_enabled: true
       )
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   Defaults to `"AES256"` when no algorithm is given.
   """
@@ -1702,7 +1768,7 @@ defmodule AwsSDK.S3 do
           transitions: [%{days: 90, storage_class: "GLACIER"}]
         }
       ])
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
   Replaces the whole configuration. A rule with no `:status` defaults to
   `"Enabled"`.
@@ -1752,10 +1818,10 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       AwsSDK.S3.put_bucket_versioning("uploads-bucket", "Enabled")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
 
       AwsSDK.S3.put_bucket_versioning("uploads-bucket", "Suspended")
-      #=> {:ok, %{}}
+      #=> {:ok, %{x_amz_request_id: "...", date: "...", ...}}
   """
   @spec put_bucket_versioning(bucket :: binary(), status :: binary(), opts :: keyword()) ::
           {:ok, map()} | {:error, term()}
@@ -1876,8 +1942,12 @@ defmodule AwsSDK.S3 do
       |> maybe_put_query("bucket-region", opts[:bucket_region])
 
     with {:ok, op} <- build_operation(:get, nil, nil, Keyword.put(opts, :query, query)),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_list_buckets(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_list_buckets(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1895,7 +1965,7 @@ defmodule AwsSDK.S3 do
            )}
 
         {:ok, %{headers: headers}} ->
-          {:ok, deserialize_headers(headers, opts)}
+          {:ok, Client.deserialize_headers(headers, opts)}
 
         {:error, _} = error ->
           error
@@ -1912,14 +1982,14 @@ defmodule AwsSDK.S3 do
   defp do_delete_bucket(bucket, opts) do
     with {:ok, op} <- build_operation(:delete, bucket, nil, opts),
          {:ok, %{headers: headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(headers, opts)}
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
   defp do_head_bucket(bucket, opts) do
     with {:ok, op} <- build_operation(:head, bucket, nil, opts),
          {:ok, %{headers: headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(headers, opts)}
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
@@ -1938,7 +2008,7 @@ defmodule AwsSDK.S3 do
            )}
 
         {:ok, %{headers: headers}} ->
-          {:ok, deserialize_headers(headers, opts)}
+          {:ok, Client.deserialize_headers(headers, opts)}
 
         {:error, _} = error ->
           error
@@ -1949,14 +2019,16 @@ defmodule AwsSDK.S3 do
   defp do_head_object(bucket, key, opts) do
     with {:ok, op} <- build_operation(:head, bucket, key, opts),
          {:ok, %{headers: headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(headers, opts)}
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
   defp do_delete_object(bucket, key, opts) do
+    # DeleteObject's output (DeleteMarker, VersionId, RequestCharged) is
+    # carried entirely in response headers; the body is empty.
     with {:ok, op} <- build_operation(:delete, bucket, key, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, body}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
@@ -1967,8 +2039,12 @@ defmodule AwsSDK.S3 do
 
     # S3 requires Content-MD5 on DeleteObjects; xml_body_headers/1 supplies it.
     with {:ok, op} <- build_operation(:post, bucket, nil, request_opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_delete_result(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_delete_result(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1976,8 +2052,12 @@ defmodule AwsSDK.S3 do
     decode_json? = Keyword.get(opts, :decode_json, false)
 
     with {:ok, op} <- build_operation(:get, bucket, key, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, if(decode_json?, do: Jason.decode!(body), else: body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: if(decode_json?, do: Jason.decode!(body), else: body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1988,8 +2068,12 @@ defmodule AwsSDK.S3 do
     # `next_continuation_token`, so a caller silently received at most one
     # page with no way to tell there were more.
     with {:ok, op} <- build_operation(:get, bucket, nil, Keyword.put(opts, :query, query)),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_list_objects(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_list_objects(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2014,10 +2098,10 @@ defmodule AwsSDK.S3 do
              dest_key,
              put_opts(opts, body: "", headers: headers)
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
       case XMLParser.parse_copy_object_result(body) do
         {:error, _} = error -> error
-        result -> {:ok, result}
+        result -> {:ok, %{body: result, headers: Client.deserialize_headers(headers, opts)}}
       end
     end
   end
@@ -2097,8 +2181,12 @@ defmodule AwsSDK.S3 do
              key,
              put_opts(opts, query: %{"uploads" => ""}, body: "", headers: headers)
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_initiate_multipart(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_initiate_multipart(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2123,7 +2211,7 @@ defmodule AwsSDK.S3 do
              Keyword.put(opts, :query, %{"uploadId" => upload_id})
            ),
          {:ok, %{headers: headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(headers, opts)}
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
@@ -2132,7 +2220,7 @@ defmodule AwsSDK.S3 do
 
     with {:ok, op} <- build_operation(:put, bucket, key, put_opts(opts, query: query, body: body)),
          {:ok, %{headers: headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(headers, opts)}
+      {:ok, Client.deserialize_headers(headers, opts)}
     end
   end
 
@@ -2140,8 +2228,12 @@ defmodule AwsSDK.S3 do
     query = maybe_put_query(%{"uploadId" => upload_id}, "part-number-marker", part_number_marker)
 
     with {:ok, op} <- build_operation(:get, bucket, key, Keyword.put(opts, :query, query)),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_list_parts(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_list_parts(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2169,8 +2261,12 @@ defmodule AwsSDK.S3 do
              dest_key,
              put_opts(opts, query: query, body: "", headers: headers)
            ),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, XMLParser.parse_copy_part(body)}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_copy_part(body),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -2214,50 +2310,18 @@ defmodule AwsSDK.S3 do
     |> handle_async_stream_response()
   end
 
+  # Every call made is reported under its own key. On failure the failing
+  # call's `{:error, _}` sits under its key, and because this function created
+  # the upload (so the caller never learned its id), the abort it then makes
+  # is reported under `:abort_multipart_upload`.
   defp do_copy_object_multipart(dest_bucket, dest_key, src_bucket, src_key, opts) do
-    with {:ok, info} <- head_object(src_bucket, src_key, opts),
+    with {:ok, head} <- head_object(src_bucket, src_key, opts),
          {:ok, mpu} <- create_multipart_upload(dest_bucket, dest_key, opts) do
-      content_length = String.to_integer(info.content_length)
+      upload_id = mpu.body.upload_id
+      content_length = String.to_integer(head.content_length)
+      calls = %{head_object: head, create_multipart_upload: mpu}
 
-      result =
-        copy_and_complete(
-          dest_bucket,
-          dest_key,
-          src_bucket,
-          src_key,
-          mpu.upload_id,
-          content_length,
-          opts
-        )
-
-      with {:error, _} = copy_error <- result do
-        abort_after_failed_copy(copy_error, dest_bucket, dest_key, mpu.upload_id, opts)
-      end
-    end
-  end
-
-  # This function creates the upload, so on failure the caller never learns
-  # the upload id and cannot abort it themselves.
-  defp abort_after_failed_copy(copy_error, bucket, key, upload_id, opts) do
-    case abort_multipart_upload(bucket, key, upload_id, opts) do
-      # Cleaned up. Report why the copy failed.
-      {:ok, _} -> copy_error
-      # Not cleaned up: an upload is left billing. That outranks the copy.
-      {:error, _} = abort_error -> abort_error
-    end
-  end
-
-  defp copy_and_complete(
-         dest_bucket,
-         dest_key,
-         src_bucket,
-         src_key,
-         upload_id,
-         content_length,
-         opts
-       ) do
-    with {:ok, parts} <-
-           copy_parts(
+      case copy_parts(
              dest_bucket,
              dest_key,
              src_bucket,
@@ -2266,15 +2330,42 @@ defmodule AwsSDK.S3 do
              content_length,
              opts
            ) do
-      parts
-      |> Enum.map(fn {%{etag: etag}, part_num} -> {part_num, etag} end)
-      |> Enum.sort()
-      |> then(&complete_multipart_upload(dest_bucket, dest_key, upload_id, &1, opts))
+        {:ok, parts} ->
+          calls = Map.put(calls, :copy_parts, parts)
+
+          etags =
+            parts
+            |> Enum.map(fn {%{body: %{etag: etag}}, part_num} -> {part_num, etag} end)
+            |> Enum.sort()
+
+          case complete_multipart_upload(dest_bucket, dest_key, upload_id, etags, opts) do
+            {:ok, complete} ->
+              {:ok, Map.put(calls, :complete_multipart_upload, complete)}
+
+            {:error, _} = error ->
+              calls
+              |> Map.put(:complete_multipart_upload, error)
+              |> abort_after_failed_copy(dest_bucket, dest_key, upload_id, opts)
+          end
+
+        {:error, _} = error ->
+          calls
+          |> Map.put(:copy_parts, error)
+          |> abort_after_failed_copy(dest_bucket, dest_key, upload_id, opts)
+      end
     end
   end
 
+  defp abort_after_failed_copy(calls, bucket, key, upload_id, opts) do
+    abort = abort_multipart_upload(bucket, key, upload_id, opts)
+    {:error, Map.put(calls, :abort_multipart_upload, abort)}
+  end
+
+  # Returns each call under its own key: `:complete_multipart_upload` always,
+  # `:list_parts` (every page) when `:max_size` is set, and `:head_object`
+  # when `:content_type` is set.
   defp do_complete_multipart_upload(bucket, key, upload_id, parts, opts) do
-    with :ok <- validate_multipart_size(bucket, key, upload_id, opts) do
+    with {:ok, size_calls} <- validate_multipart_size(bucket, key, upload_id, opts) do
       xml = build_complete_multipart_xml(validate_parts!(parts))
       query = %{"uploadId" => upload_id}
       headers = [{"content-type", "application/xml"}]
@@ -2286,18 +2377,25 @@ defmodule AwsSDK.S3 do
                key,
                put_opts(opts, query: query, body: xml, headers: headers)
              ),
-           {:ok, response} <- Client.request(op) do
-        case deserialize_completed_multipart(response, bucket, key, upload_id, opts) do
-          {:error, _} = error -> error
-          result -> {:ok, result}
+           {:ok, %{body: body, headers: response_headers}} <- Client.request(op) do
+        case XMLParser.parse_complete_multipart(body) do
+          {:error, _} = error ->
+            error
+
+          result ->
+            complete = %{
+              body: result,
+              headers: Client.deserialize_headers(response_headers, opts)
+            }
+
+            calls = Map.put(size_calls, :complete_multipart_upload, complete)
+
+            with {:ok, content_type_calls} <-
+                   validate_multipart_content_type(bucket, key, upload_id, opts) do
+              {:ok, Map.merge(calls, content_type_calls)}
+            end
         end
       end
-    end
-  end
-
-  defp deserialize_completed_multipart(%{body: body}, bucket, key, upload_id, opts) do
-    with :ok <- validate_multipart_content_type(bucket, key, upload_id, opts) do
-      XMLParser.parse_complete_multipart(body)
     end
   end
 
@@ -2310,40 +2408,69 @@ defmodule AwsSDK.S3 do
     "<CompleteMultipartUpload>#{parts_xml}</CompleteMultipartUpload>"
   end
 
+  # Both functions make a GET and, when a change is needed, a PUT. Each call's
+  # response is reported under its own key; `:put_bucket_notification_configuration`
+  # is absent when no write was made.
   defp do_enable_event_bridge(bucket, opts) do
-    with {:ok, xml} <- get_raw_notification_xml(bucket, opts) do
+    with {:ok, %{body: xml, headers: headers}} <- get_raw_notification_xml(bucket, opts) do
+      get_result = %{
+        body: XMLParser.parse_notification_configuration(xml),
+        headers: Client.deserialize_headers(headers, opts)
+      }
+
       if String.contains?(xml, "EventBridgeConfiguration") do
-        {:ok, %{}}
+        {:ok, %{get_bucket_notification_configuration: get_result}}
       else
-        xml = expand_self_closing_notification(xml)
-        new_xml = insert_event_bridge_config(xml)
-        put_notification_xml(bucket, new_xml, opts)
+        new_xml = xml |> expand_self_closing_notification() |> insert_event_bridge_config()
+
+        with {:ok, put_result} <- put_notification_xml(bucket, new_xml, opts) do
+          {:ok,
+           %{
+             get_bucket_notification_configuration: get_result,
+             put_bucket_notification_configuration: put_result
+           }}
+        end
       end
     end
   end
 
   defp do_disable_event_bridge(bucket, opts) do
-    with {:ok, xml} <- get_raw_notification_xml(bucket, opts) do
+    with {:ok, %{body: xml, headers: headers}} <- get_raw_notification_xml(bucket, opts) do
+      get_result = %{
+        body: XMLParser.parse_notification_configuration(xml),
+        headers: Client.deserialize_headers(headers, opts)
+      }
+
       if String.contains?(xml, "EventBridgeConfiguration") do
-        new_xml = remove_event_bridge_config(xml)
-        put_notification_xml(bucket, new_xml, opts)
+        with {:ok, put_result} <-
+               put_notification_xml(bucket, remove_event_bridge_config(xml), opts) do
+          {:ok,
+           %{
+             get_bucket_notification_configuration: get_result,
+             put_bucket_notification_configuration: put_result
+           }}
+        end
       else
-        {:ok, %{}}
+        {:ok, %{get_bucket_notification_configuration: get_result}}
       end
     end
   end
 
   defp do_get_notification_configuration(bucket, opts) do
-    with {:ok, xml} <- get_raw_notification_xml(bucket, opts) do
-      {:ok, XMLParser.parse_notification_configuration(xml)}
+    with {:ok, %{body: xml, headers: headers}} <- get_raw_notification_xml(bucket, opts) do
+      {:ok,
+       %{
+         body: XMLParser.parse_notification_configuration(xml),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
   defp get_raw_notification_xml(bucket, opts) do
     with {:ok, op} <-
            build_operation(:get, bucket, nil, Keyword.put(opts, :query, %{"notification" => ""})),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, body}
+         {:ok, response} <- Client.request(op) do
+      {:ok, response}
     end
   end
 
@@ -2362,8 +2489,8 @@ defmodule AwsSDK.S3 do
              nil,
              put_opts(opts, query: %{"notification" => ""}, body: xml, headers: headers)
            ),
-         {:ok, _} <- Client.request(op) do
-      {:ok, %{}}
+         {:ok, %{headers: headers}} <- Client.request(op) do
+      {:ok, %{headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -2417,7 +2544,7 @@ defmodule AwsSDK.S3 do
 
     with {:ok, op} <- build_operation(:put, bucket, nil, request_opts),
          {:ok, %{headers: response_headers}} <- Client.request(op) do
-      {:ok, deserialize_headers(response_headers, opts)}
+      {:ok, Client.deserialize_headers(response_headers, opts)}
     end
   end
 
@@ -2425,23 +2552,6 @@ defmodule AwsSDK.S3 do
     md5 = :md5 |> :crypto.hash(xml) |> Base.encode64()
     [{"content-md5", md5}, {"content-type", "application/xml"}]
   end
-
-  # AWS owns the response-header namespace and adds new headers over time
-  # (e.g. `x-amz-checksum-crc64nvme`). `Serializer.deserialize/2`'s default
-  # is `to_existing_atom: true, strict: true`, which crashes on any header
-  # whose snake-cased atom hasn't been referenced elsewhere. Headers must
-  # round-trip without crashing, so atom-safety is relaxed here by default.
-  # Callers can still override any of these options by passing their own
-  # `opts` -- caller-supplied keys win the merge.
-  @response_header_opts [to_existing_atom: false, strict: false]
-
-  defp deserialize_headers(headers, opts) do
-    headers
-    |> Serializer.deserialize(merge_response_header_opts(opts))
-    |> Map.new()
-  end
-
-  defp merge_response_header_opts(opts), do: Keyword.merge(@response_header_opts, opts)
 
   defp copy_part_range(
          dest_bucket,
@@ -2482,8 +2592,11 @@ defmodule AwsSDK.S3 do
         {results, [err | errors]}
     end)
     |> then(fn
-      {results, []} -> {:ok, Enum.reverse(results)}
-      {_, errors} -> {:error, Enum.reverse(errors)}
+      {results, []} ->
+        {:ok, Enum.reverse(results)}
+
+      {results, errors} ->
+        {:error, %{copied: Enum.reverse(results), failed: Enum.reverse(errors)}}
     end)
   end
 
@@ -2492,15 +2605,20 @@ defmodule AwsSDK.S3 do
   # caller decides whether to abort.
   defp validate_multipart_size(bucket, key, upload_id, opts) do
     case Keyword.get(opts, :max_size, :infinity) do
-      :infinity -> :ok
-      false -> :ok
-      nil -> :ok
+      :infinity -> {:ok, %{}}
+      false -> {:ok, %{}}
+      nil -> {:ok, %{}}
       max -> check_multipart_size(bucket, key, upload_id, max, opts)
     end
   end
 
   defp check_multipart_size(bucket, key, upload_id, max, opts) do
-    with {:ok, size} <- aggregate_object_size(bucket, key, upload_id, opts) do
+    with {:ok, pages} <- list_all_parts(bucket, key, upload_id, nil, [], opts) do
+      size =
+        pages
+        |> Enum.flat_map(& &1.body.parts)
+        |> Enum.reduce(0, fn p, sum -> sum + part_size(p.size) end)
+
       if size > max do
         {:error,
          ErrorMessage.forbidden(
@@ -2510,36 +2628,32 @@ defmodule AwsSDK.S3 do
              key: key,
              upload_id: upload_id,
              max_size: max,
-             size: size
+             size: size,
+             list_parts: pages
            }
          )}
       else
-        :ok
+        {:ok, %{list_parts: pages}}
       end
     end
   end
 
-  defp aggregate_object_size(bucket, key, upload_id, opts) do
-    do_aggregate_object_size(bucket, key, upload_id, nil, 0, opts)
-  end
-
-  defp do_aggregate_object_size(bucket, key, upload_id, part_number_marker, acc, opts) do
+  defp list_all_parts(bucket, key, upload_id, part_number_marker, pages, opts) do
     case list_parts(bucket, key, upload_id, part_number_marker, opts) do
-      {:ok, %{parts: parts} = body} ->
-        size = Enum.reduce(parts, 0, fn p, sum -> sum + part_size(p.size) end)
-        acc2 = acc + size
+      {:ok, page} ->
+        pages = [page | pages]
 
-        if body.is_truncated do
-          do_aggregate_object_size(
+        if page.body.is_truncated do
+          list_all_parts(
             bucket,
             key,
             upload_id,
-            body.next_part_number_marker,
-            acc2,
+            page.body.next_part_number_marker,
+            pages,
             opts
           )
         else
-          {:ok, acc2}
+          {:ok, Enum.reverse(pages)}
         end
 
       {:error, _} = error ->
@@ -2554,8 +2668,8 @@ defmodule AwsSDK.S3 do
 
   defp validate_multipart_content_type(bucket, key, upload_id, opts) do
     case Keyword.get(opts, :content_type) do
-      nil -> :ok
-      :any -> :ok
+      nil -> {:ok, %{}}
+      :any -> {:ok, %{}}
       content_type -> check_content_type(bucket, key, upload_id, content_type, opts)
     end
   end
@@ -2563,31 +2677,31 @@ defmodule AwsSDK.S3 do
   defp check_content_type(bucket, key, upload_id, content_type, opts) do
     with {:ok, meta} <- head_object(bucket, key, opts) do
       if content_type_match?(content_type, meta.content_type) do
-        :ok
+        {:ok, %{head_object: meta}}
       else
-        handle_content_type_mismatch(bucket, key, upload_id, content_type, opts)
+        handle_content_type_mismatch(bucket, key, upload_id, content_type, meta, opts)
       end
     end
   end
 
-  defp handle_content_type_mismatch(bucket, key, upload_id, content_type, opts) do
-    error =
-      {:error,
-       ErrorMessage.forbidden(
-         "content type mismatch",
-         %{
-           bucket: bucket,
-           key: key,
-           upload_id: upload_id,
-           content_type: content_type
-         }
-       )}
+  defp handle_content_type_mismatch(bucket, key, upload_id, content_type, meta, opts) do
+    details = %{
+      bucket: bucket,
+      key: key,
+      upload_id: upload_id,
+      content_type: content_type,
+      head_object: meta
+    }
 
     # Reporting is the default: the upload succeeded, and deleting the
     # caller's object is unrecoverable on an unversioned bucket.
     case Keyword.get(opts, :on_content_type_mismatch, :error) do
-      :delete -> with {:ok, _} <- delete_object(bucket, key, opts), do: error
-      :error -> error
+      :delete ->
+        details = Map.put(details, :delete_object, delete_object(bucket, key, opts))
+        {:error, ErrorMessage.forbidden("content type mismatch", details)}
+
+      :error ->
+        {:error, ErrorMessage.forbidden("content type mismatch", details)}
     end
   end
 

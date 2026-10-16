@@ -100,7 +100,7 @@ defmodule AwsSDK.Credentials.Providers.LoginSessionTest do
     login_session = arn:aws:iam::123456789012:user/dev
     """)
 
-    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}}} =
+    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}, %{exit_status: 0}}} =
              LoginSession.resolve(
                profile: "dev",
                home_dir: tmp,

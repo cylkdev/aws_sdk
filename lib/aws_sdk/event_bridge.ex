@@ -87,17 +87,17 @@ defmodule AwsSDK.EventBridge do
         description: "Fan out new uploads",
         state: "ENABLED"
       )
-      #=> {:ok, %{rule_arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads"}}
+      #=> {:ok, %{body: %{rule_arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads"}, headers: %{x_amzn_request_id: "...", ...}}}
 
       # A schedule instead of a pattern.
       AwsSDK.EventBridge.put_rule("nightly", schedule_expression: "cron(0 3 * * ? *)")
-      #=> {:ok, %{rule_arn: "arn:aws:events:us-east-1:123456789012:rule/nightly"}}
+      #=> {:ok, %{body: %{rule_arn: "arn:aws:events:us-east-1:123456789012:rule/nightly"}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Creates or updates; supply exactly one of `:event_pattern` or
   `:schedule_expression`.
   """
   @spec put_rule(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{rule_arn: String.t()}} | {:error, term()}
+          {:ok, %{body: %{rule_arn: String.t()}, headers: map()}} | {:error, term()}
   def put_rule(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_put_rule_response(name, opts)
@@ -117,8 +117,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("EventBusName", opts[:event_bus_name])
 
     with {:ok, op} <- build_operation("PutRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -130,18 +134,22 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.describe_rule("s3-uploads")
       #=> {:ok,
       #=>  %{
-      #=>    name: "s3-uploads",
-      #=>    arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads",
-      #=>    event_pattern: "{\"source\":[\"aws.s3\"],...}",
-      #=>    state: "ENABLED",
-      #=>    description: "Fan out new uploads",
-      #=>    event_bus_name: "default"
+      #=>    body:
+      #=>    %{
+      #=>      name: "s3-uploads",
+      #=>      arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads",
+      #=>      event_pattern: "{\"source\":[\"aws.s3\"],...}",
+      #=>      state: "ENABLED",
+      #=>      description: "Fan out new uploads",
+      #=>      event_bus_name: "default"
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   `:event_pattern` comes back as a JSON string, as AWS stores it.
   """
   @spec describe_rule(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_rule(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_describe_rule_response(name, opts)
@@ -154,8 +162,12 @@ defmodule AwsSDK.EventBridge do
     data = maybe_put(%{"Name" => name}, "EventBusName", opts[:event_bus_name])
 
     with {:ok, op} <- build_operation("DescribeRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -167,20 +179,25 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.list_rules(name_prefix: "s3-")
       #=> {:ok,
       #=>  %{
-      #=>    rules: [
-      #=>      %{
-      #=>        name: "s3-uploads",
-      #=>        arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads",
-      #=>        state: "ENABLED",
-      #=>        description: "Fan out new uploads",
-      #=>        event_bus_name: "default"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      rules: [
+      #=>        %{
+      #=>          name: "s3-uploads",
+      #=>          arn: "arn:aws:events:us-east-1:123456789012:rule/s3-uploads",
+      #=>          state: "ENABLED",
+      #=>          description: "Fan out new uploads",
+      #=>          event_bus_name: "default"
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec list_rules(opts :: keyword()) ::
-          {:ok, %{rules: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{rules: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_rules(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_rules_response(opts)
@@ -198,8 +215,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListRules", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -209,13 +230,13 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.delete_rule("s3-uploads")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Remove the rule's targets first with `remove_targets/3`, or pass
   `force: true`.
   """
   @spec delete_rule(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_rule(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_rule_response(name, opts)
@@ -231,8 +252,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("Force", opts[:force])
 
     with {:ok, op} <- build_operation("DeleteRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -255,26 +280,31 @@ defmodule AwsSDK.EventBridge do
           arn: "arn:aws:sqs:us-east-1:123456789012:uploads"
         }
       ])
-      #=> {:ok, %{failed_entry_count: 0, failed_entries: []}}
+      #=> {:ok, %{body: %{failed_entry_count: 0, failed_entries: []}, headers: %{x_amzn_request_id: "...", ...}}}
 
       # A partial failure reports per-target errors instead of erroring out.
       #=> {:ok,
       #=>  %{
-      #=>    failed_entry_count: 1,
-      #=>    failed_entries: [
-      #=>      %{
-      #=>        target_id: "sqs-queue",
-      #=>        error_code: "AccessDeniedException",
-      #=>        error_message: "EventBridge cannot assume the role"
-      #=>      }
-      #=>    ]
+      #=>    body:
+      #=>    %{
+      #=>      failed_entry_count: 1,
+      #=>      failed_entries: [
+      #=>        %{
+      #=>          target_id: "sqs-queue",
+      #=>          error_code: "AccessDeniedException",
+      #=>          error_message: "EventBridge cannot assume the role"
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Always check `:failed_entry_count` -- a partial failure still returns
   `{:ok, _}`.
   """
   @spec put_targets(rule :: String.t(), targets :: list(map()), opts :: keyword()) ::
-          {:ok, %{failed_entry_count: integer(), failed_entries: list()}} | {:error, term()}
+          {:ok, %{body: %{failed_entry_count: integer(), failed_entries: list()}, headers: map()}}
+          | {:error, term()}
   def put_targets(rule, [_ | _] = targets, opts \\ []) when is_binary(rule) do
     if sandbox?(opts) do
       sandbox_put_targets_response(rule, targets, opts)
@@ -292,8 +322,12 @@ defmodule AwsSDK.EventBridge do
       )
 
     with {:ok, op} <- build_operation("PutTargets", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -305,17 +339,22 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.list_targets_by_rule("s3-uploads")
       #=> {:ok,
       #=>  %{
-      #=>    targets: [
-      #=>      %{
-      #=>        id: "sqs-queue",
-      #=>        arn: "arn:aws:sqs:us-east-1:123456789012:uploads"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      targets: [
+      #=>        %{
+      #=>          id: "sqs-queue",
+      #=>          arn: "arn:aws:sqs:us-east-1:123456789012:uploads"
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec list_targets_by_rule(rule :: String.t(), opts :: keyword()) ::
-          {:ok, %{targets: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok, %{body: %{targets: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_targets_by_rule(rule, opts \\ []) when is_binary(rule) do
     if sandbox?(opts) do
       sandbox_list_targets_by_rule_response(rule, opts)
@@ -332,8 +371,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListTargetsByRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -343,12 +386,13 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.remove_targets("s3-uploads", ["sqs-queue"])
-      #=> {:ok, %{failed_entry_count: 0, failed_entries: []}}
+      #=> {:ok, %{body: %{failed_entry_count: 0, failed_entries: []}, headers: %{x_amzn_request_id: "...", ...}}}
 
   Targets are removed by the `:id` given to `put_targets/3`, not by ARN.
   """
   @spec remove_targets(rule :: String.t(), ids :: list(String.t()), opts :: keyword()) ::
-          {:ok, %{failed_entry_count: integer(), failed_entries: list()}} | {:error, term()}
+          {:ok, %{body: %{failed_entry_count: integer(), failed_entries: list()}, headers: map()}}
+          | {:error, term()}
   def remove_targets(rule, [_ | _] = ids, opts \\ []) when is_binary(rule) do
     if sandbox?(opts) do
       sandbox_remove_targets_response(rule, ids, opts)
@@ -364,8 +408,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("Force", opts[:force])
 
     with {:ok, op} <- build_operation("RemoveTargets", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -394,10 +442,14 @@ defmodule AwsSDK.EventBridge do
       )
       #=> {:ok,
       #=>  %{
-      #=>    connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>    connection_state: "AUTHORIZING",
-      #=>    creation_time: 1.7e9,
-      #=>    last_modified_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>      connection_state: "AUTHORIZING",
+      #=>      creation_time: 1.7e9,
+      #=>      last_modified_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   The secret is stored in Secrets Manager and never returned again.
@@ -408,7 +460,7 @@ defmodule AwsSDK.EventBridge do
           auth_parameters :: map(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_connection(name, authorization_type, auth_parameters, opts \\ [])
       when is_binary(name) and is_binary(authorization_type) and is_map(auth_parameters) do
     if sandbox?(opts) do
@@ -431,8 +483,12 @@ defmodule AwsSDK.EventBridge do
       )
 
     with {:ok, op} <- build_operation("CreateConnection", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -444,17 +500,21 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.describe_connection("partner-api")
       #=> {:ok,
       #=>  %{
-      #=>    name: "partner-api",
-      #=>    connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>    connection_state: "AUTHORIZED",
-      #=>    authorization_type: "API_KEY",
-      #=>    secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:events!connection/partner-api-aa11bb22",
-      #=>    auth_parameters: %{api_key_auth_parameters: %{api_key_name: "x-api-key"}},
-      #=>    creation_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      name: "partner-api",
+      #=>      connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>      connection_state: "AUTHORIZED",
+      #=>      authorization_type: "API_KEY",
+      #=>      secret_arn: "arn:aws:secretsmanager:us-east-1:123456789012:secret:events!connection/partner-api-aa11bb22",
+      #=>      auth_parameters: %{api_key_auth_parameters: %{api_key_name: "x-api-key"}},
+      #=>      creation_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec describe_connection(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_connection(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_describe_connection_response(name, opts)
@@ -465,8 +525,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_describe_connection(name, opts) do
     with {:ok, op} <- build_operation("DescribeConnection", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -488,13 +552,17 @@ defmodule AwsSDK.EventBridge do
       )
       #=> {:ok,
       #=>  %{
-      #=>    connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>    connection_state: "AUTHORIZING",
-      #=>    last_modified_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>      connection_state: "AUTHORIZING",
+      #=>      last_modified_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec update_connection(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def update_connection(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_update_connection_response(name, opts)
@@ -511,8 +579,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("Description", opts[:description])
 
     with {:ok, op} <- build_operation("UpdateConnection", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -524,13 +596,17 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.delete_connection("partner-api")
       #=> {:ok,
       #=>  %{
-      #=>    connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>    connection_state: "DELETING",
-      #=>    last_modified_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>      connection_state: "DELETING",
+      #=>      last_modified_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec delete_connection(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def delete_connection(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_connection_response(name, opts)
@@ -541,8 +617,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_delete_connection(name, opts) do
     with {:ok, op} <- build_operation("DeleteConnection", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -554,20 +634,26 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.list_connections(name_prefix: "partner-")
       #=> {:ok,
       #=>  %{
-      #=>    connections: [
-      #=>      %{
-      #=>        name: "partner-api",
-      #=>        connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>        connection_state: "AUTHORIZED",
-      #=>        authorization_type: "API_KEY",
-      #=>        creation_time: 1.7e9
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      connections: [
+      #=>        %{
+      #=>          name: "partner-api",
+      #=>          connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>          connection_state: "AUTHORIZED",
+      #=>          authorization_type: "API_KEY",
+      #=>          creation_time: 1.7e9
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec list_connections(opts :: keyword()) ::
-          {:ok, %{connections: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{connections: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_connections(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_connections_response(opts)
@@ -585,8 +671,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListConnections", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -614,10 +704,14 @@ defmodule AwsSDK.EventBridge do
       )
       #=> {:ok,
       #=>  %{
-      #=>    api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
-      #=>    api_destination_state: "ACTIVE",
-      #=>    creation_time: 1.7e9,
-      #=>    last_modified_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
+      #=>      api_destination_state: "ACTIVE",
+      #=>      creation_time: 1.7e9,
+      #=>      last_modified_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec create_api_destination(
@@ -627,7 +721,7 @@ defmodule AwsSDK.EventBridge do
           http_method :: String.t(),
           opts :: keyword()
         ) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def create_api_destination(name, connection_arn, invocation_endpoint, http_method, opts \\ [])
       when is_binary(name) and is_binary(connection_arn) and is_binary(invocation_endpoint) and
              is_binary(http_method) do
@@ -656,8 +750,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("InvocationRateLimitPerSecond", opts[:invocation_rate_limit_per_second])
 
     with {:ok, op} <- build_operation("CreateApiDestination", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -669,18 +767,22 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.describe_api_destination("partner-webhook")
       #=> {:ok,
       #=>  %{
-      #=>    name: "partner-webhook",
-      #=>    api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
-      #=>    api_destination_state: "ACTIVE",
-      #=>    connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>    invocation_endpoint: "https://partner.example.com/hooks/events",
-      #=>    http_method: "POST",
-      #=>    invocation_rate_limit_per_second: 10,
-      #=>    creation_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      name: "partner-webhook",
+      #=>      api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
+      #=>      api_destination_state: "ACTIVE",
+      #=>      connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>      invocation_endpoint: "https://partner.example.com/hooks/events",
+      #=>      http_method: "POST",
+      #=>      invocation_rate_limit_per_second: 10,
+      #=>      creation_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec describe_api_destination(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_api_destination(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_describe_api_destination_response(name, opts)
@@ -691,8 +793,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_describe_api_destination(name, opts) do
     with {:ok, op} <- build_operation("DescribeApiDestination", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -714,13 +820,17 @@ defmodule AwsSDK.EventBridge do
       )
       #=> {:ok,
       #=>  %{
-      #=>    api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
-      #=>    api_destination_state: "ACTIVE",
-      #=>    last_modified_time: 1.7e9
+      #=>    body:
+      #=>    %{
+      #=>      api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
+      #=>      api_destination_state: "ACTIVE",
+      #=>      last_modified_time: 1.7e9
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec update_api_destination(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def update_api_destination(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_update_api_destination_response(name, opts)
@@ -739,8 +849,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("InvocationRateLimitPerSecond", opts[:invocation_rate_limit_per_second])
 
     with {:ok, op} <- build_operation("UpdateApiDestination", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -750,10 +864,10 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.delete_api_destination("partner-webhook")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
   """
   @spec delete_api_destination(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_api_destination(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_api_destination_response(name, opts)
@@ -764,8 +878,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_delete_api_destination(name, opts) do
     with {:ok, op} <- build_operation("DeleteApiDestination", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -777,20 +895,26 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.list_api_destinations(name_prefix: "partner-")
       #=> {:ok,
       #=>  %{
-      #=>    api_destinations: [
-      #=>      %{
-      #=>        name: "partner-webhook",
-      #=>        api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
-      #=>        api_destination_state: "ACTIVE",
-      #=>        connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
-      #=>        http_method: "POST"
-      #=>      }
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      api_destinations: [
+      #=>        %{
+      #=>          name: "partner-webhook",
+      #=>          api_destination_arn: "arn:aws:events:us-east-1:123456789012:api-destination/partner-webhook/cc33dd44",
+      #=>          api_destination_state: "ACTIVE",
+      #=>          connection_arn: "arn:aws:events:us-east-1:123456789012:connection/partner-api/aa11bb22",
+      #=>          http_method: "POST"
+      #=>        }
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec list_api_destinations(opts :: keyword()) ::
-          {:ok, %{api_destinations: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{api_destinations: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_api_destinations(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_api_destinations_response(opts)
@@ -808,8 +932,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListApiDestinations", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -821,10 +949,10 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.create_event_bus("app-bus")
-      #=> {:ok, %{event_bus_arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus"}}
+      #=> {:ok, %{body: %{event_bus_arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus"}, headers: %{x_amzn_request_id: "...", ...}}}
   """
   @spec create_event_bus(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{event_bus_arn: String.t()}} | {:error, term()}
+          {:ok, %{body: %{event_bus_arn: String.t()}, headers: map()}} | {:error, term()}
   def create_event_bus(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_create_event_bus_response(name, opts)
@@ -837,8 +965,12 @@ defmodule AwsSDK.EventBridge do
     data = maybe_put(%{"Name" => name}, "EventSourceName", opts[:event_source_name])
 
     with {:ok, op} <- build_operation("CreateEventBus", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -850,15 +982,19 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.describe_event_bus(name: "app-bus")
       #=> {:ok,
       #=>  %{
-      #=>    name: "app-bus",
-      #=>    arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus",
-      #=>    policy: "{\"Version\":\"2012-10-17\",...}"
+      #=>    body:
+      #=>    %{
+      #=>      name: "app-bus",
+      #=>      arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus",
+      #=>      policy: "{\"Version\":\"2012-10-17\",...}"
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Omit `:name` to describe the account's `default` bus.
   """
   @spec describe_event_bus(name :: String.t(), opts :: keyword()) ::
-          {:ok, map()} | {:error, term()}
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
   def describe_event_bus(name \\ "default", opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_describe_event_bus_response(name, opts)
@@ -869,8 +1005,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_describe_event_bus(name, opts) do
     with {:ok, op} <- build_operation("DescribeEventBus", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -880,12 +1020,12 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.delete_event_bus("app-bus")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   The `default` bus cannot be deleted.
   """
   @spec delete_event_bus(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def delete_event_bus(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_delete_event_bus_response(name, opts)
@@ -896,8 +1036,12 @@ defmodule AwsSDK.EventBridge do
 
   defp do_delete_event_bus(name, opts) do
     with {:ok, op} <- build_operation("DeleteEventBus", %{"Name" => name}, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -909,15 +1053,21 @@ defmodule AwsSDK.EventBridge do
       AwsSDK.EventBridge.list_event_buses()
       #=> {:ok,
       #=>  %{
-      #=>    event_buses: [
-      #=>      %{name: "default", arn: "arn:aws:events:us-east-1:123456789012:event-bus/default"},
-      #=>      %{name: "app-bus", arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus"}
-      #=>    ],
-      #=>    next_token: nil
+      #=>    body:
+      #=>    %{
+      #=>      event_buses: [
+      #=>        %{name: "default", arn: "arn:aws:events:us-east-1:123456789012:event-bus/default"},
+      #=>        %{name: "app-bus", arn: "arn:aws:events:us-east-1:123456789012:event-bus/app-bus"}
+      #=>      ],
+      #=>      next_token: nil
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
   """
   @spec list_event_buses(opts :: keyword()) ::
-          {:ok, %{event_buses: list(map()), next_token: String.t() | nil}} | {:error, term()}
+          {:ok,
+           %{body: %{event_buses: list(map()), next_token: String.t() | nil}, headers: map()}}
+          | {:error, term()}
   def list_event_buses(opts \\ []) do
     if sandbox?(opts) do
       sandbox_list_event_buses_response(opts)
@@ -934,8 +1084,12 @@ defmodule AwsSDK.EventBridge do
       |> maybe_put("NextToken", opts[:next_token])
 
     with {:ok, op} <- build_operation("ListEventBuses", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -962,17 +1116,25 @@ defmodule AwsSDK.EventBridge do
       ])
       #=> {:ok,
       #=>  %{
-      #=>    failed_entry_count: 0,
-      #=>    entries: [%{event_id: "12345678-1234-1234-1234-123456789012"}]
+      #=>    body:
+      #=>    %{
+      #=>      failed_entry_count: 0,
+      #=>      entries: [%{event_id: "12345678-1234-1234-1234-123456789012"}]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
       # A rejected entry carries an error in place of an event ID.
       #=> {:ok,
       #=>  %{
-      #=>    failed_entry_count: 1,
-      #=>    entries: [
-      #=>      %{error_code: "NotAuthorizedForSourceException", error_message: "..."}
-      #=>    ]
+      #=>    body:
+      #=>    %{
+      #=>      failed_entry_count: 1,
+      #=>      entries: [
+      #=>        %{error_code: "NotAuthorizedForSourceException", error_message: "..."}
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "...", ...}
       #=>  }}
 
   Entries stay in order, so `:entries` lines up positionally with what you
@@ -980,7 +1142,8 @@ defmodule AwsSDK.EventBridge do
   `{:ok, _}`.
   """
   @spec put_events(entries :: list(map()), opts :: keyword()) ::
-          {:ok, %{entries: list(map()), failed_entry_count: integer()}} | {:error, term()}
+          {:ok, %{body: %{entries: list(map()), failed_entry_count: integer()}, headers: map()}}
+          | {:error, term()}
   def put_events([_ | _] = entries, opts \\ []) do
     if sandbox?(opts) do
       sandbox_put_events_response(entries, opts)
@@ -993,8 +1156,12 @@ defmodule AwsSDK.EventBridge do
     data = %{"Entries" => Enum.map(entries, &camelize_with_json(&1, "Detail"))}
 
     with {:ok, op} <- build_operation("PutEvents", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1006,10 +1173,10 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.enable_rule("s3-uploads")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
   """
   @spec enable_rule(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def enable_rule(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_enable_rule_response(name, opts)
@@ -1022,8 +1189,12 @@ defmodule AwsSDK.EventBridge do
     data = maybe_put(%{"Name" => name}, "EventBusName", opts[:event_bus_name])
 
     with {:ok, op} <- build_operation("EnableRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 
@@ -1033,12 +1204,12 @@ defmodule AwsSDK.EventBridge do
   ## Examples
 
       AwsSDK.EventBridge.disable_rule("s3-uploads")
-      #=> {:ok, %{}}
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "...", ...}}}
 
   The rule and its targets are kept; it just stops matching.
   """
   @spec disable_rule(name :: String.t(), opts :: keyword()) ::
-          {:ok, %{}} | {:error, term()}
+          {:ok, %{body: %{}, headers: map()}} | {:error, term()}
   def disable_rule(name, opts \\ []) when is_binary(name) do
     if sandbox?(opts) do
       sandbox_disable_rule_response(name, opts)
@@ -1051,8 +1222,12 @@ defmodule AwsSDK.EventBridge do
     data = maybe_put(%{"Name" => name}, "EventBusName", opts[:event_bus_name])
 
     with {:ok, op} <- build_operation("DisableRule", data, opts),
-         {:ok, %{body: body}} <- Client.request(op) do
-      {:ok, Serializer.deserialize(decode_body(body), deserialize_opts(opts))}
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: Serializer.deserialize(decode_body(body), deserialize_opts(opts)),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
     end
   end
 

@@ -48,7 +48,7 @@ defmodule AwsSDK.Credentials.Providers.LoginSession do
         :skip
 
       profile ->
-        case profile["login_session"] do
+        case Profile.value(profile, "login_session") do
           v when is_binary(v) and v !== "" ->
             ProcessCreds.run(command(profile_name, opts), :login_session)
 

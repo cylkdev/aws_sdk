@@ -18,6 +18,7 @@ defmodule AwsSDK.Credentials.Profile do
   (SSO, credential_process, AssumeRole, or static keys).
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.Credentials.INI
 
   alias AwsSDK.Credentials.Providers.{
@@ -73,37 +74,97 @@ defmodule AwsSDK.Credentials.Profile do
   defp default_credentials_path(opts), do: opts |> home() |> Path.join(".aws/credentials")
 
   @doc """
-  Loads a named profile, returning the merged key/value map or `nil`
-  when the profile is defined in neither file.
+  Loads a named profile from both shared files, unmerged.
+
+  Returns `read/2`'s per-file map, or `nil` when the profile has a section
+  in neither file. Look keys up with `value/2`, which applies the AWS CLI's
+  precedence (`~/.aws/credentials` over `~/.aws/config`).
 
   ## Examples
 
       AwsSDK.Credentials.Profile.load("dev")
       #=> %{
-      #=>   "region" => "eu-west-1",
-      #=>   "role_arn" => "arn:aws:iam::123456789012:role/dev",
-      #=>   "source_profile" => "default"
+      #=>   config: %{
+      #=>     path: "/Users/you/.aws/config",
+      #=>     read: {:ok, %{"profile dev" => %{"region" => "eu-west-1", ...}}},
+      #=>     section: %{"region" => "eu-west-1", "role_arn" => "arn:aws:iam::123456789012:role/dev"}
+      #=>   },
+      #=>   credentials: %{path: "/Users/you/.aws/credentials", read: {:error, :enoent}, section: nil}
       #=> }
 
       AwsSDK.Credentials.Profile.load("no-such-profile")
-      #=> %{}
-
-  Merges the two shared files, with `~/.aws/credentials` taking precedence.
-  In `~/.aws/config` the section is `[profile dev]`; in `~/.aws/credentials`
-  it is `[dev]`. Both resolve from the same `"dev"` name.
+      #=> nil
   """
-  @spec load(String.t(), keyword) :: profile | nil
+  @spec load(String.t(), keyword) :: map | nil
   def load(profile_name, opts \\ []) when is_binary(profile_name) do
-    config = load_file(config_path(opts))
-    creds = load_file(credentials_path(opts))
-
-    config_entry = Map.get(config, config_section_name(profile_name), %{})
-    creds_entry = Map.get(creds, profile_name, %{})
-
-    case Map.merge(config_entry, creds_entry) do
-      empty when map_size(empty) === 0 -> nil
-      merged -> merged
+    case read(profile_name, opts) do
+      %{config: %{section: nil}, credentials: %{section: nil}} -> nil
+      files -> files
     end
+  end
+
+  @doc """
+  Looks `key` up in a profile loaded by `load/2`: the `~/.aws/credentials`
+  section first, then the `~/.aws/config` section (the AWS CLI's precedence
+  rule). Returns `nil` when neither section has it.
+
+  ## Examples
+
+      profile = AwsSDK.Credentials.Profile.load("dev")
+      AwsSDK.Credentials.Profile.value(profile, "region")
+      #=> "eu-west-1"
+  """
+  @spec value(map, String.t()) :: String.t() | nil
+  def value(%{config: config, credentials: credentials}, key) when is_binary(key) do
+    case credentials.section do
+      %{^key => found} -> found
+      _ -> config.section && Map.get(config.section, key)
+    end
+  end
+
+  @doc """
+  Reads a named profile from each shared file separately, without merging.
+
+  Returns one map per file: its `:path`, the raw `:read` result
+  (`{:ok, sections}` or `{:error, reason}`, so an unreadable or missing file
+  is reported rather than treated as empty), and the profile's `:section`
+  in that file (`nil` when absent). `load/2` is the merged view the
+  providers resolve against; this is the facts it was built from.
+
+  ## Examples
+
+      AwsSDK.Credentials.Profile.read("dev")
+      #=> %{
+      #=>   config: %{
+      #=>     path: "/Users/you/.aws/config",
+      #=>     read: {:ok, %{"profile dev" => %{"region" => "eu-west-1"}}},
+      #=>     section: %{"region" => "eu-west-1"}
+      #=>   },
+      #=>   credentials: %{
+      #=>     path: "/Users/you/.aws/credentials",
+      #=>     read: {:error, :enoent},
+      #=>     section: nil
+      #=>   }
+      #=> }
+  """
+  @spec read(String.t(), keyword) :: %{config: map, credentials: map}
+  def read(profile_name, opts \\ []) when is_binary(profile_name) do
+    %{
+      config: read_section(config_path(opts), config_section_name(profile_name)),
+      credentials: read_section(credentials_path(opts), profile_name)
+    }
+  end
+
+  defp read_section(path, section_name) do
+    read = INI.read(path)
+
+    section =
+      case read do
+        {:ok, sections} -> Map.get(sections, section_name)
+        {:error, _} -> nil
+      end
+
+    %{path: path, read: read, section: section}
   end
 
   @doc """
@@ -116,18 +177,22 @@ defmodule AwsSDK.Credentials.Profile do
 
       AwsSDK.Credentials.Profile.load_sso_session("my-sso")
       #=> %{
-      #=>   "sso_start_url" => "https://example.awsapps.com/start",
-      #=>   "sso_region" => "us-east-1",
-      #=>   "sso_registration_scopes" => "sso:account:access"
+      #=>   path: "/Users/you/.aws/config",
+      #=>   read: {:ok, %{...}},
+      #=>   section: %{
+      #=>     "sso_start_url" => "https://example.awsapps.com/start",
+      #=>     "sso_region" => "us-east-1",
+      #=>     "sso_registration_scopes" => "sso:account:access"
+      #=>   }
       #=> }
 
-  Reads an `[sso-session my-sso]` section, which is the modern form a
+  Returns the file's `:path`, raw `:read` result and the `:section`
+  (`nil` when absent). Reads an `[sso-session my-sso]` section, which is the modern form a
   profile references via `sso_session = my-sso`.
   """
-  @spec load_sso_session(String.t(), keyword) :: profile | nil
+  @spec load_sso_session(String.t(), keyword) :: map
   def load_sso_session(session_name, opts \\ []) when is_binary(session_name) do
-    config = load_file(config_path(opts))
-    Map.get(config, "sso-session " <> session_name)
+    read_section(config_path(opts), "sso-session " <> session_name)
   end
 
   @doc """
@@ -165,7 +230,8 @@ defmodule AwsSDK.Credentials.Profile do
 
   Returns `{:ok, creds}` where `creds` is a map with at least
   `:access_key_id` and `:secret_access_key`, plus `:security_token`,
-  `:expires_at`, `:region`, and `:source` when available.
+  `:expires_at`, `:region`, and `:source` when available, and
+  `:profile_files` — the unmerged per-file facts from `read/2`.
 
   Returns `{:error, reason}` when the profile cannot be resolved or
   does not carry any of the dispatch keys above.
@@ -201,25 +267,25 @@ defmodule AwsSDK.Credentials.Profile do
         profile
         |> dispatch(provider_opts)
         |> interpret_dispatch(profile_name)
-        |> maybe_put_region(profile)
+        |> put_profile_files(profile)
     end
   end
 
   defp dispatch(profile, opts) do
     cond do
-      is_binary(profile["sso_session"]) or is_binary(profile["sso_start_url"]) ->
+      is_binary(value(profile, "sso_session")) or is_binary(value(profile, "sso_start_url")) ->
         SSO.resolve(opts)
 
-      is_binary(profile["credential_process"]) ->
+      is_binary(value(profile, "credential_process")) ->
         CredentialProcess.resolve(opts)
 
-      is_binary(profile["login_session"]) ->
+      is_binary(value(profile, "login_session")) ->
         LoginSession.resolve(opts)
 
-      is_binary(profile["role_arn"]) ->
+      is_binary(value(profile, "role_arn")) ->
         AssumeRole.resolve(opts)
 
-      is_binary(profile["aws_access_key_id"]) ->
+      is_binary(value(profile, "aws_access_key_id")) ->
         StaticProfile.resolve(opts)
 
       true ->
@@ -233,27 +299,15 @@ defmodule AwsSDK.Credentials.Profile do
   defp interpret_dispatch(:skip, profile_name),
     do: {:error, {:unresolvable_profile, profile_name}}
 
-  defp maybe_put_region({:ok, creds}, profile) do
-    case profile["region"] do
-      region when is_binary(region) and region !== "" ->
-        {:ok, Map.put_new(creds, :region, region)}
-
-      _ ->
-        {:ok, creds}
-    end
+  # The per-file facts this profile resolved from, kept unmerged.
+  defp put_profile_files({:ok, creds}, profile) do
+    {:ok, Map.put(creds, :profile_files, Secrets.strip(profile))}
   end
 
-  defp maybe_put_region(result, _profile), do: result
+  defp put_profile_files(result, _profile), do: result
 
   defp config_section_name("default"), do: "default"
   defp config_section_name(profile), do: "profile " <> profile
-
-  defp load_file(path) do
-    case INI.read(path) do
-      {:ok, sections} -> sections
-      {:error, _} -> %{}
-    end
-  end
 
   defp home(opts) do
     opts[:home_dir] || System.user_home!()

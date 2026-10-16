@@ -51,7 +51,7 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcessTest do
   @tag :tmp_dir
   test "error when command fails with non-zero status", %{tmp_dir: tmp} do
     script = Path.join(tmp, "fail.sh")
-    File.write!(script, "#!/bin/sh\nexit 7\n")
+    File.write!(script, "#!/bin/sh\necho out\necho err >&2\nexit 7\n")
     File.chmod!(script, 0o755)
 
     File.mkdir_p!(Path.join(tmp, ".aws"))
@@ -61,7 +61,8 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcessTest do
     credential_process = #{script}
     """)
 
-    assert {:error, {:credential_process_failed, 7, _}} =
+    assert {:error,
+            {:credential_process_failed, 7, %{stdout: "out\n", stderr: "err\n", exit_status: 7}}} =
              CredentialProcess.resolve(profile: "dev", home_dir: tmp)
   end
 
@@ -83,7 +84,7 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcessTest do
     credential_process = #{script}
     """)
 
-    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}}} =
+    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}, %{exit_status: 0}}} =
              CredentialProcess.resolve(profile: "dev", home_dir: tmp)
   end
 end

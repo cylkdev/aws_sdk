@@ -18,6 +18,7 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
   `AwsSDK.STS.get_caller_identity/1` and other public operations use.
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.AuthCache
   alias AwsSDK.Credentials.Profile
 
@@ -37,8 +38,8 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
   end
 
   defp resolve_with_profile(profile, opts) do
-    role_arn = profile["role_arn"]
-    source = profile["source_profile"]
+    role_arn = Profile.value(profile, "role_arn")
+    source = Profile.value(profile, "source_profile")
 
     cond do
       is_nil(role_arn) ->
@@ -58,7 +59,7 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
   end
 
   defp assume(role_arn, source_profile, profile, opts) do
-    region = profile["region"] || "us-east-1"
+    region = Profile.value(profile, "region") || "us-east-1"
 
     base_params = %{
       role_arn: role_arn,
@@ -66,17 +67,21 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
       duration_seconds: duration(profile)
     }
 
-    params = maybe_put(base_params, :external_id, profile["external_id"])
+    params = maybe_put(base_params, :external_id, Profile.value(profile, "external_id"))
 
     with {:ok, source} <- AuthCache.get({:awscli, source_profile}, source_opts(opts)),
          {:ok, result} <- AwsSDK.STS.assume_role(params, source, region, opts) do
+      # The signer reads the top-level keys; the full AssumeRole response
+      # (assumed role user, packed policy size, source identity, headers)
+      # is kept unaltered under `:sts_assume_role`.
       {:ok,
        %{
-         access_key_id: result.credentials.access_key_id,
-         secret_access_key: result.credentials.secret_access_key,
-         security_token: result.credentials.session_token,
-         expires_at: result.credentials.expiration,
-         source: :sts
+         access_key_id: result.body.credentials.access_key_id,
+         secret_access_key: result.body.credentials.secret_access_key,
+         security_token: result.body.credentials.session_token,
+         expires_at: result.body.credentials.expiration,
+         source: :sts,
+         sts_assume_role: Secrets.strip(result)
        }}
     end
   end
@@ -87,11 +92,11 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
   defp source_opts(opts), do: Keyword.drop(opts, [:ttl_seconds, :fetcher])
 
   defp session_name(profile) do
-    profile["role_session_name"] || "aws-elixir-#{System.system_time(:second)}"
+    Profile.value(profile, "role_session_name") || "aws-elixir-#{System.system_time(:second)}"
   end
 
   defp duration(profile) do
-    case profile["duration_seconds"] do
+    case Profile.value(profile, "duration_seconds") do
       nil -> @default_duration_seconds
       seconds when is_binary(seconds) -> String.to_integer(seconds)
       seconds when is_integer(seconds) -> seconds

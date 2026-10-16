@@ -9,6 +9,7 @@ defmodule AwsSDK.Credentials.Providers.StaticProfile do
   lets the chain continue to them.
   """
 
+  alias AwsSDK.Credentials.Secrets
   alias AwsSDK.Credentials.Profile
 
   @sso_indicators ~w(sso_session sso_start_url credential_process role_arn)
@@ -31,9 +32,9 @@ defmodule AwsSDK.Credentials.Providers.StaticProfile do
   end
 
   defp from_profile(profile) do
-    ak = profile["aws_access_key_id"]
-    sk = profile["aws_secret_access_key"]
-    st = profile["aws_session_token"]
+    ak = Profile.value(profile, "aws_access_key_id")
+    sk = Profile.value(profile, "aws_secret_access_key")
+    st = Profile.value(profile, "aws_session_token")
 
     if is_binary(ak) and is_binary(sk) do
       {:ok,
@@ -42,7 +43,9 @@ defmodule AwsSDK.Credentials.Providers.StaticProfile do
          secret_access_key: sk,
          security_token: present(st),
          expires_at: nil,
-         source: :profile
+         source: :profile,
+         # Every key read for this profile, not only the three used above.
+         profile: Secrets.strip(profile)
        }}
     else
       :skip
