@@ -172,6 +172,24 @@ defmodule AwsSDK.IAM.SandboxTest do
     end
   end
 
+  describe "simulate_principal_policy/3" do
+    test "returns the response registered for the policy source" do
+      response =
+        {:ok, %{body: %{evaluation_results: [], is_truncated: false, marker: nil}, headers: %{}}}
+
+      Sandbox.set_simulate_principal_policy_responses([
+        {"arn:aws:iam::ACCOUNT:role/ROLE", fn -> response end}
+      ])
+
+      assert response ===
+               IAM.simulate_principal_policy(
+                 "arn:aws:iam::ACCOUNT:role/ROLE",
+                 ["s3:CreateBucket"],
+                 sandbox: [enabled: true]
+               )
+    end
+  end
+
   describe "list_roles/1" do
     test "returns mocked list" do
       Sandbox.set_list_roles_responses([

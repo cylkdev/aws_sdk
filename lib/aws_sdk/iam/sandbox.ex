@@ -444,6 +444,26 @@ if Code.ensure_loaded?(SandboxRegistry) do
       Sandbox.register(@registry, __MODULE__, :get_account_summary, entries)
     end
 
+    def simulate_principal_policy_response(policy_source_arn, action_names, opts) do
+      binding = [
+        policy_source_arn: policy_source_arn,
+        action_names: action_names,
+        opts: opts
+      ]
+
+      Sandbox.apply(
+        @registry,
+        __MODULE__,
+        :simulate_principal_policy,
+        policy_source_arn,
+        binding
+      )
+    end
+
+    def set_simulate_principal_policy_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :simulate_principal_policy, entries)
+    end
+
     def delete_open_id_connect_provider_response(arn, opts) do
       binding = [arn: arn, opts: opts]
 

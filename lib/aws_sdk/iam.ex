@@ -2558,6 +2558,153 @@ defmodule AwsSDK.IAM do
   @doc false
   def parse_account_summary_for_test(xml), do: parse_account_summary(xml)
 
+  @doc """
+  Simulates whether the IAM user, group or role at `policy_source_arn` may
+  perform each action in `action_names`, including the effect of the
+  organization's service control policies on the account.
+
+  Maps to AWS `SimulatePrincipalPolicy`.
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - iam:SimulatePrincipalPolicy
+
+  ## Arguments
+
+    * `policy_source_arn` - The ARN of the user, group or role to simulate.
+    * `action_names` - The actions to evaluate, such as `"s3:CreateBucket"`.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+    * `:resource_arns` - The resources to evaluate the actions against.
+    * `:context_entries` - A list of
+      `%{context_key_name: "aws:RequestedRegion", context_key_values: ["..."], context_key_type: "string"}`.
+    * `:marker` - Where to continue a truncated answer.
+    * `:max_items` - The most results to return.
+
+  See the "Shared Options" section in the module documentation for common options.
+  """
+  @spec simulate_principal_policy(
+          policy_source_arn :: String.t(),
+          action_names :: [String.t()],
+          opts :: keyword()
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def simulate_principal_policy(policy_source_arn, action_names, opts \\ [])
+      when is_binary(policy_source_arn) and is_list(action_names) do
+    if sandbox?(opts) do
+      sandbox_simulate_principal_policy_response(policy_source_arn, action_names, opts)
+    else
+      do_simulate_principal_policy(policy_source_arn, action_names, opts)
+    end
+  end
+
+  defp do_simulate_principal_policy(policy_source_arn, action_names, opts) do
+    params =
+      %{"PolicySourceArn" => policy_source_arn}
+      |> put_member_list("ActionNames", action_names)
+      |> put_member_list("ResourceArns", Keyword.get(opts, :resource_arns, []))
+      |> put_context_entries(Keyword.get(opts, :context_entries, []))
+      |> maybe_put("Marker", opts[:marker])
+      |> maybe_put("MaxItems", opts[:max_items])
+
+    with {:ok, op} <- build_operation("SimulatePrincipalPolicy", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         headers: Client.deserialize_headers(headers, opts),
+         body: parse_simulate_principal_policy(body)
+       }}
+    end
+  end
+
+  defp put_context_entries(map, entries) do
+    entries
+    |> Enum.with_index(1)
+    |> Enum.reduce(map, fn {entry, idx}, acc ->
+      prefix = "ContextEntries.member.#{idx}"
+
+      acc
+      |> Map.put(prefix <> ".ContextKeyName", entry.context_key_name)
+      |> Map.put(prefix <> ".ContextKeyType", entry.context_key_type)
+      |> put_member_list(prefix <> ".ContextKeyValues", entry.context_key_values)
+    end)
+  end
+
+  defp parse_simulate_principal_policy(body) do
+    %{
+      evaluation_results:
+        xpath(body, ~x"//SimulatePrincipalPolicyResult/EvaluationResults/member"l,
+          eval_action_name: ~x"./EvalActionName/text()"s,
+          eval_resource_name: ~x"./EvalResourceName/text()"o |> transform_by(&optional_text/1),
+          eval_decision: ~x"./EvalDecision/text()"s,
+          matched_statements: matched_statements_spec(),
+          missing_context_values: ~x"./MissingContextValues/member/text()"sl,
+          organizations_decision_detail: [
+            ~x"./OrganizationsDecisionDetail"o,
+            allowed_by_organizations:
+              ~x"./AllowedByOrganizations/text()"s |> transform_by(&(&1 === "true"))
+          ],
+          permissions_boundary_decision_detail: permissions_boundary_decision_detail_spec(),
+          eval_decision_details: eval_decision_details_spec(),
+          resource_specific_results: [
+            ~x"./ResourceSpecificResults/member"l,
+            eval_resource_name: ~x"./EvalResourceName/text()"s,
+            eval_resource_decision: ~x"./EvalResourceDecision/text()"s,
+            matched_statements: matched_statements_spec(),
+            missing_context_values: ~x"./MissingContextValues/member/text()"sl,
+            eval_decision_details: eval_decision_details_spec(),
+            permissions_boundary_decision_detail: permissions_boundary_decision_detail_spec()
+          ]
+        ),
+      is_truncated:
+        xpath(body, ~x"//SimulatePrincipalPolicyResult/IsTruncated/text()"s) === "true",
+      marker:
+        xpath(
+          body,
+          ~x"//SimulatePrincipalPolicyResult/Marker/text()"o |> transform_by(&optional_text/1)
+        )
+    }
+  end
+
+  defp matched_statements_spec do
+    [
+      ~x"./MatchedStatements/member"l,
+      source_policy_id: ~x"./SourcePolicyId/text()"o |> transform_by(&optional_text/1),
+      source_policy_type: ~x"./SourcePolicyType/text()"o |> transform_by(&optional_text/1),
+      start_position: [
+        ~x"./StartPosition"o,
+        line: ~x"./Line/text()"oi,
+        column: ~x"./Column/text()"oi
+      ],
+      end_position: [
+        ~x"./EndPosition"o,
+        line: ~x"./Line/text()"oi,
+        column: ~x"./Column/text()"oi
+      ]
+    ]
+  end
+
+  defp permissions_boundary_decision_detail_spec do
+    [
+      ~x"./PermissionsBoundaryDecisionDetail"o,
+      allowed_by_permissions_boundary:
+        ~x"./AllowedByPermissionsBoundary/text()"s |> transform_by(&(&1 === "true"))
+    ]
+  end
+
+  # AWS sends EvalDecisionDetails as a list of <entry><key/><value/></entry>,
+  # so that is what comes back.
+  defp eval_decision_details_spec do
+    [
+      ~x"./EvalDecisionDetails/entry"l,
+      key: ~x"./key/text()"s,
+      value: ~x"./value/text()"s
+    ]
+  end
+
   # AWS sends SummaryMap as a list of <entry><key/><value/></entry>, so that
   # is what comes back. Collapsing it to a plain map would be this library
   # choosing a container AWS did not send.
@@ -2966,6 +3113,15 @@ defmodule AwsSDK.IAM do
       as: :remove_client_id_from_open_id_connect_provider_response
 
     @doc false
+    defdelegate sandbox_simulate_principal_policy_response(
+                  policy_source_arn,
+                  action_names,
+                  opts
+                ),
+                to: AwsSDK.IAM.Sandbox,
+                as: :simulate_principal_policy_response
+
+    @doc false
     defdelegate sandbox_get_account_summary_response(opts),
       to: AwsSDK.IAM.Sandbox,
       as: :get_account_summary_response
@@ -3052,6 +3208,9 @@ defmodule AwsSDK.IAM do
       do: raise("sandbox not available")
 
     defp sandbox_get_account_summary_response(_opts), do: raise("sandbox not available")
+
+    defp sandbox_simulate_principal_policy_response(_, _, _),
+      do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
