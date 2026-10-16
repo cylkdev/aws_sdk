@@ -1865,6 +1865,38 @@ defmodule AwsSDK.S3 do
     end
   end
 
+  @doc """
+  Returns the public access block configuration of a bucket.
+
+  Maps to AWS `GetPublicAccessBlock`. Each of the four flags is a boolean, or
+  `nil` when AWS leaves it out. A bucket that has never had a public access
+  block set answers with an error.
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - s3:GetBucketPublicAccessBlock
+
+  ## Arguments
+
+    * `bucket` - The name of the bucket.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+  See the "Shared Options" section in the module documentation for common options.
+  """
+  @spec get_public_access_block(bucket :: binary(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def get_public_access_block(bucket, opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_get_public_access_block_response(bucket, opts)
+    else
+      do_get_public_access_block(bucket, opts)
+    end
+  end
+
   @doc false
   def build_operation(method, bucket, key, opts) do
     with {:ok, config} <- resolve_config(opts) do
@@ -2582,6 +2614,19 @@ defmodule AwsSDK.S3 do
     end
   end
 
+  defp do_get_public_access_block(bucket, opts) do
+    request_opts = Keyword.put(opts, :query, %{"publicAccessBlock" => ""})
+
+    with {:ok, op} <- build_operation(:get, bucket, nil, request_opts),
+         {:ok, %{body: xml, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_public_access_block(xml),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
+    end
+  end
+
   defp put_bucket_config(bucket, query_key, xml, opts) do
     headers = xml_body_headers(xml)
     request_opts = put_opts(opts, query: %{query_key => ""}, body: xml, headers: headers)
@@ -3134,6 +3179,10 @@ defmodule AwsSDK.S3 do
         S3.get_bucket_versioning(source_bucket!(opts), with_default_options(opts))
       end
 
+      def get_public_access_block(opts \\ []) do
+        S3.get_public_access_block(source_bucket!(opts), with_default_options(opts))
+      end
+
       defp destination_bucket!(opts) do
         with nil <-
                opts[:bucket] ||
@@ -3347,6 +3396,11 @@ defmodule AwsSDK.S3 do
     defdelegate sandbox_get_bucket_versioning_response(bucket, opts),
       to: AwsSDK.S3.Sandbox,
       as: :get_bucket_versioning_response
+
+    @doc false
+    defdelegate sandbox_get_public_access_block_response(bucket, opts),
+      to: AwsSDK.S3.Sandbox,
+      as: :get_public_access_block_response
   else
     defp sandbox_disabled?, do: true
 
@@ -3660,6 +3714,15 @@ defmodule AwsSDK.S3 do
     end
 
     defp sandbox_get_bucket_versioning_response(bucket, opts) do
+      raise """
+      Cannot use sandbox mode outside of test environment.
+
+      bucket: #{inspect(bucket)}
+      options: #{inspect(opts)}
+      """
+    end
+
+    defp sandbox_get_public_access_block_response(bucket, opts) do
       raise """
       Cannot use sandbox mode outside of test environment.
 

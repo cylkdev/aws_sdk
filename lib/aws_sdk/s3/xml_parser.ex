@@ -686,6 +686,31 @@ defmodule AwsSDK.S3.XMLParser do
     }
   end
 
+  @doc """
+  Parses the `<PublicAccessBlockConfiguration>` body a `GetPublicAccessBlock`
+  call returns, casting each of the four flags to a boolean.
+  """
+  @spec parse_public_access_block(binary()) :: %{
+          block_public_acls: boolean() | nil,
+          ignore_public_acls: boolean() | nil,
+          block_public_policy: boolean() | nil,
+          restrict_public_buckets: boolean() | nil
+        }
+  def parse_public_access_block(xml) do
+    doc = SweetXml.parse(xml)
+
+    %{
+      block_public_acls:
+        to_bool(xpath(doc, ~x"//PublicAccessBlockConfiguration/BlockPublicAcls/text()"s)),
+      ignore_public_acls:
+        to_bool(xpath(doc, ~x"//PublicAccessBlockConfiguration/IgnorePublicAcls/text()"s)),
+      block_public_policy:
+        to_bool(xpath(doc, ~x"//PublicAccessBlockConfiguration/BlockPublicPolicy/text()"s)),
+      restrict_public_buckets:
+        to_bool(xpath(doc, ~x"//PublicAccessBlockConfiguration/RestrictPublicBuckets/text()"s))
+    }
+  end
+
   defp to_bool("true"), do: true
   defp to_bool("false"), do: false
   # An absent element is reported as absent, not as `false`.

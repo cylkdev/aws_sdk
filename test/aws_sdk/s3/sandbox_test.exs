@@ -652,6 +652,29 @@ defmodule AwsSDK.S3.SandboxTest do
     end
   end
 
+  describe "get_public_access_block/2" do
+    test "returns the response registered for the bucket" do
+      response =
+        {:ok,
+         %{
+           body: %{
+             block_public_acls: nil,
+             ignore_public_acls: nil,
+             block_public_policy: nil,
+             restrict_public_buckets: nil
+           },
+           headers: %{}
+         }}
+
+      Sandbox.set_get_public_access_block_responses([
+        {"test-bucket", fn -> response end}
+      ])
+
+      assert response ===
+               S3.get_public_access_block("test-bucket", sandbox: [enabled: true])
+    end
+  end
+
   describe "put_public_access_block/2" do
     test "returns mocked success" do
       Sandbox.set_put_public_access_block_responses([
