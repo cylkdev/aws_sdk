@@ -106,6 +106,16 @@ defmodule AwsSDK.EC2.SandboxTest do
     end
   end
 
+  describe "describe_internet_gateways/1" do
+    test "returns the registered response" do
+      response = {:ok, %{body: %{internet_gateway_set: [], next_token: nil}, headers: %{}}}
+
+      Sandbox.set_describe_internet_gateways_responses([fn -> response end])
+
+      assert response === EC2.describe_internet_gateways(sandbox: [enabled: true])
+    end
+  end
+
   describe "describe_subnets/1" do
     test "returns the registered subnets" do
       Sandbox.set_describe_subnets_responses([

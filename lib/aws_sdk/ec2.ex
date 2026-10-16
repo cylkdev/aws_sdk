@@ -821,6 +821,70 @@ defmodule AwsSDK.EC2 do
   end
 
   @doc """
+  Describes internet gateways.
+
+  Maps to AWS `DescribeInternetGateways`.
+
+  ## Options
+
+    * `:internet_gateway_ids` - List of internet gateway IDs.
+    * `:filters` - List of `%{name:, values:}` filters, such as
+      `attachment.vpc-id`.
+    * `:next_token` - Where to continue a truncated answer.
+    * `:max_results` - The most results to return.
+  """
+  @spec describe_internet_gateways(opts :: keyword()) ::
+          {:ok,
+           %{
+             body: %{internet_gateway_set: list(map()), next_token: String.t() | nil},
+             headers: map()
+           }}
+          | {:error, term()}
+  def describe_internet_gateways(opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_describe_internet_gateways_response(opts)
+    else
+      do_describe_internet_gateways(opts)
+    end
+  end
+
+  defp do_describe_internet_gateways(opts) do
+    params =
+      %{}
+      |> put_member_list("InternetGatewayId", opts[:internet_gateway_ids] || [])
+      |> put_filters(opts[:filters] || [])
+      |> maybe_put("NextToken", opts[:next_token])
+      |> maybe_put("MaxResults", opts[:max_results])
+
+    with {:ok, op} <- build_operation("DescribeInternetGateways", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: %{
+           internet_gateway_set:
+             xpath(body, ~x"//DescribeInternetGatewaysResponse/internetGatewaySet/item"l,
+               internet_gateway_id: ~x"./internetGatewayId/text()"s,
+               owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+               attachment_set: [
+                 ~x"./attachmentSet/item"l,
+                 vpc_id: ~x"./vpcId/text()"s,
+                 state: ~x"./state/text()"s
+               ],
+               tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+             ),
+           next_token:
+             xpath(
+               body,
+               ~x"//DescribeInternetGatewaysResponse/nextToken/text()"o
+               |> transform_by(&optional_text/1)
+             )
+         },
+         headers: Client.deserialize_headers(headers, opts)
+       }}
+    end
+  end
+
+  @doc """
   Describes network ACLs.
 
   ## Options
@@ -4384,6 +4448,11 @@ defmodule AwsSDK.EC2 do
       as: :describe_vpcs_response
 
     @doc false
+    defdelegate sandbox_describe_internet_gateways_response(opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :describe_internet_gateways_response
+
+    @doc false
     defdelegate sandbox_describe_subnets_response(opts),
       to: AwsSDK.EC2.Sandbox,
       as: :describe_subnets_response
@@ -4542,6 +4611,7 @@ defmodule AwsSDK.EC2 do
       do: raise("sandbox not available")
 
     defp sandbox_describe_vpcs_response(_), do: raise("sandbox not available")
+    defp sandbox_describe_internet_gateways_response(_), do: raise("sandbox not available")
     defp sandbox_describe_subnets_response(_), do: raise("sandbox not available")
     defp sandbox_create_tags_response(_, _), do: raise("sandbox not available")
     defp sandbox_describe_tags_response(_), do: raise("sandbox not available")

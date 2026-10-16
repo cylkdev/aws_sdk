@@ -94,6 +94,16 @@ if Code.ensure_loaded?(SandboxRegistry) do
       Sandbox.register(@registry, __MODULE__, :describe_vpcs, entries)
     end
 
+    def describe_internet_gateways_response(opts) do
+      binding = [opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :describe_internet_gateways, :*, binding)
+    end
+
+    def set_describe_internet_gateways_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :describe_internet_gateways, entries)
+    end
+
     def describe_subnets_response(opts) do
       binding = [opts: opts]
 
