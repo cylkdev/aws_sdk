@@ -2062,11 +2062,11 @@ defmodule AwsSDK.S3 do
 
     with {:ok, op} <- build_operation(:put, bucket, nil, Keyword.put(opts, :body, body)) do
       case Client.request(op) do
-        {:error, %ErrorMessage{details: %{status: 409, response: resp}}} ->
+        {:error, %ErrorMessage{details: %{status: 409} = details}} ->
           {:error,
            ErrorMessage.conflict(
              "bucket already exists",
-             %{bucket: bucket, region: region, response: resp}
+             Map.merge(details, %{bucket: bucket, region: region})
            )}
 
         {:ok, %{headers: headers}} ->
