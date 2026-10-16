@@ -266,8 +266,8 @@ defmodule AwsSDK.S3 do
 
   Returns `{:ok, headers}` when the bucket exists and is accessible (the response
   body is empty; useful headers such as `x-amz-bucket-region` are returned).
-  Returns `{:error, :not_found}` when the bucket does not exist or the caller
-  lacks permission.
+  Returns `{:error, :not_found}` when the bucket does not exist and
+  `{:error, :forbidden}` when the caller lacks permission.
 
   ## Permissions
 

@@ -138,9 +138,9 @@ defmodule AwsSDK.Client do
   Executes a signed operation and maps failures to `ErrorMessage` errors.
 
   This is the library's single status-code contract — 3xx →
-  `bad_request`, 4xx → `not_found`, 5xx → `service_unavailable`, transport
-  errors → `internal_server_error`. The 4xx/5xx/transport mappings align
-  with prior per-service helpers; 3xx handling is now uniform. Success
+  `bad_request`, 4xx → labelled from AWS's own error code by
+  `error_message/3`, 5xx → `service_unavailable`, transport errors →
+  `internal_server_error`. Success
   passes `execute/1`'s response map (`:status_code`, `:headers`, `:body`,
   and the streaming variants) through untouched. For HTTP failures, `details`
   carries the original `:status` code alongside `:response` (the body) and
@@ -164,12 +164,7 @@ defmodule AwsSDK.Client do
          })}
 
       {:error, {:http_error, status_code, response, headers}} when status_code in 400..499 ->
-        {:error,
-         ErrorMessage.not_found("resource not found.", %{
-           status: status_code,
-           response: response,
-           headers: headers
-         })}
+        {:error, error_message(status_code, response, headers)}
 
       {:error, {:http_error, status_code, response, headers}} when status_code >= 500 ->
         {:error,
@@ -182,6 +177,90 @@ defmodule AwsSDK.Client do
       {:error, transport_error} ->
         {:error, ErrorMessage.internal_server_error("internal server error", transport_error)}
     end
+  end
+
+  @doc """
+  Builds the `ErrorMessage` for a 4xx answer from AWS.
+
+  The label comes from AWS's own error code — the XML `<Code>` or the JSON
+  `__type` — because AWS answers many "not found" cases with status 400:
+
+    * a code containing `NotFound`, or starting with `NoSuch` → `not_found`
+    * a code starting with `AccessDenied`, or `UnauthorizedOperation` →
+      `forbidden`
+    * a code containing `Malformed` or `Validation` → `bad_request`
+    * a code containing `AlreadyExists` or `AlreadyOwnedByYou` → `conflict`
+    * any other code, or a body with none (a HEAD answer) → labelled by
+      `status`
+
+  `details` carries `:status`, `:response` (the body) and `:headers`.
+
+  ## Examples
+
+      AwsSDK.Client.error_message(404, "", [])
+      #=> %ErrorMessage{
+      #=>   code: :not_found,
+      #=>   message: "resource not found.",
+      #=>   details: %{status: 404, response: "", headers: []}
+      #=> }
+  """
+  @spec error_message(400..499, binary(), list()) :: ErrorMessage.t()
+  def error_message(status, response, headers) do
+    code = error_label(status, aws_error_code(response))
+
+    %ErrorMessage{
+      code: code,
+      message: error_label_message(code),
+      details: %{status: status, response: response, headers: headers}
+    }
+  end
+
+  defp aws_error_code(response) do
+    case Regex.run(~r{<Code>([^<]+)</Code>|"__type":"(?:[^"#]*#)?([^"]+)"}, response,
+           capture: :all_but_first
+         ) do
+      ["", json_code] -> json_code
+      [xml_code | _] -> xml_code
+      nil -> nil
+    end
+  end
+
+  defp error_label(status, nil), do: Plug.Conn.Status.reason_atom(status)
+
+  defp error_label(status, aws_code) do
+    cond do
+      not_found_code?(aws_code) -> :not_found
+      forbidden_code?(aws_code) -> :forbidden
+      bad_request_code?(aws_code) -> :bad_request
+      conflict_code?(aws_code) -> :conflict
+      true -> Plug.Conn.Status.reason_atom(status)
+    end
+  end
+
+  defp not_found_code?(aws_code) do
+    String.contains?(aws_code, "NotFound") or String.starts_with?(aws_code, "NoSuch")
+  end
+
+  defp forbidden_code?(aws_code) do
+    String.starts_with?(aws_code, "AccessDenied") or aws_code === "UnauthorizedOperation"
+  end
+
+  defp bad_request_code?(aws_code) do
+    String.contains?(aws_code, "Malformed") or String.contains?(aws_code, "Validation")
+  end
+
+  defp conflict_code?(aws_code) do
+    String.contains?(aws_code, "AlreadyExists") or String.contains?(aws_code, "AlreadyOwnedByYou")
+  end
+
+  defp error_label_message(:not_found), do: "resource not found."
+
+  defp error_label_message(code) do
+    code
+    |> Plug.Conn.Status.code()
+    |> Plug.Conn.Status.reason_phrase()
+    |> String.downcase()
+    |> Kernel.<>(".")
   end
 
   @doc """
