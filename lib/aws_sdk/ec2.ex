@@ -808,6 +808,18 @@ defmodule AwsSDK.EC2 do
     %{vpc | is_default: to_bool(value)}
   end
 
+  defp coerce_subnet_booleans(subnet) do
+    %{
+      subnet
+      | default_for_az: to_bool(subnet.default_for_az),
+        map_public_ip_on_launch: to_bool(subnet.map_public_ip_on_launch),
+        assign_ipv6_address_on_creation: to_bool(subnet.assign_ipv6_address_on_creation),
+        map_customer_owned_ip_on_launch: to_bool(subnet.map_customer_owned_ip_on_launch),
+        enable_dns64: to_bool(subnet.enable_dns64),
+        ipv6_native: to_bool(subnet.ipv6_native)
+    }
+  end
+
   @doc """
   Describes network ACLs.
 
@@ -1112,8 +1124,8 @@ defmodule AwsSDK.EC2 do
       #=>        subnet_arn: "arn:aws:ec2:us-east-1:123456789012:subnet/subnet-9d4a7b6c",
       #=>        owner_id: "123456789012",
       #=>        available_ip_address_count: 251,
-      #=>        default_for_az: "false",
-      #=>        map_public_ip_on_launch: "false",
+      #=>        default_for_az: false,
+      #=>        map_public_ip_on_launch: false,
       #=>        ipv6_cidr_block_association_set: [],
       #=>        tag_set: [%{key: "Name", value: "private-a"}]
       #=>      }
@@ -1192,7 +1204,7 @@ defmodule AwsSDK.EC2 do
       {:ok,
        %{
          body: %{
-           subnet_set: subnets,
+           subnet_set: Enum.map(subnets, &coerce_subnet_booleans/1),
            next_token:
              xpath(
                body,
