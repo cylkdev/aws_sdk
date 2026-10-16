@@ -639,6 +639,19 @@ defmodule AwsSDK.S3.SandboxTest do
     end
   end
 
+  describe "get_bucket_versioning/2" do
+    test "returns the response registered for the bucket" do
+      response = {:ok, %{body: %{status: "STATUS", mfa_delete: nil}, headers: %{}}}
+
+      Sandbox.set_get_bucket_versioning_responses([
+        {"test-bucket", fn -> response end}
+      ])
+
+      assert response ===
+               S3.get_bucket_versioning("test-bucket", sandbox: [enabled: true])
+    end
+  end
+
   describe "put_public_access_block/2" do
     test "returns mocked success" do
       Sandbox.set_put_public_access_block_responses([

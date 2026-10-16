@@ -661,6 +661,31 @@ defmodule AwsSDK.S3.XMLParser do
     }
   end
 
+  @doc """
+  Parses the `<VersioningConfiguration>` body a `GetBucketVersioning` call
+  returns.
+
+  A bucket that has never had versioning set returns the element with no
+  members, so both keys are `nil`.
+  """
+  @spec parse_versioning_configuration(binary()) :: %{
+          status: String.t() | nil,
+          mfa_delete: String.t() | nil
+        }
+  def parse_versioning_configuration(xml) do
+    doc = SweetXml.parse(xml)
+
+    %{
+      status:
+        xpath(doc, ~x"//VersioningConfiguration/Status/text()"o |> transform_by(&optional_text/1)),
+      mfa_delete:
+        xpath(
+          doc,
+          ~x"//VersioningConfiguration/MfaDelete/text()"o |> transform_by(&optional_text/1)
+        )
+    }
+  end
+
   defp to_bool("true"), do: true
   defp to_bool("false"), do: false
   # An absent element is reported as absent, not as `false`.

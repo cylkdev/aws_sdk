@@ -355,5 +355,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_put_bucket_versioning_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :put_bucket_versioning, entries)
     end
+
+    def get_bucket_versioning_response(bucket, opts) do
+      binding = [bucket: bucket, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :get_bucket_versioning, bucket, binding)
+    end
+
+    def set_get_bucket_versioning_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :get_bucket_versioning, entries)
+    end
   end
 end

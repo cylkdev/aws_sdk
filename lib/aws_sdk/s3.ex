@@ -1834,6 +1834,37 @@ defmodule AwsSDK.S3 do
     end
   end
 
+  @doc """
+  Returns the versioning state of a bucket.
+
+  Maps to AWS `GetBucketVersioning`. `:status` and `:mfa_delete` are `nil` for
+  a bucket that has never had versioning set.
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - s3:GetBucketVersioning
+
+  ## Arguments
+
+    * `bucket` - The name of the bucket.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+  See the "Shared Options" section in the module documentation for common options.
+  """
+  @spec get_bucket_versioning(bucket :: binary(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def get_bucket_versioning(bucket, opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_get_bucket_versioning_response(bucket, opts)
+    else
+      do_get_bucket_versioning(bucket, opts)
+    end
+  end
+
   @doc false
   def build_operation(method, bucket, key, opts) do
     with {:ok, config} <- resolve_config(opts) do
@@ -2538,6 +2569,19 @@ defmodule AwsSDK.S3 do
     put_bucket_config(bucket, "versioning", xml, opts)
   end
 
+  defp do_get_bucket_versioning(bucket, opts) do
+    request_opts = Keyword.put(opts, :query, %{"versioning" => ""})
+
+    with {:ok, op} <- build_operation(:get, bucket, nil, request_opts),
+         {:ok, %{body: xml, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_versioning_configuration(xml),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
+    end
+  end
+
   defp put_bucket_config(bucket, query_key, xml, opts) do
     headers = xml_body_headers(xml)
     request_opts = put_opts(opts, query: %{query_key => ""}, body: xml, headers: headers)
@@ -3086,6 +3130,10 @@ defmodule AwsSDK.S3 do
         S3.put_bucket_versioning(source_bucket!(opts), status, with_default_options(opts))
       end
 
+      def get_bucket_versioning(opts \\ []) do
+        S3.get_bucket_versioning(source_bucket!(opts), with_default_options(opts))
+      end
+
       defp destination_bucket!(opts) do
         with nil <-
                opts[:bucket] ||
@@ -3294,6 +3342,11 @@ defmodule AwsSDK.S3 do
     defdelegate sandbox_put_bucket_versioning_response(bucket, status, opts),
       to: AwsSDK.S3.Sandbox,
       as: :put_bucket_versioning_response
+
+    @doc false
+    defdelegate sandbox_get_bucket_versioning_response(bucket, opts),
+      to: AwsSDK.S3.Sandbox,
+      as: :get_bucket_versioning_response
   else
     defp sandbox_disabled?, do: true
 
@@ -3602,6 +3655,15 @@ defmodule AwsSDK.S3 do
 
       bucket: #{inspect(bucket)}
       status: #{inspect(status)}
+      options: #{inspect(opts)}
+      """
+    end
+
+    defp sandbox_get_bucket_versioning_response(bucket, opts) do
+      raise """
+      Cannot use sandbox mode outside of test environment.
+
+      bucket: #{inspect(bucket)}
       options: #{inspect(opts)}
       """
     end
