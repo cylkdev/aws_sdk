@@ -524,7 +524,15 @@ defmodule AwsSDK.ConformanceTest do
     """
 
     assert {:error,
-            {:unexpected_response, %{operation: "CreateLaunchTemplateVersion", body: ^xml}}} =
+            %ErrorMessage{
+              code: :bad_gateway,
+              message: "bad gateway",
+              details: %{
+                kind: :unexpected_response,
+                operation: "CreateLaunchTemplateVersion",
+                response: xml
+              }
+            }} ===
              AwsSDK.EC2.create_launch_template_version_result_for_test(xml)
   end
 
@@ -577,7 +585,16 @@ defmodule AwsSDK.ConformanceTest do
     </ModifyLaunchTemplateResponse>
     """
 
-    assert {:error, {:unexpected_response, %{operation: "ModifyLaunchTemplate", body: ^xml}}} =
+    assert {:error,
+            %ErrorMessage{
+              code: :bad_gateway,
+              message: "bad gateway",
+              details: %{
+                kind: :unexpected_response,
+                operation: "ModifyLaunchTemplate",
+                response: xml
+              }
+            }} ===
              AwsSDK.EC2.modify_launch_template_result_for_test(xml)
   end
 
@@ -665,8 +682,14 @@ defmodule AwsSDK.ConformanceTest do
            } == AwsSDK.EC2.parse_delete_launch_template_versions_for_test(xml)
 
     assert {:error,
-            {:launch_template_version_not_deleted,
-             AwsSDK.EC2.parse_delete_launch_template_versions_for_test(xml)}} ==
+            %ErrorMessage{
+              code: :conflict,
+              message: "conflict",
+              details:
+                xml
+                |> AwsSDK.EC2.parse_delete_launch_template_versions_for_test()
+                |> Map.put(:kind, :launch_template_version_not_deleted)
+            }} ===
              AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
   end
 
@@ -680,7 +703,15 @@ defmodule AwsSDK.ConformanceTest do
     """
 
     assert {:error,
-            {:unexpected_response, %{operation: "DeleteLaunchTemplateVersions", body: ^xml}}} =
+            %ErrorMessage{
+              code: :bad_gateway,
+              message: "bad gateway",
+              details: %{
+                kind: :unexpected_response,
+                operation: "DeleteLaunchTemplateVersions",
+                response: xml
+              }
+            }} ===
              AwsSDK.EC2.delete_launch_template_version_result_for_test(xml)
   end
 

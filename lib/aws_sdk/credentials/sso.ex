@@ -8,7 +8,7 @@ defmodule AwsSDK.Credentials.SSO do
 
   `execute/1` is the dispatcher for
   `AwsSDK.Credentials.SSO.Operation` structs. Unlike
-  `AwsSDK.Client.execute/1`, it does not SigV4-sign the request — the
+  `AwsSDK.Client.request/1`, it does not SigV4-sign the request — the
   portal endpoint uses a bearer token (`x-amz-sso_bearer_token`) and
   the OIDC endpoints are unauthenticated POSTs. Callers interpret
   status codes themselves (since OIDC `invalid_grant`,
@@ -23,13 +23,9 @@ defmodule AwsSDK.Credentials.SSO do
 
   defdelegate login(profile_name, opts \\ []), to: AwsSDK.Credentials.SSO.Login, as: :run
 
-  @spec execute(Operation.t()) ::
-          {:ok, response} | {:error, {:sso_transport_error, term}}
+  @spec execute(Operation.t()) :: {:ok, response} | {:error, ErrorMessage.t()}
   def execute(%Operation{} = op) do
-    case dispatch(op) do
-      {:ok, _} = ok -> ok
-      {:error, %{error: error}} -> {:error, {:sso_transport_error, error}}
-    end
+    dispatch(op)
   end
 
   defp dispatch(%Operation{method: :get} = op) do

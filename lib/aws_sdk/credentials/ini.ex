@@ -7,34 +7,37 @@ defmodule AwsSDK.Credentials.INI do
   comments are stripped.
   """
 
+  alias AwsSDK.Error
+
   @type sections :: %{optional(String.t()) => %{optional(String.t()) => String.t()}}
 
   @doc """
   Reads and parses the INI file at `path`.
 
-  Returns `{:ok, sections}` when the file exists and parses cleanly,
-  `{:error, :enoent}` when the file is missing, or `{:error, posix}`
-  for other read errors.
+  Returns `{:ok, sections}` when the file exists and parses cleanly, or a
+  `:file_error` error whose `reason` is the posix code (`:enoent` when the
+  file is missing).
 
   ## Examples
 
       AwsSDK.Credentials.INI.read("/Users/you/.aws/config")
-      #=> %{
-      #=>   "default" => %{"region" => "us-east-1"},
-      #=>   "profile dev" => %{"role_arn" => "arn:aws:iam::123456789012:role/dev"}
-      #=> }
+      #=> {:ok,
+      #=>  %{
+      #=>    "default" => %{"region" => "us-east-1"},
+      #=>    "profile dev" => %{"role_arn" => "arn:aws:iam::123456789012:role/dev"}
+      #=>  }}
 
       AwsSDK.Credentials.INI.read("/no/such/file")
-      #=> %{}
+      #=> {:error, %ErrorMessage{details: %{kind: :file_error, reason: :enoent, path: "/no/such/file"}}}
 
-  A missing or unreadable file yields an empty map rather than raising, so a
+  A missing or unreadable file is an error rather than a raise, so a
   machine with no `~/.aws` still resolves credentials from other sources.
   """
-  @spec read(Path.t()) :: {:ok, sections} | {:error, File.posix()}
+  @spec read(Path.t()) :: {:ok, sections} | {:error, ErrorMessage.t()}
   def read(path) do
     case File.read(path) do
       {:ok, contents} -> {:ok, parse(contents)}
-      {:error, _} = err -> err
+      {:error, reason} -> {:error, Error.new(:file_error, %{reason: reason, path: path})}
     end
   end
 

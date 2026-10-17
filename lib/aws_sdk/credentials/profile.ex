@@ -18,8 +18,9 @@ defmodule AwsSDK.Credentials.Profile do
   (SSO, credential_process, AssumeRole, or static keys).
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
   alias AwsSDK.Credentials.INI
+  alias AwsSDK.Error
 
   alias AwsSDK.Credentials.Providers.{
     AssumeRole,
@@ -89,7 +90,7 @@ defmodule AwsSDK.Credentials.Profile do
       #=>     read: {:ok, %{"profile dev" => %{"region" => "eu-west-1", ...}}},
       #=>     section: %{"region" => "eu-west-1", "role_arn" => "arn:aws:iam::123456789012:role/dev"}
       #=>   },
-      #=>   credentials: %{path: "/Users/you/.aws/credentials", read: {:error, :enoent}, section: nil}
+      #=>   credentials: %{path: "/Users/you/.aws/credentials", read: {:error, %ErrorMessage{details: %{kind: :file_error, reason: :enoent, ...}}}, section: nil}
       #=> }
 
       AwsSDK.Credentials.Profile.load("no-such-profile")
@@ -142,7 +143,7 @@ defmodule AwsSDK.Credentials.Profile do
       #=>   },
       #=>   credentials: %{
       #=>     path: "/Users/you/.aws/credentials",
-      #=>     read: {:error, :enoent},
+      #=>     read: {:error, %ErrorMessage{details: %{kind: :file_error, reason: :enoent, ...}}},
       #=>     section: nil
       #=>   }
       #=> }
@@ -249,17 +250,17 @@ defmodule AwsSDK.Credentials.Profile do
       #=>  }}
 
       AwsSDK.Credentials.Profile.security_credentials("no-such-profile")
-      #=> {:error, :no_credentials}
+      #=> {:error, %ErrorMessage{code: :not_found, details: %{kind: :profile_not_found, profile: "no-such-profile"}}}
 
   Picks the provider the profile implies: static keys, `role_arn` +
   `source_profile` (AssumeRole), `sso_session` (SSO), or
   `credential_process`. `:source` says which one answered.
   """
-  @spec security_credentials(String.t(), keyword) :: {:ok, map} | {:error, term}
+  @spec security_credentials(String.t(), keyword) :: {:ok, map} | {:error, ErrorMessage.t()}
   def security_credentials(profile_name, opts \\ []) when is_binary(profile_name) do
     case load(profile_name, opts) do
       nil ->
-        {:error, {:profile_not_found, profile_name}}
+        {:error, Error.new(:profile_not_found, %{profile: profile_name})}
 
       profile ->
         provider_opts = Keyword.put(opts, :profile, profile_name)
@@ -289,7 +290,7 @@ defmodule AwsSDK.Credentials.Profile do
         StaticProfile.resolve(opts)
 
       true ->
-        {:error, :unresolvable_profile}
+        :skip
     end
   end
 
@@ -297,11 +298,11 @@ defmodule AwsSDK.Credentials.Profile do
   defp interpret_dispatch({:error, _} = err, _profile_name), do: err
 
   defp interpret_dispatch(:skip, profile_name),
-    do: {:error, {:unresolvable_profile, profile_name}}
+    do: {:error, Error.new(:unresolvable_profile, %{profile: profile_name})}
 
   # The per-file facts this profile resolved from, kept unmerged.
   defp put_profile_files({:ok, creds}, profile) do
-    {:ok, Map.put(creds, :profile_files, Secrets.strip(profile))}
+    {:ok, Map.put(creds, :profile_files, Redact.strip(profile))}
   end
 
   defp put_profile_files(result, _profile), do: result

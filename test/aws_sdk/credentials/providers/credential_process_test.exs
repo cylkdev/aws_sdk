@@ -62,8 +62,14 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcessTest do
     """)
 
     assert {:error,
-            {:credential_process_failed, 7, %{stdout: "out\n", stderr: "err\n", exit_status: 7}}} =
-             CredentialProcess.resolve(profile: "dev", home_dir: tmp)
+            %ErrorMessage{
+              code: :internal_server_error,
+              message: "internal server error",
+              details: %{
+                kind: :credential_process_failed,
+                process: %{command: script, args: [], stderr: "err\n", exit_status: 7}
+              }
+            }} === CredentialProcess.resolve(profile: "dev", home_dir: tmp)
   end
 
   @tag :tmp_dir
@@ -84,7 +90,15 @@ defmodule AwsSDK.Credentials.Providers.CredentialProcessTest do
     credential_process = #{script}
     """)
 
-    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}, %{exit_status: 0}}} =
-             CredentialProcess.resolve(profile: "dev", home_dir: tmp)
+    assert {:error,
+            %ErrorMessage{
+              code: :bad_gateway,
+              message: "bad gateway",
+              details: %{
+                kind: :credential_process_invalid,
+                version: 2,
+                process: %{command: script, args: [], stderr: "", exit_status: 0}
+              }
+            }} === CredentialProcess.resolve(profile: "dev", home_dir: tmp)
   end
 end

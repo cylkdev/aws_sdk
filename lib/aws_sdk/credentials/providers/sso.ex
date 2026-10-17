@@ -26,16 +26,17 @@ defmodule AwsSDK.Credentials.Providers.SSO do
     4. Call `GetRoleCredentials` on the portal endpoint using the
        access token as a bearer token.
 
-  Returns `{:error, {:sso_token_expired, facts}}` when the token is stale
-  and no refresh is possible; `facts` holds every call result gathered
-  before the failure, one key per call. Callers that opt into `auto_sso_login` can
+  Returns an `:sso_token_expired` error when the token is stale and no
+  refresh is possible; its details hold every call result gathered before
+  the failure, one key per call. Callers that opt into `auto_sso_login` can
   recover by invoking `AwsSDK.Credentials.SSO.Login`.
   """
 
   require Logger
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
   alias AwsSDK.Credentials.Profile
+  alias AwsSDK.Error
   alias AwsSDK.Credentials.SSO
   alias AwsSDK.Credentials.SSO.{Operation, TokenCache}
 
@@ -48,8 +49,8 @@ defmodule AwsSDK.Credentials.Providers.SSO do
     # Tokens and secrets are removed from the facts kept under `:sso` and
     # from error terms; the signer's top-level keys are left intact.
     case do_resolve(opts) do
-      {:ok, creds} -> {:ok, Map.update!(creds, :sso, &Secrets.strip/1)}
-      other -> Secrets.strip(other)
+      {:ok, creds} -> {:ok, Map.update!(creds, :sso, &Redact.strip/1)}
+      other -> Redact.strip(other)
     end
   end
 
@@ -99,7 +100,7 @@ defmodule AwsSDK.Credentials.Providers.SSO do
   defp from_session(session_name, account_id, role_name, opts) do
     case Profile.load_sso_session(session_name, opts) do
       %{section: nil} = file ->
-        {:error, {:sso_session_not_found, session_name, file}}
+        {:error, Error.new(:sso_session_not_found, %{session: session_name, file: file})}
 
       %{section: session} ->
         start_url = session["sso_start_url"]
@@ -109,10 +110,10 @@ defmodule AwsSDK.Credentials.Providers.SSO do
   end
 
   defp build_config(nil, _region, _account, _role, _key),
-    do: {:error, :sso_start_url_missing}
+    do: {:error, Error.new(:sso_start_url_missing, %{})}
 
   defp build_config(_start_url, nil, _account, _role, _key),
-    do: {:error, :sso_region_missing}
+    do: {:error, Error.new(:sso_region_missing, %{})}
 
   defp build_config(start_url, region, account_id, role_name, cache_key) do
     {:ok,
@@ -127,10 +128,14 @@ defmodule AwsSDK.Credentials.Providers.SSO do
 
   defp load_or_refresh_token(config, opts) do
     case TokenCache.read(config.cache_key, opts) do
-      {:ok, cached} -> maybe_refresh(cached, config, opts, %{token_cache_read: cached})
-      {:error, :enoent} = read -> {:error, {:sso_token_expired, %{token_cache_read: read}}}
-      {:error, {:invalid_json, _} = reason} -> {:error, reason}
-      {:error, reason} -> {:error, {:sso_cache_error, reason}}
+      {:ok, cached} ->
+        maybe_refresh(cached, config, opts, %{token_cache_read: cached})
+
+      {:error, %ErrorMessage{details: %{kind: :file_error, reason: :enoent}}} = read ->
+        {:error, Error.new(:sso_token_expired, %{token_cache_read: read})}
+
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -140,7 +145,7 @@ defmodule AwsSDK.Credentials.Providers.SSO do
     else
       case cached["accessToken"] do
         token when is_binary(token) and token !== "" -> {:ok, cached, calls}
-        _ -> {:error, {:sso_token_expired, calls}}
+        _ -> {:error, Error.new(:sso_token_expired, %{calls: calls})}
       end
     end
   end
@@ -206,8 +211,9 @@ defmodule AwsSDK.Credentials.Providers.SSO do
         {:ok, updated, calls}
 
       # Every earlier call result travels with the failure.
-      {:error, reason} ->
-        {:error, {reason, Map.put(calls, :create_token, response)}}
+      {:error, error} ->
+        {:error,
+         Error.new(:sso_failed, %{error: error, calls: Map.put(calls, :create_token, response)})}
     end
   end
 
@@ -215,29 +221,42 @@ defmodule AwsSDK.Credentials.Providers.SSO do
     decode(resp_body)
   end
 
-  defp interpret_oidc_response({:ok, %{status_code: 400, body: resp_body}}, err_fn) do
+  defp interpret_oidc_response({:ok, %{status_code: 400, body: resp_body} = response}, err_fn) do
     case decode(resp_body) do
       {:ok, %{"error" => code} = err_body} ->
-        err_fn.({code, err_body}) || {:error, {:sso_oidc_error, code, err_body}}
+        err_fn.({code, err_body}) ||
+          {:error, Error.new(:sso_oidc_error, %{oidc_error: code, response: err_body})}
 
       _ ->
-        {:error, {:sso_oidc_error, 400, resp_body}}
+        {:error, http_error(response)}
     end
   end
 
   defp interpret_oidc_response({:ok, %{status_code: 401} = response}, _err_fn) do
-    {:error, {:sso_token_expired, response}}
+    {:error, Error.new(:sso_token_expired, %{response: response})}
   end
 
-  defp interpret_oidc_response({:ok, %{status_code: status, body: resp_body}}, _err_fn) do
-    {:error, {:sso_oidc_error, status, resp_body}}
+  defp interpret_oidc_response({:ok, response}, _err_fn) do
+    {:error, http_error(response)}
   end
 
   defp interpret_oidc_response({:error, _} = err, _err_fn), do: err
 
-  defp token_error({"invalid_grant", err_body}), do: {:error, {:sso_token_expired, err_body}}
-  defp token_error({"invalid_client", err_body}), do: {:error, {:sso_token_expired, err_body}}
+  defp token_error({"invalid_grant", err_body}),
+    do: {:error, Error.new(:sso_token_expired, %{response: err_body})}
+
+  defp token_error({"invalid_client", err_body}),
+    do: {:error, Error.new(:sso_token_expired, %{response: err_body})}
+
   defp token_error(_), do: nil
+
+  defp http_error(response) do
+    Error.new(:http_error, %{
+      status: response.status_code,
+      response: response.body,
+      headers: response.headers
+    })
+  end
 
   defp oidc_endpoint(region, opts) do
     (opts[:endpoints] || [])[:oidc] || "https://oidc.#{region}.amazonaws.com"
@@ -246,7 +265,7 @@ defmodule AwsSDK.Credentials.Providers.SSO do
   defp decode(binary) do
     {:ok, :json.decode(binary)}
   rescue
-    err -> {:error, {:sso_invalid_json, Exception.message(err)}}
+    exception -> {:error, Error.new(:invalid_json, %{exception: exception})}
   end
 
   # Unlike `AwsSDK.Credentials.SSO.Login`, this refresh happens while resolving
@@ -304,23 +323,32 @@ defmodule AwsSDK.Credentials.Providers.SSO do
             {:ok, %{body: decoded, headers: headers}}
 
           {:ok, other} ->
-            {:error,
-             {:sso_unexpected_body,
-              Map.put(calls, :get_role_credentials, %{body: other, headers: headers})}}
+            calls = Map.put(calls, :get_role_credentials, %{body: other, headers: headers})
+            {:error, Error.new(:unexpected_response, %{calls: calls})}
 
-          {:error, reason} ->
-            {:error,
-             {reason, Map.put(calls, :get_role_credentials, %{body: body, headers: headers})}}
+          {:error, error} ->
+            calls = Map.put(calls, :get_role_credentials, %{body: body, headers: headers})
+            {:error, Error.new(:sso_failed, %{error: error, calls: calls})}
         end
 
       {:ok, %{status_code: status} = response} when status in [401, 403] ->
-        {:error, {:sso_token_expired, Map.put(calls, :get_role_credentials, response)}}
+        calls = Map.put(calls, :get_role_credentials, response)
+        {:error, Error.new(:sso_token_expired, %{calls: calls})}
 
       {:ok, response} ->
-        {:error, {:sso_http_error, Map.put(calls, :get_role_credentials, response)}}
+        calls = Map.put(calls, :get_role_credentials, response)
 
-      {:error, reason} = error ->
-        {:error, {reason, Map.put(calls, :get_role_credentials, error)}}
+        {:error,
+         Error.new(:http_error, %{
+           status: response.status_code,
+           response: response.body,
+           headers: response.headers,
+           calls: calls
+         })}
+
+      {:error, error} = result ->
+        calls = Map.put(calls, :get_role_credentials, result)
+        {:error, Error.new(:sso_failed, %{error: error, calls: calls})}
     end
   end
 

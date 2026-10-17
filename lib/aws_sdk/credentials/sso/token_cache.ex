@@ -14,6 +14,8 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
 
   require Logger
 
+  alias AwsSDK.Error
+
   @type cache :: %{
           optional(:accessToken) => String.t(),
           optional(:expiresAt) => String.t(),
@@ -45,8 +47,9 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
   @doc """
   Reads and decodes the cache file for `key`.
 
-  Returns `{:ok, map}`, `{:error, :enoent}` when the file is missing,
-  or `{:error, {:invalid_json, reason}}` on a parse failure.
+  Returns `{:ok, map}`, a `:file_error` error whose `reason` is the posix
+  code (`:enoent` when the file is missing), or an `:invalid_json` error on
+  a parse failure.
 
   ## Examples
 
@@ -60,15 +63,18 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
       #=>  }}
 
       AwsSDK.Credentials.SSO.TokenCache.read("https://never-logged-in.example.com/start")
-      #=> {:error, :enoent}
+      #=> {:error, %ErrorMessage{details: %{kind: :file_error, reason: :enoent, ...}}}
 
   The key is hashed with SHA-1 to form the filename, matching the AWS CLI,
   so a token cached by `aws sso login` is readable here and vice versa.
   """
-  @spec read(String.t(), keyword) :: {:ok, map} | {:error, term}
+  @spec read(String.t(), keyword) :: {:ok, map} | {:error, ErrorMessage.t()}
   def read(key, opts \\ []) when is_binary(key) do
-    with {:ok, contents} <- key |> path(opts) |> File.read() do
-      decode_json(contents)
+    path = path(key, opts)
+
+    case File.read(path) do
+      {:ok, contents} -> decode_json(contents)
+      {:error, reason} -> {:error, Error.new(:file_error, %{reason: reason, path: path})}
     end
   end
 
@@ -88,20 +94,20 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
       #=> :ok
 
       AwsSDK.Credentials.SSO.TokenCache.write("...", contents)
-      #=> {:error, :eacces}
+      #=> {:error, %ErrorMessage{details: %{kind: :file_error, reason: :eacces, ...}}}
 
   Writes to a `0600` temp file and renames it onto the target, so a reader
   never sees a half-written token, and the access token is never briefly
   world-readable.
   """
-  @spec write(String.t(), map, keyword) :: :ok | {:error, term}
+  @spec write(String.t(), map, keyword) :: :ok | {:error, ErrorMessage.t()}
   def write(key, contents, opts \\ []) when is_binary(key) and is_map(contents) do
     target = path(key, opts)
     tmp = "#{target}.tmp.#{System.unique_integer([:positive])}"
     body = contents |> :json.encode() |> IO.iodata_to_binary()
 
     # `mkdir_p` belongs in the `with` rather than its raising `!` variant:
-    # the spec promises `{:error, term}`, and an unwritable ~/.aws is exactly
+    # the spec promises an error, and an unwritable ~/.aws is exactly
     # the failure callers need to handle.
     with :ok <- target |> Path.dirname() |> File.mkdir_p(),
          :ok <- File.write(tmp, body),
@@ -109,7 +115,8 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
          :ok <- File.rename(tmp, target) do
       :ok
     else
-      {:error, _} = err -> discard_temp(tmp, err)
+      {:error, reason} ->
+        discard_temp(tmp, {:error, Error.new(:file_error, %{reason: reason, path: target})})
     end
   end
 
@@ -136,7 +143,7 @@ defmodule AwsSDK.Credentials.SSO.TokenCache do
   defp decode_json(binary) do
     {:ok, :json.decode(binary)}
   rescue
-    err -> {:error, {:invalid_json, Exception.message(err)}}
+    exception -> {:error, Error.new(:invalid_json, %{exception: exception})}
   end
 
   defp home(opts) do

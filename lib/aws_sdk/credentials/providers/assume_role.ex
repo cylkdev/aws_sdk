@@ -18,9 +18,10 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
   `AwsSDK.STS.get_caller_identity/1` and other public operations use.
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
   alias AwsSDK.AuthCache
   alias AwsSDK.Credentials.Profile
+  alias AwsSDK.Error
 
   @default_duration_seconds 3_600
 
@@ -46,12 +47,13 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
         :skip
 
       is_nil(source) ->
-        {:error, :assume_role_missing_source_profile}
+        {:error, Error.new(:assume_role_missing_source_profile, %{role_arn: role_arn})}
 
       # A profile naming itself as its own source would re-enter the
       # AuthCache fetch for a key already in flight and never resolve.
       source === (opts[:profile] || Profile.default()) ->
-        {:error, :assume_role_self_reference}
+        {:error,
+         Error.new(:assume_role_self_reference, %{role_arn: role_arn, source_profile: source})}
 
       true ->
         assume(role_arn, source, profile, opts)
@@ -81,7 +83,7 @@ defmodule AwsSDK.Credentials.Providers.AssumeRole do
          security_token: result.body.credentials.session_token,
          expires_at: result.body.credentials.expiration,
          source: :sts,
-         sts_assume_role: Secrets.strip(result)
+         sts_assume_role: Redact.strip(result)
        }}
     end
   end

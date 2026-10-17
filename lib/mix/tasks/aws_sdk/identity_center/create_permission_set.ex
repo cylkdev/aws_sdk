@@ -61,8 +61,11 @@ defmodule Mix.Tasks.AwsSDK.IdentityCenter.CreatePermissionSet do
       name,
       fn ->
         case AwsSDK.IdentityCenter.list_permission_sets(instance_arn, opts) do
-          {:ok, %{permission_sets: _}} -> {:error, %{code: :not_found}}
-          error -> error
+          {:ok, %{body: %{permission_sets: _}}} ->
+            {:error, AwsSDK.Error.new(:resource_not_found, %{name: name})}
+
+          error ->
+            error
         end
       end,
       fn ->

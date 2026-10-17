@@ -65,7 +65,7 @@ defmodule AwsSDK.Config do
   key in caller opts.
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
   alias AwsSDK.AuthCache
 
   @app :aws_sdk
@@ -164,7 +164,7 @@ defmodule AwsSDK.Config do
     |> List.wrap()
     |> Enum.reduce_while([], fn source, attempts ->
       result = resolve_credentials(source, opts)
-      attempts = [%{source: source, result: Secrets.strip(result)} | attempts]
+      attempts = [%{source: source, result: Redact.strip(result)} | attempts]
 
       case complete(result) do
         nil -> {:cont, attempts}

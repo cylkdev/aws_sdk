@@ -64,7 +64,7 @@ defmodule Mix.Tasks.AwsSDK.IAM.CreateGroup do
     if Enum.any?(groups, &(&1[:group_name] === name)) do
       {:ok, %{}}
     else
-      {:error, %{code: :not_found}}
+      {:error, AwsSDK.Error.new(:resource_not_found, %{name: name})}
     end
   end
 

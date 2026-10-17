@@ -220,21 +220,23 @@ defmodule AwsSDK.S3.SandboxTest do
       Sandbox.set_presign_responses([
         {"test-bucket",
          fn ->
-           %{
-             key: "test-object",
-             url: "https://example.com/test-object?signature=fake",
-             expires_in: 60,
-             expires_at: ~U[2025-08-30 01:00:00.000000Z]
-           }
+           {:ok,
+            %{
+              key: "test-object",
+              url: "https://example.com/test-object?signature=fake",
+              expires_in: 60,
+              expires_at: ~U[2025-08-30 01:00:00.000000Z]
+            }}
          end}
       ])
 
-      assert %{
-               key: "test-object",
-               url: "https://example.com/test-object?signature=fake",
-               expires_in: 60,
-               expires_at: ~U[2025-08-30 01:00:00.000000Z]
-             } = S3.presign("test-bucket", :post, "test-object", sandbox: [enabled: true])
+      assert {:ok,
+              %{
+                key: "test-object",
+                url: "https://example.com/test-object?signature=fake",
+                expires_in: 60,
+                expires_at: ~U[2025-08-30 01:00:00.000000Z]
+              }} = S3.presign("test-bucket", :post, "test-object", sandbox: [enabled: true])
     end
   end
 
@@ -267,20 +269,22 @@ defmodule AwsSDK.S3.SandboxTest do
       Sandbox.set_presign_part_responses([
         {"test-bucket",
          fn ->
-           %{
-             key: "test-object",
-             url: "https://example.com/test-object?uploadId=uid&partNumber=1",
-             expires_in: 60,
-             expires_at: ~U[2025-08-30 01:00:00.000000Z]
-           }
+           {:ok,
+            %{
+              key: "test-object",
+              url: "https://example.com/test-object?uploadId=uid&partNumber=1",
+              expires_in: 60,
+              expires_at: ~U[2025-08-30 01:00:00.000000Z]
+            }}
          end}
       ])
 
-      assert %{
-               key: "test-object",
-               url: url,
-               expires_in: 60
-             } =
+      assert {:ok,
+              %{
+                key: "test-object",
+                url: url,
+                expires_in: 60
+              }} =
                S3.presign_part("test-bucket", "test-object", "upload-id", 1,
                  sandbox: [enabled: true]
                )

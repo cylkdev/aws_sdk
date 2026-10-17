@@ -1,4 +1,4 @@
-defmodule AwsSDK.Credentials.Secrets do
+defmodule AwsSDK.Credentials.Redact do
   @moduledoc """
   Removes secret values from the raw facts credential providers keep.
 
@@ -32,7 +32,7 @@ defmodule AwsSDK.Credentials.Secrets do
 
   @doc """
   Returns `term` with every map entry whose key names a secret removed,
-  recursing through maps, lists and tuples.
+  recursing through structs, maps, lists and tuples.
 
   Keys match by name regardless of case or whether they are atoms or
   strings, so `"SecretAccessKey"`, `:secret_access_key` and
@@ -41,7 +41,7 @@ defmodule AwsSDK.Credentials.Secrets do
 
   ## Examples
 
-      AwsSDK.Credentials.Secrets.strip(%{
+      AwsSDK.Credentials.Redact.strip(%{
         "AccessKeyId" => "AKIA...",
         "SecretAccessKey" => "wJal...",
         "Expiration" => "2026-10-15T12:00:00Z"
@@ -49,7 +49,7 @@ defmodule AwsSDK.Credentials.Secrets do
       #=> %{"AccessKeyId" => "AKIA...", "Expiration" => "2026-10-15T12:00:00Z"}
   """
   @spec strip(term) :: term
-  def strip(%_{} = struct), do: struct
+  def strip(%module{} = struct), do: struct(module, struct |> Map.from_struct() |> strip())
 
   def strip(map) when is_map(map) do
     for {key, value} <- map, not secret_key?(key), into: %{} do

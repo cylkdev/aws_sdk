@@ -21,6 +21,9 @@ defmodule AwsSDK.Credentials.ProcessCreds do
   downstream can tell which provider produced the credentials.
   """
 
+  alias AwsSDK.Credentials.Redact
+  alias AwsSDK.Error
+
   @type creds :: %{
           access_key_id: String.t(),
           secret_access_key: String.t(),
@@ -50,23 +53,24 @@ defmodule AwsSDK.Credentials.ProcessCreds do
       #=>  }}
 
       AwsSDK.Credentials.ProcessCreds.run("false", :credential_process)
-      #=> {:error, {:credential_process_failed, 1, %{command: "false", stdout: "", stderr: "", exit_status: 1, args: []}}}
+      #=> {:error, %ErrorMessage{code: :internal_server_error, details: %{kind: :credential_process_failed, process: %{command: "false", stderr: "", exit_status: 1, args: []}}}}
 
   Runs the command and reads AWS's documented JSON contract from stdout
   (`Version`, `AccessKeyId`, `SecretAccessKey`, `SessionToken`,
   `Expiration`). A non-zero exit or unparseable output is an error, never a
   partial credential.
   """
-  @spec run(String.t(), atom) :: {:ok, creds} | {:error, term}
+  @spec run(String.t(), atom) :: {:ok, creds} | {:error, ErrorMessage.t()}
   def run(command, source) when is_binary(command) and is_atom(source) do
     [bin | args] = OptionParser.split(command)
 
     case cmd(bin, args) do
       %{exit_status: 0} = result -> parse(result, source)
-      %{exit_status: status} = result -> {:error, {:credential_process_failed, status, result}}
+      result -> {:error, Error.new(:credential_process_failed, %{process: Redact.strip(result)})}
     end
   rescue
-    err -> {:error, {:credential_process_failed, :exception, err}}
+    exception ->
+      {:error, Error.new(:credential_process_failed, %{command: command, exception: exception})}
   end
 
   @doc """
@@ -74,8 +78,8 @@ defmodule AwsSDK.Credentials.ProcessCreds do
 
   `System.cmd/3` can only capture stderr by merging it into stdout, so the
   command runs under `sh` with stderr redirected to a temporary file, which
-  is read back and removed. `:stderr` is `{:error, reason}` if that file
-  could not be read. Requires a POSIX `sh`.
+  is read back and removed. `:stderr` is a `:file_error` error if that
+  file could not be read. Requires a POSIX `sh`.
 
   ## Examples
 
@@ -87,7 +91,7 @@ defmodule AwsSDK.Credentials.ProcessCreds do
           command: String.t(),
           args: [String.t()],
           stdout: binary,
-          stderr: binary | {:error, File.posix()},
+          stderr: binary | {:error, ErrorMessage.t()},
           exit_status: non_neg_integer
         }
   def cmd(bin, args) do
@@ -102,8 +106,11 @@ defmodule AwsSDK.Credentials.ProcessCreds do
 
       stderr =
         case File.read(stderr_path) do
-          {:ok, contents} -> contents
-          {:error, _} = error -> error
+          {:ok, contents} ->
+            contents
+
+          {:error, reason} ->
+            {:error, Error.new(:file_error, %{reason: reason, path: stderr_path})}
         end
 
       %{command: bin, args: args, stdout: stdout, stderr: stderr, exit_status: status}
@@ -118,17 +125,22 @@ defmodule AwsSDK.Credentials.ProcessCreds do
         build(body, result, source)
 
       {:ok, body} ->
-        {:error, {:credential_process_invalid, {:unsupported_version, body["Version"]}, result}}
+        {:error,
+         Error.new(:credential_process_invalid, %{
+           version: body["Version"],
+           process: Redact.strip(result)
+         })}
 
-      {:error, reason} ->
-        {:error, {:credential_process_invalid, reason, result}}
+      {:error, error} ->
+        {:error,
+         Error.new(:credential_process_invalid, %{error: error, process: Redact.strip(result)})}
     end
   end
 
   defp decode_json(binary) do
     {:ok, :json.decode(binary)}
   rescue
-    err -> {:error, Exception.message(err)}
+    exception -> {:error, Error.new(:invalid_json, %{exception: exception})}
   end
 
   defp build(body, result, source) do
@@ -143,17 +155,24 @@ defmodule AwsSDK.Credentials.ProcessCreds do
          source: source,
          # The process's full JSON output, including `Version` and any
          # fields beyond the documented ones.
-         process_output: AwsSDK.Credentials.Secrets.strip(body),
+         process_output: Redact.strip(body),
          # The raw run: command, args, stdout, stderr and exit status.
-         process: AwsSDK.Credentials.Secrets.strip(result)
+         process: Redact.strip(result)
        }}
     end
   end
 
   defp fetch_string(body, key, result) do
     case Map.get(body, key) do
-      v when is_binary(v) and v !== "" -> {:ok, v}
-      _ -> {:error, {:credential_process_invalid, {:missing_field, key}, result}}
+      v when is_binary(v) and v !== "" ->
+        {:ok, v}
+
+      _ ->
+        {:error,
+         Error.new(:credential_process_invalid, %{
+           missing_field: key,
+           process: Redact.strip(result)
+         })}
     end
   end
 

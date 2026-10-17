@@ -112,6 +112,7 @@ defmodule AwsSDK.S3 do
   alias AwsSDK.{
     Client,
     Config,
+    Error,
     Operation,
     S3.Multipart,
     S3.XMLBuilder,
@@ -227,8 +228,8 @@ defmodule AwsSDK.S3 do
   @doc """
   Deletes an empty bucket.
 
-  Returns `{:error, :not_found}` if the bucket does not exist and
-  `{:error, :conflict}` if the bucket is not empty.
+  Returns a `:not_found` error if the bucket does not exist and a
+  `:conflict` error if the bucket is not empty.
 
   ## Arguments
 
@@ -266,8 +267,8 @@ defmodule AwsSDK.S3 do
 
   Returns `{:ok, headers}` when the bucket exists and is accessible (the response
   body is empty; useful headers such as `x-amz-bucket-region` are returned).
-  Returns `{:error, :not_found}` when the bucket does not exist and
-  `{:error, :forbidden}` when the caller lacks permission.
+  Returns a `:not_found` error when the bucket does not exist and a
+  `:forbidden` error when the caller lacks permission.
 
   ## Permissions
 
@@ -767,7 +768,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.presign("my-bucket", :get, "my-key")
-      %{key: "my-key", url: "https://...", expires_in: 60, expires_at: ~U[...]}
+      {:ok, %{key: "my-key", url: "https://...", expires_in: 60, expires_at: ~U[...]}}
 
   ## Examples
 
@@ -788,7 +789,7 @@ defmodule AwsSDK.S3 do
   maximum 604800).
   """
   @spec presign(bucket :: binary(), http_method :: atom(), key :: binary(), opts :: keyword()) ::
-          map()
+          {:ok, map()} | {:error, ErrorMessage.t()}
   def presign(bucket, http_method, key, opts \\ []) do
     if sandbox?(opts) do
       sandbox_presign_response(bucket, http_method, key, opts)
@@ -853,7 +854,7 @@ defmodule AwsSDK.S3 do
   wire names (lowercase strings), not atoms.
   """
   @spec presign_post(bucket :: binary(), key :: binary(), opts :: keyword()) ::
-          {:ok, map()}
+          {:ok, map()} | {:error, ErrorMessage.t()}
   def presign_post(bucket, key, opts \\ []) do
     if sandbox?(opts) do
       sandbox_presign_post_response(bucket, key, opts)
@@ -889,7 +890,7 @@ defmodule AwsSDK.S3 do
   ## Examples
 
       iex> AwsSDK.S3.presign_part("my-bucket", "my-key", "upload-id", 1)
-      %{key: "my-key", url: "https://...", expires_in: 60, expires_at: ~U[...]}
+      {:ok, %{key: "my-key", url: "https://...", expires_in: 60, expires_at: ~U[...]}}
 
   ## Examples
 
@@ -909,7 +910,7 @@ defmodule AwsSDK.S3 do
           upload_id :: binary(),
           part_number :: integer(),
           opts :: keyword()
-        ) :: map()
+        ) :: {:ok, map()} | {:error, ErrorMessage.t()}
   def presign_part(bucket, object, upload_id, part_number, opts \\ []) do
     if sandbox?(opts) do
       sandbox_presign_part_response(bucket, object, upload_id, part_number, opts)
@@ -1300,9 +1301,10 @@ defmodule AwsSDK.S3 do
       #=>  ]}
 
   Splits the source by the given byte size and copies each range. Each
-  element is `{copy_part_result, part_number}`. If any part fails, returns
-  `{:error, %{copied: [successful elements], failed: [{error, part_number}]}}`
-  so the parts that did copy are not lost.
+  element is `{copy_part_result, part_number}`. If any part fails, returns a
+  `:copy_failed` error whose details hold `copied` (the successful elements)
+  and `failed` (one error per failed part), so the parts that did copy are
+  not lost.
   """
   @spec copy_parts(
           dest_bucket :: binary(),
@@ -1312,7 +1314,7 @@ defmodule AwsSDK.S3 do
           upload_id :: binary(),
           content_length :: integer(),
           opts :: keyword()
-        ) :: {:ok, list()} | {:error, %{copied: list(), failed: list()}}
+        ) :: {:ok, list()} | {:error, ErrorMessage.t()}
   def copy_parts(
         dest_bucket,
         dest_key,
@@ -1407,9 +1409,9 @@ defmodule AwsSDK.S3 do
 
   Runs the whole head/create/copy-parts/complete cycle and returns each
   call's result under its own key. If copying or completing fails, the upload
-  is aborted and the result is `{:error, %{...}}` holding every call made: the
-  failing call's `{:error, _}` under its key and the abort's result under
-  `:abort_multipart_upload`. Use this for objects over 5 GB, which `copy_object/5`
+  is aborted and the result is a `:copy_failed` error whose details hold every
+  call made: the failing call's `{:error, _}` under its key and the abort's
+  result under `:abort_multipart_upload`. Use this for objects over 5 GB, which `copy_object/5`
   cannot handle. The trailing `-2` on the ETag is the part count.
   """
   @spec copy_object_multipart(
@@ -2064,8 +2066,8 @@ defmodule AwsSDK.S3 do
       case Client.request(op) do
         {:error, %ErrorMessage{details: %{status: 409} = details}} ->
           {:error,
-           ErrorMessage.conflict(
-             "bucket already exists",
+           Error.new(
+             :bucket_already_exists,
              Map.merge(details, %{bucket: bucket, region: region})
            )}
 
@@ -2105,12 +2107,9 @@ defmodule AwsSDK.S3 do
     with {:ok, op} <-
            build_operation(:put, bucket, key, put_opts(opts, body: body, headers: headers)) do
       case Client.request(op) do
-        {:error, %ErrorMessage{details: %{status: 412, response: resp}}} when if_none_match? ->
+        {:error, %ErrorMessage{details: %{status: 412} = details}} when if_none_match? ->
           {:error,
-           ErrorMessage.conflict(
-             "object already exists",
-             %{bucket: bucket, key: key, response: resp}
-           )}
+           Error.new(:object_already_exists, Map.merge(details, %{bucket: bucket, key: key}))}
 
         {:ok, %{headers: headers}} ->
           {:ok, Client.deserialize_headers(headers, opts)}
@@ -2235,55 +2234,57 @@ defmodule AwsSDK.S3 do
   end
 
   defp do_presign(bucket, http_method, key, opts) do
-    expires_in = opts[:expires_in] || @sixty_seconds
-    {:ok, config} = resolve_config(opts)
-    query_params = Map.new(opts[:query_params] || %{})
-    url = build_url(config, bucket, key, query_params)
+    with {:ok, config} <- resolve_config(opts) do
+      expires_in = opts[:expires_in] || @sixty_seconds
+      query_params = Map.new(opts[:query_params] || %{})
+      url = build_url(config, bucket, key, query_params)
 
-    signed_url = Signer.sign_query(http_method, url, [], expires_in, signer_creds(config))
+      signed_url = Signer.sign_query(http_method, url, [], expires_in, signer_creds(config))
 
-    %{
-      key: key,
-      url: signed_url,
-      expires_in: expires_in,
-      expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
-    }
+      {:ok,
+       %{
+         key: key,
+         url: signed_url,
+         expires_in: expires_in,
+         expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
+       }}
+    end
   end
 
   defp do_presign_post(bucket, key, opts) do
-    expires_in = opts[:expires_in] || @sixty_seconds
-    min_size = Keyword.get(opts, :min_size, 0)
-    max_size = Keyword.get(opts, :max_size, @one_gib)
+    with {:ok, config} <- resolve_config(opts) do
+      expires_in = opts[:expires_in] || @sixty_seconds
+      min_size = Keyword.get(opts, :min_size, 0)
+      max_size = Keyword.get(opts, :max_size, @one_gib)
+      url = build_url(config, bucket, nil, %{})
 
-    {:ok, config} = resolve_config(opts)
-    url = build_url(config, bucket, nil, %{})
+      conditions =
+        maybe_add_content_type_condition(
+          [
+            %{"bucket" => bucket},
+            %{"key" => key},
+            ["content-length-range", min_size, max_size]
+          ],
+          opts[:content_type]
+        )
 
-    conditions =
-      maybe_add_content_type_condition(
-        [
-          %{"bucket" => bucket},
-          %{"key" => key},
-          ["content-length-range", min_size, max_size]
-        ],
-        opts[:content_type]
-      )
+      result = Signer.presign_post_policy(url, conditions, expires_in, signer_creds(config))
 
-    result = Signer.presign_post_policy(url, conditions, expires_in, signer_creds(config))
+      # These are literal HTML form field names that S3 matches byte-for-byte
+      # ("policy", "x-amz-algorithm", "x-amz-credential", "x-amz-date",
+      # "x-amz-signature", "x-amz-security-token"). Running them through the
+      # response deserializer snake-cased them into atoms like
+      # `:x_amz_algorithm`, and a form built from those is rejected.
+      fields = Map.put(result.fields, "key", key)
 
-    # These are literal HTML form field names that S3 matches byte-for-byte
-    # ("policy", "x-amz-algorithm", "x-amz-credential", "x-amz-date",
-    # "x-amz-signature", "x-amz-security-token"). Running them through the
-    # response deserializer snake-cased them into atoms like
-    # `:x_amz_algorithm`, and a form built from those is rejected.
-    fields = Map.put(result.fields, "key", key)
-
-    {:ok,
-     %{
-       fields: fields,
-       url: result.url,
-       expires_in: expires_in,
-       expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
-     }}
+      {:ok,
+       %{
+         fields: fields,
+         url: result.url,
+         expires_in: expires_in,
+         expires_at: DateTime.add(DateTime.utc_now(), expires_in, :second)
+       }}
+    end
   end
 
   defp maybe_add_content_type_condition(conditions, nil), do: conditions
@@ -2486,7 +2487,7 @@ defmodule AwsSDK.S3 do
 
   defp abort_after_failed_copy(calls, bucket, key, upload_id, opts) do
     abort = abort_multipart_upload(bucket, key, upload_id, opts)
-    {:error, Map.put(calls, :abort_multipart_upload, abort)}
+    {:error, Error.new(:copy_failed, Map.put(calls, :abort_multipart_upload, abort))}
   end
 
   # Returns each call under its own key: `:complete_multipart_upload` always,
@@ -2728,7 +2729,7 @@ defmodule AwsSDK.S3 do
            opts
          ) do
       {:ok, result} -> {:ok, {result, part_num}}
-      {:error, term} -> {:error, {term, part_num}}
+      {:error, error} -> {:error, Error.new(:copy_failed, %{error: error, part_number: part_num})}
     end
   end
 
@@ -2742,15 +2743,15 @@ defmodule AwsSDK.S3 do
         {results, [reason | errors]}
 
       {:exit, reason}, {results, errors} ->
-        err = ErrorMessage.internal_server_error("task exited", %{reason: reason})
-        {results, [err | errors]}
+        {results, [Error.new(:task_exited, %{reason: reason}) | errors]}
     end)
     |> then(fn
       {results, []} ->
         {:ok, Enum.reverse(results)}
 
       {results, errors} ->
-        {:error, %{copied: Enum.reverse(results), failed: Enum.reverse(errors)}}
+        {:error,
+         Error.new(:copy_failed, %{copied: Enum.reverse(results), failed: Enum.reverse(errors)})}
     end)
   end
 
@@ -2775,17 +2776,14 @@ defmodule AwsSDK.S3 do
 
       if size > max do
         {:error,
-         ErrorMessage.forbidden(
-           "multipart upload size exceeds maximum allowed size",
-           %{
-             bucket: bucket,
-             key: key,
-             upload_id: upload_id,
-             max_size: max,
-             size: size,
-             list_parts: pages
-           }
-         )}
+         Error.new(:multipart_upload_too_large, %{
+           bucket: bucket,
+           key: key,
+           upload_id: upload_id,
+           max_size: max,
+           size: size,
+           list_parts: pages
+         })}
       else
         {:ok, %{list_parts: pages}}
       end
@@ -2852,10 +2850,10 @@ defmodule AwsSDK.S3 do
     case Keyword.get(opts, :on_content_type_mismatch, :error) do
       :delete ->
         details = Map.put(details, :delete_object, delete_object(bucket, key, opts))
-        {:error, ErrorMessage.forbidden("content type mismatch", details)}
+        {:error, Error.new(:content_type_mismatch, details)}
 
       :error ->
-        {:error, ErrorMessage.forbidden("content type mismatch", details)}
+        {:error, Error.new(:content_type_mismatch, details)}
     end
   end
 

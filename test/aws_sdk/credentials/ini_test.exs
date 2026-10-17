@@ -74,9 +74,15 @@ defmodule AwsSDK.Credentials.INITest do
       assert {:ok, %{"default" => %{"key" => "v"}}} = INI.read(path)
     end
 
-    test "returns {:error, :enoent} for a missing file" do
-      assert {:error, :enoent} =
-               INI.read("/nonexistent/aws/credentials-#{System.unique_integer()}")
+    test "returns a file error for a missing file" do
+      path = "/nonexistent/aws/credentials-#{System.unique_integer()}"
+
+      assert {:error,
+              %ErrorMessage{
+                code: :internal_server_error,
+                message: "internal server error",
+                details: %{kind: :file_error, reason: :enoent, path: path}
+              }} === INI.read(path)
     end
   end
 end

@@ -17,8 +17,17 @@ defmodule AwsSDK.Credentials.SSO.TokenCacheTest do
   end
 
   @tag :tmp_dir
-  test "read/2 returns {:error, :enoent} when the file is missing", %{tmp_dir: tmp} do
-    assert {:error, :enoent} = TokenCache.read("absent", home_dir: tmp)
+  test "read/2 returns a file error when the file is missing", %{tmp_dir: tmp} do
+    assert {:error,
+            %ErrorMessage{
+              code: :internal_server_error,
+              message: "internal server error",
+              details: %{
+                kind: :file_error,
+                reason: :enoent,
+                path: TokenCache.path("absent", home_dir: tmp)
+              }
+            }} === TokenCache.read("absent", home_dir: tmp)
   end
 
   @tag :tmp_dir
@@ -34,10 +43,19 @@ defmodule AwsSDK.Credentials.SSO.TokenCacheTest do
   end
 
   @tag :tmp_dir
-  test "write/3 returns an error tuple when the cache directory cannot be created",
+  test "write/3 returns a file error when the cache directory cannot be created",
        %{tmp_dir: tmp} do
     File.write!(Path.join(tmp, ".aws"), "")
 
-    assert {:error, :enotdir} = TokenCache.write("main", %{"accessToken" => "v1"}, home_dir: tmp)
+    assert {:error,
+            %ErrorMessage{
+              code: :internal_server_error,
+              message: "internal server error",
+              details: %{
+                kind: :file_error,
+                reason: :enotdir,
+                path: TokenCache.path("main", home_dir: tmp)
+              }
+            }} === TokenCache.write("main", %{"accessToken" => "v1"}, home_dir: tmp)
   end
 end

@@ -34,6 +34,7 @@ defmodule AwsSDK.HTTP do
 
   require Logger
 
+  alias AwsSDK.Error
   alias AwsSDK.HTTP.FinchPool
 
   @default_request_timeout 30_000
@@ -74,13 +75,13 @@ defmodule AwsSDK.HTTP do
       #=> {:ok, %{status_code: 404, body: "not found", headers: [...]}}
 
       AwsSDK.HTTP.request(:get, "https://unreachable.invalid", "", [], receive_timeout: 1_000)
-      #=> {:error, %{error: %Req.TransportError{reason: :nxdomain}}}
+      #=> {:error, %ErrorMessage{code: :internal_server_error, details: %{kind: :transport_error, error: %Req.TransportError{reason: :nxdomain}}}}
 
   A non-2xx response is still `{:ok, _}` -- status branching happens in
   `AwsSDK.Client`, not here. Only transport failures return `{:error, _}`.
   """
   @spec request(method, String.t(), iodata, [header], keyword) ::
-          {:ok, response} | {:error, %{error: term}}
+          {:ok, response} | {:error, ErrorMessage.t()}
   def request(method, url, body, headers, opts \\ []) when is_atom(method) do
     :ok = validate_url!(url)
 
@@ -108,7 +109,8 @@ defmodule AwsSDK.HTTP do
       AwsSDK.HTTP.post("https://example.com/api", ~s({"a":1}), [{"content-type", "application/json"}])
       #=> {:ok, %{status_code: 200, body: ~s({"ok":true}), headers: [...]}}
   """
-  @spec post(String.t(), iodata, [header], keyword) :: {:ok, response} | {:error, %{error: term}}
+  @spec post(String.t(), iodata, [header], keyword) ::
+          {:ok, response} | {:error, ErrorMessage.t()}
   def post(url, body, headers, opts \\ []) do
     request(:post, url, body, headers, opts)
   end
@@ -127,7 +129,7 @@ defmodule AwsSDK.HTTP do
       )
       #=> {:ok, %{status_code: 200, body: "my-instance-role", headers: [...]}}
   """
-  @spec get(String.t(), [header], keyword) :: {:ok, response} | {:error, %{error: term}}
+  @spec get(String.t(), [header], keyword) :: {:ok, response} | {:error, ErrorMessage.t()}
   def get(url, headers \\ [], opts \\ []) do
     request(:get, url, nil, headers, opts)
   end
@@ -158,7 +160,7 @@ defmodule AwsSDK.HTTP do
   chunked transfer encoding for this.
   """
   @spec stream_upload(method, String.t(), Enumerable.t(), [header], keyword) ::
-          {:ok, response} | {:error, %{error: term}}
+          {:ok, response} | {:error, ErrorMessage.t()}
   def stream_upload(method, url, body_stream, headers, opts \\ []) when is_atom(method) do
     :ok = validate_url!(url)
 
@@ -188,7 +190,7 @@ defmodule AwsSDK.HTTP do
   mid-body raises rather than ending the stream as if it were complete.
   """
   @spec stream_download(String.t(), [header], keyword) ::
-          {:ok, stream_response} | {:error, %{error: term}}
+          {:ok, stream_response} | {:error, ErrorMessage.t()}
   def stream_download(url, headers \\ [], opts \\ []) do
     :ok = validate_url!(url)
     timeout = request_timeout(opts)
@@ -208,7 +210,7 @@ defmodule AwsSDK.HTTP do
          }}
 
       {:error, error} ->
-        {:error, %{error: error}}
+        {:error, Error.new(:transport_error, %{error: error})}
     end
   end
 
@@ -234,7 +236,8 @@ defmodule AwsSDK.HTTP do
      }}
   end
 
-  defp handle_response({:error, error}), do: {:error, %{error: error}}
+  defp handle_response({:error, error}),
+    do: {:error, Error.new(:transport_error, %{error: error})}
 
   defp body_stream(%Req.Response{body: %Req.Response.Async{}} = response, timeout) do
     Stream.resource(

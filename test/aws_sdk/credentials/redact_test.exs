@@ -1,7 +1,7 @@
-defmodule AwsSDK.Credentials.SecretsTest do
+defmodule AwsSDK.Credentials.RedactTest do
   use ExUnit.Case, async: true
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
 
   test "removes secret keys whatever their case or type, and keeps everything else" do
     facts = %{
@@ -16,7 +16,7 @@ defmodule AwsSDK.Credentials.SecretsTest do
       result: {:ok, %{secret_access_key: "s", source: :env}}
     }
 
-    assert Secrets.strip(facts) == %{
+    assert Redact.strip(facts) == %{
              "AccessKeyId" => "AKIA",
              body: %{"roleCredentials" => %{"accessKeyId" => "AKIA"}},
              token_cache_read: %{},
@@ -25,5 +25,18 @@ defmodule AwsSDK.Credentials.SecretsTest do
              headers: [{"x-aws-ec2-metadata-token", nil}, {"content-type", "text/plain"}],
              result: {:ok, %{source: :env}}
            }
+  end
+
+  test "removes secret keys inside a struct" do
+    error =
+      AwsSDK.Error.new(:sso_token_expired, %{
+        token_cache_read: %{"accessToken" => "a", "region" => "eu-west-1"}
+      })
+
+    assert %ErrorMessage{
+             code: :unauthorized,
+             message: "unauthorized",
+             details: %{kind: :sso_token_expired, token_cache_read: %{"region" => "eu-west-1"}}
+           } === Redact.strip(error)
   end
 end

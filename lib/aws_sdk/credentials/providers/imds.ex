@@ -15,7 +15,8 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
   on a non-EC2 host.
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
+  alias AwsSDK.Error
   alias AwsSDK.HTTP
 
   @endpoint "http://169.254.169.254"
@@ -55,7 +56,7 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
        Map.put(
          creds,
          :imds,
-         Secrets.strip(%{
+         Redact.strip(%{
            token: token_resp,
            security_credentials: roles_resp,
            role_credentials: %{creds_resp | body: :json.decode(creds_resp.body)}
@@ -81,10 +82,10 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
         {:ok, %{body: body, headers: h}}
 
       {:ok, %{status_code: status, body: body, headers: h}} ->
-        {:error, {:imds_token_error, %{status_code: status, body: body, headers: h}}}
+        {:error, Error.new(:http_error, %{status: status, response: body, headers: h, url: url})}
 
-      {:error, %{error: error}} ->
-        {:error, {:imds_transport_error, error}}
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -96,14 +97,11 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
       {:ok, %{status_code: 200, body: body, headers: h}} ->
         {:ok, %{body: body, headers: h}}
 
-      {:ok, %{status_code: 404, body: body, headers: h}} ->
-        {:error, {:imds_no_role, %{status_code: 404, body: body, headers: h}}}
-
       {:ok, %{status_code: status, body: body, headers: h}} ->
-        {:error, {:imds_role_error, %{status_code: status, body: body, headers: h}}}
+        {:error, Error.new(:http_error, %{status: status, response: body, headers: h, url: url})}
 
-      {:error, %{error: error}} ->
-        {:error, {:imds_transport_error, error}}
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -116,10 +114,10 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
         {:ok, %{body: body, headers: h}}
 
       {:ok, %{status_code: status, body: body, headers: h}} ->
-        {:error, {:imds_http_error, %{status_code: status, body: body, headers: h}}}
+        {:error, Error.new(:http_error, %{status: status, response: body, headers: h, url: url})}
 
-      {:error, %{error: error}} ->
-        {:error, {:imds_transport_error, error}}
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -138,10 +136,10 @@ defmodule AwsSDK.Credentials.Providers.IMDS do
          }}
 
       _ ->
-        {:error, {:imds_invalid_response, Secrets.strip(decoded)}}
+        {:error, Error.new(:unexpected_response, %{response: Redact.strip(decoded)})}
     end
   rescue
-    err -> {:error, {:imds_invalid_json, Exception.message(err)}}
+    exception -> {:error, Error.new(:invalid_json, %{exception: exception})}
   end
 
   defp parse_expiration(nil), do: nil

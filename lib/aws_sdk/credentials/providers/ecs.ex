@@ -17,7 +17,8 @@ defmodule AwsSDK.Credentials.Providers.ECS do
   the `Authorization` header.
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
+  alias AwsSDK.Error
   alias AwsSDK.HTTP
 
   @ecs_host "169.254.170.2"
@@ -81,14 +82,14 @@ defmodule AwsSDK.Credentials.Providers.ECS do
         # The signer reads the top-level keys; the full response (every
         # field of the credentials document, plus headers) is under `:ecs`.
         with {:ok, creds} <- decode(body) do
-          {:ok, Map.put(creds, :ecs, Secrets.strip(%{body: :json.decode(body), headers: h}))}
+          {:ok, Map.put(creds, :ecs, Redact.strip(%{body: :json.decode(body), headers: h}))}
         end
 
       {:ok, %{status_code: status, body: body, headers: h}} ->
-        {:error, {:ecs_http_error, %{status_code: status, body: body, headers: h}}}
+        {:error, Error.new(:http_error, %{status: status, response: body, headers: h, url: url})}
 
-      {:error, %{error: error}} ->
-        {:error, {:ecs_transport_error, error}}
+      {:error, _} = error ->
+        error
     end
   end
 
@@ -145,10 +146,10 @@ defmodule AwsSDK.Credentials.Providers.ECS do
          }}
 
       _ ->
-        {:error, {:ecs_invalid_response, Secrets.strip(decoded)}}
+        {:error, Error.new(:unexpected_response, %{response: Redact.strip(decoded)})}
     end
   rescue
-    err -> {:error, {:ecs_invalid_json, Exception.message(err)}}
+    exception -> {:error, Error.new(:invalid_json, %{exception: exception})}
   end
 
   defp parse_expiration(nil), do: nil

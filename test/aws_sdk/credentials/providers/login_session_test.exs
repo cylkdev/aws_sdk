@@ -74,7 +74,15 @@ defmodule AwsSDK.Credentials.Providers.LoginSessionTest do
     login_session = arn:aws:iam::123456789012:user/dev
     """)
 
-    assert {:error, {:credential_process_failed, 9, _}} =
+    assert {:error,
+            %ErrorMessage{
+              code: :internal_server_error,
+              message: "internal server error",
+              details: %{
+                kind: :credential_process_failed,
+                process: %{command: script, args: [], stderr: "", exit_status: 9}
+              }
+            }} ===
              LoginSession.resolve(
                profile: "dev",
                home_dir: tmp,
@@ -100,7 +108,16 @@ defmodule AwsSDK.Credentials.Providers.LoginSessionTest do
     login_session = arn:aws:iam::123456789012:user/dev
     """)
 
-    assert {:error, {:credential_process_invalid, {:unsupported_version, 2}, %{exit_status: 0}}} =
+    assert {:error,
+            %ErrorMessage{
+              code: :bad_gateway,
+              message: "bad gateway",
+              details: %{
+                kind: :credential_process_invalid,
+                version: 2,
+                process: %{command: script, args: [], stderr: "", exit_status: 0}
+              }
+            }} ===
              LoginSession.resolve(
                profile: "dev",
                home_dir: tmp,

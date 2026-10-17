@@ -705,7 +705,7 @@ defmodule AwsSDK.S3.XMLParser do
         nil
 
       code ->
-        ErrorMessage.internal_server_error("s3 returned an error in a 200 response", %{
+        AwsSDK.Error.new(:error_in_success_response, %{
           code: code,
           message: xpath(doc, ~x"//Error/Message/text()"s),
           request_id: xpath(doc, ~x"//Error/RequestId/text()"s),

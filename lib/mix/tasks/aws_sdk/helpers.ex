@@ -175,7 +175,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
       Mix.Tasks.AwsSDK.Helpers.idempotent("s3-uploads", check_fn, action_fn, true)
       #=> {:ok, %{rule_arn: "..."}}
 
-  Only `{:error, %{code: :not_found}}` means "safe to create"; any other
+  Only a `:not_found` error means "safe to create"; any other
   error is reported through `handle_result/1` rather than being treated as
   absence.
   """
@@ -188,7 +188,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
           Mix.shell().info("'#{name}' already exists, skipping (use --force to update)")
           :skipped
 
-        {:error, %{code: :not_found}} ->
+        {:error, %ErrorMessage{code: :not_found}} ->
           action_fn.()
 
         {:error, _} = error ->
@@ -199,7 +199,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
 
   @doc """
   Checks whether a target with `target_id` exists on `rule`. Returns `{:ok, %{}}` if found,
-  `{:error, %{code: :not_found}}` if not. Used by `idempotent/4` for target checks.
+  a `:resource_not_found` error if not. Used by `idempotent/4` for target checks.
 
   ## Examples
 
@@ -207,7 +207,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
       #=> {:ok, %{}}
 
       Mix.Tasks.AwsSDK.Helpers.find_target("s3-uploads", "not-attached", opts)
-      #=> {:error, %{code: :not_found}}
+      #=> {:error, %ErrorMessage{code: :not_found, details: %{kind: :resource_not_found, rule: "s3-uploads", target_id: "not-attached"}}}
 
   Shaped to be passed straight to `idempotent/4` as its `check_fn`.
   """
@@ -217,7 +217,7 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
         if Enum.any?(targets, &(&1[:id] === target_id)) do
           {:ok, %{}}
         else
-          {:error, %{code: :not_found}}
+          {:error, AwsSDK.Error.new(:resource_not_found, %{rule: rule, target_id: target_id})}
         end
 
       error ->
@@ -408,30 +408,13 @@ defmodule Mix.Tasks.AwsSDK.Helpers do
     |> Mix.shell().info()
   end
 
-  defp format_error(%{code: code, message: msg, details: details}) when not is_nil(details) do
+  defp format_error(%ErrorMessage{code: code, message: msg, details: details}) do
     """
       code:    #{inspect(code)}
       message: #{msg}
       details: #{inspect(details, pretty: true, limit: :infinity)}\
     """
   end
-
-  defp format_error(%{code: code, message: msg}) do
-    """
-      code:    #{inspect(code)}
-      message: #{msg}\
-    """
-  end
-
-  defp format_error(%{message: msg, details: details}) when not is_nil(details) do
-    """
-      message: #{msg}
-      details: #{inspect(details, pretty: true, limit: :infinity)}\
-    """
-  end
-
-  defp format_error(%{message: msg}), do: "  message: #{msg}"
-  defp format_error(error), do: "  " <> inspect(error, pretty: true, limit: :infinity)
 
   defp mix_config(key) do
     Application.get_env(:aws_sdk, key)

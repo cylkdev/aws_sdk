@@ -97,7 +97,8 @@ if Code.ensure_loaded?(SandboxRegistry) do
     """
     @spec disable(atom, module) :: :ok
     def disable(registry, module) do
-      with {:error, :registry_not_started} <- put_state(registry, @disabled, %{}) do
+      with {:error, %ErrorMessage{details: %{kind: :sandbox_registry_not_started}}} <-
+             put_state(registry, @disabled, %{}) do
         raise_not_started!(module)
       end
     end
@@ -276,8 +277,11 @@ if Code.ensure_loaded?(SandboxRegistry) do
         |> Map.new(fn {key, fun} -> {{function, key}, fun} end)
         |> then(&put_state(registry, @state, &1))
         |> then(fn
-          :ok -> :ok
-          {:error, :registry_not_started} -> raise_not_started!(module)
+          :ok ->
+            :ok
+
+          {:error, %ErrorMessage{details: %{kind: :sandbox_registry_not_started}}} ->
+            raise_not_started!(module)
         end)
 
       :ok = Process.sleep(@sleep)
@@ -294,7 +298,7 @@ if Code.ensure_loaded?(SandboxRegistry) do
     defp put_state(registry, context, state) do
       case Process.whereis(registry) do
         nil ->
-          {:error, :registry_not_started}
+          {:error, AwsSDK.Error.new(:sandbox_registry_not_started, %{registry: registry})}
 
         _pid_or_port ->
           merged =

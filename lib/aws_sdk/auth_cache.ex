@@ -54,6 +54,7 @@ defmodule AwsSDK.AuthCache do
 
   alias AwsSDK.Credentials.Profile
   alias AwsSDK.Credentials.Providers.{ECS, IMDS}
+  alias AwsSDK.Error
 
   @table :aws_auth_cache
   @refresh_skew_seconds 60
@@ -90,7 +91,7 @@ defmodule AwsSDK.AuthCache do
       #=>  }}
 
       AwsSDK.AuthCache.get({:awscli, "no-such-profile"}, [])
-      #=> {:error, :no_credentials}
+      #=> {:error, %ErrorMessage{code: :not_found, details: %{kind: :profile_not_found, profile: "no-such-profile"}}}
 
   Concurrent callers for the same key share one in-flight fetch rather than
   each hitting the provider. A cached entry is refreshed once `:expires_at`
@@ -186,9 +187,14 @@ defmodule AwsSDK.AuthCache do
     end
   end
 
-  defp loggable?({:awscli, _}, {:profile_not_found, _}), do: false
-  defp loggable?(:aws_instance_auth, {:imds_transport_error, _}), do: false
-  defp loggable?(:aws_instance_auth, {:imds_no_role, _}), do: false
+  defp loggable?({:awscli, _}, %ErrorMessage{details: %{kind: :profile_not_found}}), do: false
+
+  defp loggable?(:aws_instance_auth, %ErrorMessage{details: %{kind: :transport_error}}),
+    do: false
+
+  defp loggable?(:aws_instance_auth, %ErrorMessage{details: %{kind: :http_error, status: 404}}),
+    do: false
+
   defp loggable?(_key, _reason), do: true
 
   # -- GenServer ---------------------------------------------------------------
@@ -249,7 +255,11 @@ defmodule AwsSDK.AuthCache do
         log_failure(key, reason)
 
         for waiter <- waiters,
-            do: GenServer.reply(waiter, {:error, {:credential_fetch_failed, reason}})
+            do:
+              GenServer.reply(
+                waiter,
+                {:error, Error.new(:credential_fetch_failed, %{reason: reason})}
+              )
 
         {:noreply, %{state | inflight: Map.delete(state.inflight, key)}}
     end

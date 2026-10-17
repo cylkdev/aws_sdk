@@ -9,7 +9,7 @@ defmodule AwsSDK.Credentials.Providers.StaticProfile do
   lets the chain continue to them.
   """
 
-  alias AwsSDK.Credentials.Secrets
+  alias AwsSDK.Credentials.Redact
   alias AwsSDK.Credentials.Profile
 
   @sso_indicators ~w(sso_session sso_start_url credential_process role_arn)
@@ -45,7 +45,7 @@ defmodule AwsSDK.Credentials.Providers.StaticProfile do
          expires_at: nil,
          source: :profile,
          # Every key read for this profile, not only the three used above.
-         profile: Secrets.strip(profile)
+         profile: Redact.strip(profile)
        }}
     else
       :skip

@@ -1,18 +1,18 @@
-defmodule AwsSDK.ClientTest do
+defmodule AwsSDK.ErrorTest do
   use ExUnit.Case, async: true
 
-  alias AwsSDK.Client
+  alias AwsSDK.Error
 
-  describe "error_message/3" do
+  describe "new/2" do
     test "an EC2 NotFound code at status 400 is not_found" do
       response =
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<Response><Errors><Error><Code>InvalidVpcID.NotFound</Code><Message>The vpc ID 'vpc-00000000000000000' does not exist</Message></Error></Errors><RequestID>aa457d80-fbc9-47ec-9a7a-02525d33ed7a</RequestID></Response>"
 
       assert %ErrorMessage{
                code: :not_found,
-               message: "resource not found.",
-               details: %{status: 400, response: response, headers: []}
-             } === Client.error_message(400, response, [])
+               message: "not found",
+               details: %{kind: :http_error, status: 400, response: response, headers: []}
+             } === Error.new(:http_error, %{status: 400, response: response, headers: []})
     end
 
     test "a malformed id is bad_request" do
@@ -21,9 +21,9 @@ defmodule AwsSDK.ClientTest do
 
       assert %ErrorMessage{
                code: :bad_request,
-               message: "bad request.",
-               details: %{status: 400, response: response, headers: []}
-             } === Client.error_message(400, response, [])
+               message: "bad request",
+               details: %{kind: :http_error, status: 400, response: response, headers: []}
+             } === Error.new(:http_error, %{status: 400, response: response, headers: []})
     end
 
     test "a JSON ValidationException is bad_request" do
@@ -32,17 +32,17 @@ defmodule AwsSDK.ClientTest do
 
       assert %ErrorMessage{
                code: :bad_request,
-               message: "bad request.",
-               details: %{status: 400, response: response, headers: []}
-             } === Client.error_message(400, response, [])
+               message: "bad request",
+               details: %{kind: :http_error, status: 400, response: response, headers: []}
+             } === Error.new(:http_error, %{status: 400, response: response, headers: []})
     end
 
     test "an empty 404 is not_found" do
       assert %ErrorMessage{
                code: :not_found,
-               message: "resource not found.",
-               details: %{status: 404, response: "", headers: []}
-             } === Client.error_message(404, "", [])
+               message: "not found",
+               details: %{kind: :http_error, status: 404, response: "", headers: []}
+             } === Error.new(:http_error, %{status: 404, response: "", headers: []})
     end
 
     test "a BucketAlreadyExists code is conflict" do
@@ -51,9 +51,9 @@ defmodule AwsSDK.ClientTest do
 
       assert %ErrorMessage{
                code: :conflict,
-               message: "conflict.",
-               details: %{status: 409, response: response, headers: []}
-             } === Client.error_message(409, response, [])
+               message: "conflict",
+               details: %{kind: :http_error, status: 409, response: response, headers: []}
+             } === Error.new(:http_error, %{status: 409, response: response, headers: []})
     end
 
     test "an AccessDenied code is forbidden" do
@@ -62,9 +62,33 @@ defmodule AwsSDK.ClientTest do
 
       assert %ErrorMessage{
                code: :forbidden,
-               message: "forbidden.",
-               details: %{status: 403, response: response, headers: []}
-             } === Client.error_message(403, response, [])
+               message: "forbidden",
+               details: %{kind: :http_error, status: 403, response: response, headers: []}
+             } === Error.new(:http_error, %{status: 403, response: response, headers: []})
+    end
+
+    test "a 3xx answer is bad_request" do
+      assert %ErrorMessage{
+               code: :bad_request,
+               message: "bad request",
+               details: %{kind: :http_error, status: 301, response: "", headers: []}
+             } === Error.new(:http_error, %{status: 301, response: "", headers: []})
+    end
+
+    test "a 5xx answer is service_unavailable" do
+      assert %ErrorMessage{
+               code: :service_unavailable,
+               message: "service unavailable",
+               details: %{kind: :http_error, status: 503, response: "", headers: []}
+             } === Error.new(:http_error, %{status: 503, response: "", headers: []})
+    end
+
+    test "any other kind takes its code from the table" do
+      assert %ErrorMessage{
+               code: :unauthorized,
+               message: "unauthorized",
+               details: %{kind: :missing_credentials, profile: "default"}
+             } === Error.new(:missing_credentials, %{profile: "default"})
     end
   end
 end

@@ -91,7 +91,7 @@ defmodule Mix.Tasks.AwsSDK.IAM.CreatePolicy do
     if Enum.any?(policies, &(&1[:policy_name] === name)) do
       {:ok, %{}}
     else
-      {:error, %{code: :not_found}}
+      {:error, AwsSDK.Error.new(:resource_not_found, %{name: name})}
     end
   end
 end

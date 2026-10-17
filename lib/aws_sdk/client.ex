@@ -8,16 +8,14 @@ defmodule AwsSDK.Client do
     * SigV4 signing via `AwsSDK.Signer.sign/5`,
     * HTTP dispatch via `AwsSDK.HTTP` (buffered, stream-upload, or
       stream-download depending on struct fields),
-    * status-code branching into `{:ok, resp}` for 2xx,
-      `{:error, {:http_error, status, body, headers}}` otherwise, and
-      `{:error, reason}` on transport failure,
+    * status-code branching into `{:ok, resp}` for 2xx, and
+      `{:error, %ErrorMessage{}}` from `AwsSDK.Error.new/2` otherwise,
     * credential / endpoint / sandbox resolution driven by a per-service
       opts namespace (`:s3`, `:iam`, `:events`, `:logs`,
       `:organizations`, `:identity_center`).
 
   Callers build a populated Operation struct in their service facade
-  (`AwsSDK.EventBridge`, `AwsSDK.S3`, …) and hand it to `request/1`,
-  which wraps `execute/1` (the raw transport seam) with error mapping. The
+  (`AwsSDK.EventBridge`, `AwsSDK.S3`, …) and hand it to `request/1`. The
   struct is the whole contract between facade and dispatcher: body
   is already encoded, headers are already populated, URL is already
   composed.
@@ -29,8 +27,8 @@ defmodule AwsSDK.Client do
   (virtual-hosted addressing is S3-only), and response body decoding.
   """
 
-  alias AwsSDK.Credentials.Secrets
-  alias AwsSDK.{Config, HTTP, Signer}
+  alias AwsSDK.Credentials.Redact
+  alias AwsSDK.{Config, Error, HTTP, Signer}
   alias AwsSDK.Credentials.Profile
 
   @type method :: :get | :post | :put | :delete | :head
@@ -91,24 +89,20 @@ defmodule AwsSDK.Client do
 
       {:ok, op} = AwsSDK.EC2.build_operation("DescribeTags", %{}, access_key_id: "AK", secret_access_key: "SK")
 
-      AwsSDK.Client.execute(op)
+      AwsSDK.Client.request(op)
       #=> {:ok, %{status_code: 200, body: "<DescribeTagsResponse>...", headers: [...]}}
 
       # Non-2xx is an error at this layer, unlike AwsSDK.HTTP.
-      AwsSDK.Client.execute(op)
-      #=> {:error, {:http_error, 403, "<ErrorResponse>...</ErrorResponse>", [{"x-amzn-requestid", "..."}]}}
+      AwsSDK.Client.request(op)
+      #=> {:error, %ErrorMessage{code: :forbidden, details: %{kind: :http_error, status: 403, ...}}}
 
-      AwsSDK.Client.execute(op)
-      #=> {:error, %{error: %Req.TransportError{reason: :nxdomain}}}
+      AwsSDK.Client.request(op)
+      #=> {:error, %ErrorMessage{code: :internal_server_error, details: %{kind: :transport_error, ...}}}
 
-  The three shapes above are exactly what `request/1` pattern-matches on.
+  Every error is built by `AwsSDK.Error.new/2`.
   """
-  @spec execute(struct) ::
-          {:ok, response}
-          | {:ok, stream_response}
-          | {:error, {:http_error, non_neg_integer, binary, [header]}}
-          | {:error, term}
-  def execute(%_{} = op) do
+  @spec request(struct) :: {:ok, response} | {:ok, stream_response} | {:error, ErrorMessage.t()}
+  def request(%_{} = op) do
     method = op.method
     url = op.url
     headers = op.headers
@@ -132,135 +126,6 @@ defmodule AwsSDK.Client do
     signed_headers = Signer.sign(method, url, headers, signing_body, creds)
 
     dispatch(method, url, body, signed_headers, stream_upload?, stream_response?, http_opts)
-  end
-
-  @doc """
-  Executes a signed operation and maps failures to `ErrorMessage` errors.
-
-  This is the library's single status-code contract — 3xx →
-  `bad_request`, 4xx → labelled from AWS's own error code by
-  `error_message/3`, 5xx → `service_unavailable`, transport errors →
-  `internal_server_error`. Success
-  passes `execute/1`'s response map (`:status_code`, `:headers`, `:body`,
-  and the streaming variants) through untouched. For HTTP failures, `details`
-  carries the original `:status` code alongside `:response` (the body) and
-  `:headers` (the response headers, e.g. the request id) so callers can
-  special-case specific statuses without losing the shared mapping. For
-  transport failures, `details` is the transport error map (`:error`,
-  the original exception).
-  """
-  @spec request(struct) :: {:ok, map} | {:error, ErrorMessage.t()}
-  def request(%_{} = op) do
-    case execute(op) do
-      {:ok, response} ->
-        {:ok, response}
-
-      {:error, {:http_error, status_code, response, headers}} when status_code in 300..399 ->
-        {:error,
-         ErrorMessage.bad_request("redirect not followed.", %{
-           status: status_code,
-           response: response,
-           headers: headers
-         })}
-
-      {:error, {:http_error, status_code, response, headers}} when status_code in 400..499 ->
-        {:error, error_message(status_code, response, headers)}
-
-      {:error, {:http_error, status_code, response, headers}} when status_code >= 500 ->
-        {:error,
-         ErrorMessage.service_unavailable("service temporarily unavailable", %{
-           status: status_code,
-           response: response,
-           headers: headers
-         })}
-
-      {:error, transport_error} ->
-        {:error, ErrorMessage.internal_server_error("internal server error", transport_error)}
-    end
-  end
-
-  @doc """
-  Builds the `ErrorMessage` for a 4xx answer from AWS.
-
-  The label comes from AWS's own error code — the XML `<Code>` or the JSON
-  `__type` — because AWS answers many "not found" cases with status 400:
-
-    * a code containing `NotFound`, or starting with `NoSuch` → `not_found`
-    * a code starting with `AccessDenied`, or `UnauthorizedOperation` →
-      `forbidden`
-    * a code containing `Malformed` or `Validation` → `bad_request`
-    * a code containing `AlreadyExists` or `AlreadyOwnedByYou` → `conflict`
-    * any other code, or a body with none (a HEAD answer) → labelled by
-      `status`
-
-  `details` carries `:status`, `:response` (the body) and `:headers`.
-
-  ## Examples
-
-      AwsSDK.Client.error_message(404, "", [])
-      #=> %ErrorMessage{
-      #=>   code: :not_found,
-      #=>   message: "resource not found.",
-      #=>   details: %{status: 404, response: "", headers: []}
-      #=> }
-  """
-  @spec error_message(400..499, binary(), list()) :: ErrorMessage.t()
-  def error_message(status, response, headers) do
-    code = error_label(status, aws_error_code(response))
-
-    %ErrorMessage{
-      code: code,
-      message: error_label_message(code),
-      details: %{status: status, response: response, headers: headers}
-    }
-  end
-
-  defp aws_error_code(response) do
-    case Regex.run(~r{<Code>([^<]+)</Code>|"__type":"(?:[^"#]*#)?([^"]+)"}, response,
-           capture: :all_but_first
-         ) do
-      ["", json_code] -> json_code
-      [xml_code | _] -> xml_code
-      nil -> nil
-    end
-  end
-
-  defp error_label(status, nil), do: Plug.Conn.Status.reason_atom(status)
-
-  defp error_label(status, aws_code) do
-    cond do
-      not_found_code?(aws_code) -> :not_found
-      forbidden_code?(aws_code) -> :forbidden
-      bad_request_code?(aws_code) -> :bad_request
-      conflict_code?(aws_code) -> :conflict
-      true -> Plug.Conn.Status.reason_atom(status)
-    end
-  end
-
-  defp not_found_code?(aws_code) do
-    String.contains?(aws_code, "NotFound") or String.starts_with?(aws_code, "NoSuch")
-  end
-
-  defp forbidden_code?(aws_code) do
-    String.starts_with?(aws_code, "AccessDenied") or aws_code === "UnauthorizedOperation"
-  end
-
-  defp bad_request_code?(aws_code) do
-    String.contains?(aws_code, "Malformed") or String.contains?(aws_code, "Validation")
-  end
-
-  defp conflict_code?(aws_code) do
-    String.contains?(aws_code, "AlreadyExists") or String.contains?(aws_code, "AlreadyOwnedByYou")
-  end
-
-  defp error_label_message(:not_found), do: "resource not found."
-
-  defp error_label_message(code) do
-    code
-    |> Plug.Conn.Status.code()
-    |> Plug.Conn.Status.reason_phrase()
-    |> String.downcase()
-    |> Kernel.<>(".")
   end
 
   @doc """
@@ -304,9 +169,9 @@ defmodule AwsSDK.Client do
       #=> {:ok, %{scheme: "http", host: "localhost", port: 4566, ...}}
   """
   @spec resolve_config(atom, keyword, (String.t() -> String.t())) ::
-          {:ok, map} | {:error, term}
+          {:ok, map} | {:error, ErrorMessage.t()}
   @spec resolve_config(atom, keyword, (String.t() -> String.t()), [atom]) ::
-          {:ok, map} | {:error, term}
+          {:ok, map} | {:error, ErrorMessage.t()}
   def resolve_config(namespace, opts, default_host_fn, extra \\ []) do
     {svc_opts, cred_opts} = Keyword.pop(opts, namespace, [])
     {_sandbox_opts, cred_opts} = Keyword.pop(cred_opts, :sandbox, [])
@@ -348,12 +213,14 @@ defmodule AwsSDK.Client do
   defp missing_credentials_error(credential_chain, opts) do
     profile_name = opts[:profile] || Profile.default()
 
-    {:missing_credentials,
-     Secrets.strip(%{
-       credential_chain: credential_chain,
-       profile: profile_name,
-       profile_files: Profile.load(profile_name, opts)
-     })}
+    Error.new(
+      :missing_credentials,
+      Redact.strip(%{
+        credential_chain: credential_chain,
+        profile: profile_name,
+        profile_files: Profile.load(profile_name, opts)
+      })
+    )
   end
 
   @doc """
@@ -388,14 +255,21 @@ defmodule AwsSDK.Client do
         {:ok, resp}
 
       {:ok, %{status_code: status, headers: headers} = resp} ->
-        # The error body is kept as the raw stream elements: binary chunks
-        # and any `{:trailers, _}` elements, in arrival order.
-        body = resp |> Map.get(:body_stream, []) |> Enum.to_list()
+        # The stream holds binary chunks and `{:trailers, _}` elements.
+        elements = resp |> Map.get(:body_stream, []) |> Enum.to_list()
+        response = elements |> Enum.filter(&is_binary/1) |> IO.iodata_to_binary()
+        trailers = Enum.reject(elements, &is_binary/1)
 
-        {:error, {:http_error, status, body, headers}}
+        {:error,
+         Error.new(:http_error, %{
+           status: status,
+           response: response,
+           headers: headers,
+           trailers: trailers
+         })}
 
-      {:error, %{error: _} = transport_error} ->
-        {:error, transport_error}
+      {:error, error} ->
+        {:error, error}
     end
   end
 
@@ -410,11 +284,11 @@ defmodule AwsSDK.Client do
   end
 
   defp translate_buffered({:ok, %{status_code: status, body: body, headers: headers}}) do
-    {:error, {:http_error, status, body, headers}}
+    {:error, Error.new(:http_error, %{status: status, response: body, headers: headers})}
   end
 
-  defp translate_buffered({:error, %{error: _} = transport_error}) do
-    {:error, transport_error}
+  defp translate_buffered({:error, error}) do
+    {:error, error}
   end
 
   # -- signing creds map ------------------------------------------------------

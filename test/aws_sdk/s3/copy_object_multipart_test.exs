@@ -37,18 +37,23 @@ defmodule AwsSDK.S3.CopyObjectMultipartTest do
   end
 
   test "a failed copy keeps prior call results and reports the abort" do
-    copy_error = {:error, %{copied: [], failed: [{:boom, 1}]}}
+    copy_error = {:error, AwsSDK.Error.new(:copy_failed, %{copied: [], failed: [:boom]})}
     abort = %{x_amz_request_id: "abort-req"}
 
     Sandbox.set_copy_parts_responses([{"dest", fn -> copy_error end}])
     Sandbox.set_abort_multipart_upload_responses([{"dest", fn -> {:ok, abort} end}])
 
     assert {:error,
-            %{
-              head_object: @head,
-              create_multipart_upload: @create,
-              copy_parts: ^copy_error,
-              abort_multipart_upload: {:ok, ^abort}
-            }} = S3.copy_object_multipart("dest", "k", "src", "src-k", @opts)
+            %ErrorMessage{
+              code: :internal_server_error,
+              message: "internal server error",
+              details: %{
+                kind: :copy_failed,
+                head_object: @head,
+                create_multipart_upload: @create,
+                copy_parts: copy_error,
+                abort_multipart_upload: {:ok, abort}
+              }
+            }} === S3.copy_object_multipart("dest", "k", "src", "src-k", @opts)
   end
 end

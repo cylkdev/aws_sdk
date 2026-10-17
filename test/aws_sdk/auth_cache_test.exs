@@ -150,7 +150,9 @@ defmodule AwsSDK.AuthCacheTest do
         )
         |> Enum.map(fn {:ok, result} -> result end)
 
-      assert Enum.all?(results, &match?({:error, {:credential_fetch_failed, _}}, &1))
+      kinds = Enum.map(results, fn {:error, %ErrorMessage{details: %{kind: kind}}} -> kind end)
+
+      assert List.duplicate(:credential_fetch_failed, 5) === kinds
 
       # The in-flight slot was released, so the cache still works.
       assert {:ok, %{access_key_id: "AKIA_1"}} = AuthCache.get(@key, fetcher: minter(counter))

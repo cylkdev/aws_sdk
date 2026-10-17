@@ -66,6 +66,7 @@ defmodule AwsSDK.STS do
   import SweetXml, only: [xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
+  alias AwsSDK.Error
   alias AwsSDK.Operation
 
   @service "sts"
@@ -106,7 +107,7 @@ defmodule AwsSDK.STS do
              body: %{account: String.t(), arn: String.t(), user_id: String.t()},
              headers: map()
            }}
-          | {:error, term()}
+          | {:error, ErrorMessage.t()}
   def get_caller_identity(opts \\ []) do
     if sandbox?(opts) do
       sandbox_get_caller_identity_response(opts)
@@ -150,7 +151,7 @@ defmodule AwsSDK.STS do
              },
              headers: map()
            }}
-          | {:error, term}
+          | {:error, ErrorMessage.t()}
   def assume_role(params, source_creds, region, opts) do
     op = %Operation{
       method: :post,
@@ -165,17 +166,9 @@ defmodule AwsSDK.STS do
       http: Keyword.get(opts, :http, [])
     }
 
-    case Client.execute(op) do
-      {:ok, %{body: xml, headers: headers}} ->
-        with {:ok, parsed} <- parse_assume_role(xml) do
-          {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
-        end
-
-      {:error, {:http_error, status, xml, headers}} ->
-        {:error, {:sts_http_error, status, xml, headers}}
-
-      {:error, reason} ->
-        {:error, {:sts_transport_error, reason}}
+    with {:ok, %{body: xml, headers: headers}} <- Client.request(op),
+         {:ok, parsed} <- parse_assume_role(xml) do
+      {:ok, %{body: parsed, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
@@ -235,17 +228,17 @@ defmodule AwsSDK.STS do
          }}
 
       _ ->
-        {:error, {:sts_invalid_response, xml}}
+        {:error, Error.new(:unexpected_response, %{response: xml})}
     end
   rescue
-    err -> {:error, {:sts_invalid_response, Exception.message(err)}}
+    exception -> {:error, Error.new(:unexpected_response, %{exception: exception})}
   end
 
   # An absent Expiration is legitimate; an unparseable one is not. Returning
   # nil for the latter would mean "never expires", and `AwsSDK.AuthCache` caches
   # an entry with no expiry forever -- the credentials would die at AWS while
   # this process kept reusing them. Raise instead; the caller's rescue turns
-  # it into `{:error, {:sts_invalid_response, _}}`.
+  # it into an `:unexpected_response` error.
   defp parse_expiration(""), do: nil
 
   defp parse_expiration(iso) do

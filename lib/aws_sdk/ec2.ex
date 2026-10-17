@@ -37,6 +37,7 @@ defmodule AwsSDK.EC2 do
   import SweetXml, only: [xpath: 2, xpath: 3, sigil_x: 2, transform_by: 2]
 
   alias AwsSDK.Client
+  alias AwsSDK.Error
   alias AwsSDK.Operation
 
   @service "ec2"
@@ -3891,7 +3892,7 @@ defmodule AwsSDK.EC2 do
     * `:resolve_alias` - When `true`, resolves an AMI alias in the returned
       `:launch_template_data` `:image_id` to the underlying AMI ID.
 
-  Returns `{:error, {:unexpected_response, %{operation: "CreateLaunchTemplateVersion", body: body}}}`
+  Returns `{:error, Error.new(:unexpected_response, %{operation: "CreateLaunchTemplateVersion", response: body})}`
   if a 200 response carries no `launchTemplateVersion` element, since AWS
   always returns one on success.
   """
@@ -3944,7 +3945,11 @@ defmodule AwsSDK.EC2 do
   defp create_launch_template_version_result(body) do
     case parse_create_launch_template_version(body) do
       %{launch_template_version: nil} ->
-        {:error, {:unexpected_response, %{operation: "CreateLaunchTemplateVersion", body: body}}}
+        {:error,
+         Error.new(:unexpected_response, %{
+           operation: "CreateLaunchTemplateVersion",
+           response: body
+         })}
 
       result ->
         {:ok, result}
@@ -4022,7 +4027,7 @@ defmodule AwsSDK.EC2 do
     * `:client_token` - a unique string making the call idempotent, so a retry
       after a timeout does not move the default twice.
 
-  Returns `{:error, {:unexpected_response, %{operation: "ModifyLaunchTemplate", body: body}}}`
+  Returns `{:error, Error.new(:unexpected_response, %{operation: "ModifyLaunchTemplate", response: body})}`
   if a 200 response carries no `launchTemplate` element, since AWS always
   returns one on success.
   """
@@ -4065,7 +4070,8 @@ defmodule AwsSDK.EC2 do
   defp modify_launch_template_result(body) do
     case parse_modify_launch_template(body) do
       %{launch_template: nil} ->
-        {:error, {:unexpected_response, %{operation: "ModifyLaunchTemplate", body: body}}}
+        {:error,
+         Error.new(:unexpected_response, %{operation: "ModifyLaunchTemplate", response: body})}
 
       result ->
         {:ok, result}
@@ -4108,11 +4114,11 @@ defmodule AwsSDK.EC2 do
   `unsuccessfullyDeletedLaunchTemplateVersionSet` rather than as an HTTP
   error. That set, not the status code, decides success here — a version
   found there comes back as
-  `{:error, {:launch_template_version_not_deleted, %{launch_template_id:, launch_template_name:, version_number:, response_error: %{code:, message:}}}}`,
+  `{:error, Error.new(:launch_template_version_not_deleted, %{launch_template_id:, launch_template_name:, version_number:, response_error: %{code:, message:}})}`,
   carrying the code and message AWS gave. The default version cannot be
   deleted this way; it must first be moved with `modify_launch_template/3`.
 
-  Returns `{:error, {:unexpected_response, %{operation: "DeleteLaunchTemplateVersions", body: body}}}`
+  Returns `{:error, Error.new(:unexpected_response, %{operation: "DeleteLaunchTemplateVersions", response: body})}`
   if a 200 response carries the requested version in neither set.
   """
   @spec delete_launch_template_version(
@@ -4158,10 +4164,14 @@ defmodule AwsSDK.EC2 do
         {:ok, result}
 
       %{unsuccessfully_deleted_launch_template_version_set: [_]} = result ->
-        {:error, {:launch_template_version_not_deleted, result}}
+        {:error, Error.new(:launch_template_version_not_deleted, result)}
 
       _ ->
-        {:error, {:unexpected_response, %{operation: "DeleteLaunchTemplateVersions", body: body}}}
+        {:error,
+         Error.new(:unexpected_response, %{
+           operation: "DeleteLaunchTemplateVersions",
+           response: body
+         })}
     end
   end
 
