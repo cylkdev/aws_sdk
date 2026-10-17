@@ -51,6 +51,8 @@ defmodule AwsSDK.ACM do
 
     * `:certificate_statuses` - List of statuses to include, such as
       `["ISSUED"]`.
+    * `:key_types` - Key types to include, such as `["RSA_4096"]`. AWS
+      returns only RSA_2048 certificates when this is not given.
     * `:max_items` - The most results to return.
     * `:next_token` - Where to continue a truncated answer.
   """
@@ -68,6 +70,7 @@ defmodule AwsSDK.ACM do
     data =
       %{}
       |> maybe_put("CertificateStatuses", opts[:certificate_statuses])
+      |> maybe_put("Includes", includes(opts[:key_types]))
       |> maybe_put("MaxItems", opts[:max_items])
       |> maybe_put("NextToken", opts[:next_token])
 
@@ -127,6 +130,9 @@ defmodule AwsSDK.ACM do
 
   defp maybe_put(map, _key, nil), do: map
   defp maybe_put(map, key, value), do: Map.put(map, key, value)
+
+  defp includes(nil), do: nil
+  defp includes(key_types), do: %{"keyTypes" => key_types}
 
   # ---------------------------------------------------------------------------
   # Sandbox delegation
