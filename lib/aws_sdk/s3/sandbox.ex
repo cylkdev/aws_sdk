@@ -376,6 +376,16 @@ if Code.ensure_loaded?(SandboxRegistry) do
       Sandbox.register(@registry, __MODULE__, :get_bucket_versioning, entries)
     end
 
+    def get_bucket_lifecycle_configuration_response(bucket, opts) do
+      binding = [bucket: bucket, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :get_bucket_lifecycle_configuration, bucket, binding)
+    end
+
+    def set_get_bucket_lifecycle_configuration_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :get_bucket_lifecycle_configuration, entries)
+    end
+
     def get_public_access_block_response(bucket, opts) do
       binding = [bucket: bucket, opts: opts]
 

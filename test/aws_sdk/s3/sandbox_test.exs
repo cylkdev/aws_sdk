@@ -656,6 +656,19 @@ defmodule AwsSDK.S3.SandboxTest do
     end
   end
 
+  describe "get_bucket_lifecycle_configuration/2" do
+    test "returns the response registered for the bucket" do
+      response = {:ok, %{body: %{rules: []}, headers: %{}}}
+
+      Sandbox.set_get_bucket_lifecycle_configuration_responses([
+        {"test-bucket", fn -> response end}
+      ])
+
+      assert response ===
+               S3.get_bucket_lifecycle_configuration("test-bucket", sandbox: [enabled: true])
+    end
+  end
+
   describe "list_object_versions/2" do
     test "returns the response registered for the bucket" do
       response =

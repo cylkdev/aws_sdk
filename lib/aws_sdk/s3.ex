@@ -1910,6 +1910,40 @@ defmodule AwsSDK.S3 do
   end
 
   @doc """
+  Returns the lifecycle configuration of a bucket.
+
+  Maps to AWS `GetBucketLifecycleConfiguration`. `:rules` lists each rule
+  under the same keys `put_bucket_lifecycle_configuration/3` takes; an element
+  the rule does not set is `nil` (or `[]` for transitions). A bucket with no
+  lifecycle configuration returns a `:not_found` error
+  (`NoSuchLifecycleConfiguration`).
+
+  ## Permissions
+
+  To execute this request, you must have the following permission:
+
+    - s3:GetLifecycleConfiguration
+
+  ## Arguments
+
+    * `bucket` - The name of the bucket.
+    * `opts` - A keyword list of options.
+
+  ## Options
+
+  See the "Shared Options" section in the module documentation for common options.
+  """
+  @spec get_bucket_lifecycle_configuration(bucket :: binary(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def get_bucket_lifecycle_configuration(bucket, opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_get_bucket_lifecycle_configuration_response(bucket, opts)
+    else
+      do_get_bucket_lifecycle_configuration(bucket, opts)
+    end
+  end
+
+  @doc """
   Returns the public access block configuration of a bucket.
 
   Maps to AWS `GetPublicAccessBlock`. Each of the four flags is a boolean, or
@@ -2680,6 +2714,19 @@ defmodule AwsSDK.S3 do
     end
   end
 
+  defp do_get_bucket_lifecycle_configuration(bucket, opts) do
+    request_opts = Keyword.put(opts, :query, %{"lifecycle" => ""})
+
+    with {:ok, op} <- build_operation(:get, bucket, nil, request_opts),
+         {:ok, %{body: xml, headers: headers}} <- Client.request(op) do
+      {:ok,
+       %{
+         body: XMLParser.parse_lifecycle_configuration(xml),
+         headers: Client.deserialize_headers(headers, opts)
+       }}
+    end
+  end
+
   defp do_get_public_access_block(bucket, opts) do
     request_opts = Keyword.put(opts, :query, %{"publicAccessBlock" => ""})
 
@@ -3242,6 +3289,10 @@ defmodule AwsSDK.S3 do
         S3.get_bucket_versioning(source_bucket!(opts), with_default_options(opts))
       end
 
+      def get_bucket_lifecycle_configuration(opts \\ []) do
+        S3.get_bucket_lifecycle_configuration(source_bucket!(opts), with_default_options(opts))
+      end
+
       def get_public_access_block(opts \\ []) do
         S3.get_public_access_block(source_bucket!(opts), with_default_options(opts))
       end
@@ -3464,6 +3515,11 @@ defmodule AwsSDK.S3 do
     defdelegate sandbox_get_bucket_versioning_response(bucket, opts),
       to: AwsSDK.S3.Sandbox,
       as: :get_bucket_versioning_response
+
+    @doc false
+    defdelegate sandbox_get_bucket_lifecycle_configuration_response(bucket, opts),
+      to: AwsSDK.S3.Sandbox,
+      as: :get_bucket_lifecycle_configuration_response
 
     @doc false
     defdelegate sandbox_get_public_access_block_response(bucket, opts),
@@ -3791,6 +3847,15 @@ defmodule AwsSDK.S3 do
     end
 
     defp sandbox_get_bucket_versioning_response(bucket, opts) do
+      raise """
+      Cannot use sandbox mode outside of test environment.
+
+      bucket: #{inspect(bucket)}
+      options: #{inspect(opts)}
+      """
+    end
+
+    defp sandbox_get_bucket_lifecycle_configuration_response(bucket, opts) do
       raise """
       Cannot use sandbox mode outside of test environment.
 

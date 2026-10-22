@@ -794,6 +794,79 @@ defmodule AwsSDK.S3.XMLParser do
     }
   end
 
+  @doc """
+  Parses the `<LifecycleConfiguration>` body a `GetBucketLifecycleConfiguration`
+  call returns.
+
+  Each rule is returned under the keys `AwsSDK.S3.put_bucket_lifecycle_configuration/3`
+  takes. An element the rule does not carry is `nil`, and a repeated element
+  (`Transition`, `NoncurrentVersionTransition`) the rule does not carry is `[]`.
+  Day and size counts are cast to integers and `ExpiredObjectDeleteMarker` to
+  a boolean, per the AWS model.
+  """
+  @spec parse_lifecycle_configuration(binary()) :: %{rules: list(map())}
+  def parse_lifecycle_configuration(xml) do
+    doc = SweetXml.parse(xml)
+
+    %{
+      rules:
+        xpath(doc, ~x"//LifecycleConfiguration/Rule"l,
+          id: ~x"./ID/text()"o |> transform_by(&optional_text/1),
+          status: ~x"./Status/text()"s,
+          filter: [
+            ~x"./Filter"o,
+            prefix: ~x"./Prefix/text()"o |> transform_by(&optional_text/1),
+            tag: [
+              ~x"./Tag"o,
+              key: ~x"./Key/text()"s,
+              value: ~x"./Value/text()"s
+            ],
+            object_size_greater_than: ~x"./ObjectSizeGreaterThan/text()"oi,
+            object_size_less_than: ~x"./ObjectSizeLessThan/text()"oi,
+            and: [
+              ~x"./And"o,
+              prefix: ~x"./Prefix/text()"o |> transform_by(&optional_text/1),
+              tags: [
+                ~x"./Tag"l,
+                key: ~x"./Key/text()"s,
+                value: ~x"./Value/text()"s
+              ],
+              object_size_greater_than: ~x"./ObjectSizeGreaterThan/text()"oi,
+              object_size_less_than: ~x"./ObjectSizeLessThan/text()"oi
+            ]
+          ],
+          expiration: [
+            ~x"./Expiration"o,
+            days: ~x"./Days/text()"oi,
+            date: ~x"./Date/text()"o |> transform_by(&optional_text/1),
+            expired_object_delete_marker:
+              ~x"./ExpiredObjectDeleteMarker/text()"s |> transform_by(&to_bool/1)
+          ],
+          transitions: [
+            ~x"./Transition"l,
+            days: ~x"./Days/text()"oi,
+            date: ~x"./Date/text()"o |> transform_by(&optional_text/1),
+            storage_class: ~x"./StorageClass/text()"s
+          ],
+          noncurrent_version_expiration: [
+            ~x"./NoncurrentVersionExpiration"o,
+            noncurrent_days: ~x"./NoncurrentDays/text()"oi,
+            newer_noncurrent_versions: ~x"./NewerNoncurrentVersions/text()"oi
+          ],
+          noncurrent_version_transitions: [
+            ~x"./NoncurrentVersionTransition"l,
+            noncurrent_days: ~x"./NoncurrentDays/text()"oi,
+            newer_noncurrent_versions: ~x"./NewerNoncurrentVersions/text()"oi,
+            storage_class: ~x"./StorageClass/text()"s
+          ],
+          abort_incomplete_multipart_upload: [
+            ~x"./AbortIncompleteMultipartUpload"o,
+            days_after_initiation: ~x"./DaysAfterInitiation/text()"oi
+          ]
+        )
+    }
+  end
+
   defp to_bool("true"), do: true
   defp to_bool("false"), do: false
   # An absent element is reported as absent, not as `false`.
