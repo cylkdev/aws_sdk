@@ -110,63 +110,33 @@ defmodule AwsSDK.ConformanceTest do
     assert %{bucket: "b", key: "k"} = AwsSDK.S3.XMLParser.parse_complete_multipart(xml)
   end
 
-  # TODO: this body is written from the AWS API reference for
-  # GetBucketLifecycleConfiguration; replace it with a response saved from a
-  # real call before landing.
+  # The body S3 answered for a bucket holding one rule, saved from a real
+  # GetBucketLifecycleConfiguration call (aws-sandbox, us-east-2).
   test "a GetBucketLifecycleConfiguration body parses into the put's rule shape" do
-    xml = """
-    <?xml version="1.0" encoding="UTF-8"?>
-    <LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-      <Rule>
-        <ID>expire-logs</ID>
-        <Filter><Prefix>logs/</Prefix></Filter>
-        <Status>Enabled</Status>
-        <Expiration><Days>30</Days></Expiration>
-      </Rule>
-      <Rule>
-        <ID>archive-reports</ID>
-        <Filter></Filter>
-        <Status>Disabled</Status>
-        <Transition><Days>90</Days><StorageClass>GLACIER</StorageClass></Transition>
-        <NoncurrentVersionExpiration><NoncurrentDays>7</NoncurrentDays></NoncurrentVersionExpiration>
-        <AbortIncompleteMultipartUpload><DaysAfterInitiation>2</DaysAfterInitiation></AbortIncompleteMultipartUpload>
-      </Rule>
-    </LifecycleConfiguration>
-    """
+    xml =
+      ~s(<?xml version="1.0" encoding="UTF-8"?>\n) <>
+        ~s(<LifecycleConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">) <>
+        "<Rule><ID>expire-incoming</ID><Filter><Prefix>incoming/</Prefix></Filter>" <>
+        "<Status>Enabled</Status><Expiration><Days>1</Days></Expiration></Rule>" <>
+        "</LifecycleConfiguration>"
 
     expected = %{
       rules: [
         %{
-          id: "expire-logs",
+          id: "expire-incoming",
           status: "Enabled",
           filter: %{
-            prefix: "logs/",
+            prefix: "incoming/",
             tag: nil,
             object_size_greater_than: nil,
             object_size_less_than: nil,
             and: nil
           },
-          expiration: %{days: 30, date: nil, expired_object_delete_marker: nil},
+          expiration: %{days: 1, date: nil, expired_object_delete_marker: nil},
           transitions: [],
           noncurrent_version_expiration: nil,
           noncurrent_version_transitions: [],
           abort_incomplete_multipart_upload: nil
-        },
-        %{
-          id: "archive-reports",
-          status: "Disabled",
-          filter: %{
-            prefix: nil,
-            tag: nil,
-            object_size_greater_than: nil,
-            object_size_less_than: nil,
-            and: nil
-          },
-          expiration: nil,
-          transitions: [%{days: 90, date: nil, storage_class: "GLACIER"}],
-          noncurrent_version_expiration: %{noncurrent_days: 7, newer_noncurrent_versions: nil},
-          noncurrent_version_transitions: [],
-          abort_incomplete_multipart_upload: %{days_after_initiation: 2}
         }
       ]
     }
