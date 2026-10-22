@@ -1931,6 +1931,9 @@ defmodule AwsSDK.S3 do
 
   ## Options
 
+    - `:raw_body` - When true, `body` is the XML S3 answered, unparsed, as
+      the evidence a parser test is written from.
+
   See the "Shared Options" section in the module documentation for common options.
   """
   @spec get_bucket_lifecycle_configuration(bucket :: binary(), opts :: keyword()) ::
@@ -2719,11 +2722,8 @@ defmodule AwsSDK.S3 do
 
     with {:ok, op} <- build_operation(:get, bucket, nil, request_opts),
          {:ok, %{body: xml, headers: headers}} <- Client.request(op) do
-      {:ok,
-       %{
-         body: XMLParser.parse_lifecycle_configuration(xml),
-         headers: Client.deserialize_headers(headers, opts)
-       }}
+      body = if opts[:raw_body], do: xml, else: XMLParser.parse_lifecycle_configuration(xml)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
 
