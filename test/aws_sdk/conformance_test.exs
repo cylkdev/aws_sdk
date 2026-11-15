@@ -1707,4 +1707,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.EC2.parse_create_vpc_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted VPC, saved from a real DeleteVpc call
+  # (aws-sandbox, us-east-2).
+  test "DeleteVpc keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteVpcResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>8ded20d0-ff10-4af6-a20b-9169d43cf49f</requestId>
+        <return>true</return>
+    </DeleteVpcResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_delete_vpc_for_test(xml)
+  end
 end

@@ -4375,6 +4375,49 @@ defmodule AwsSDK.EC2 do
     %{vpc: coerce_is_default(vpc)}
   end
 
+  @doc """
+  Deletes a VPC.
+
+  Everything inside the VPC -- subnets, attached internet gateways, route
+  tables other than the main one, security groups other than the default
+  one -- must be deleted or detached first.
+
+  ## Arguments
+
+    * `vpc_id` - The VPC ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.delete_vpc("vpc-1a2b3c4d")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec delete_vpc(vpc_id :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def delete_vpc(vpc_id, opts \\ []) when is_binary(vpc_id) do
+    if sandbox?(opts) do
+      sandbox_delete_vpc_response(vpc_id, opts)
+    else
+      do_delete_vpc(vpc_id, opts)
+    end
+  end
+
+  defp do_delete_vpc(vpc_id, opts) do
+    with {:ok, op} <- build_operation("DeleteVpc", %{"VpcId" => vpc_id}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_delete_vpc_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -4704,6 +4747,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_create_vpc_response(cidr_block, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :create_vpc_response
+
+    @doc false
+    defdelegate sandbox_delete_vpc_response(vpc_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :delete_vpc_response
   else
     defp sandbox_disabled?, do: true
 
@@ -4779,6 +4827,8 @@ defmodule AwsSDK.EC2 do
       do: raise("sandbox not available")
 
     defp sandbox_create_vpc_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_delete_vpc_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

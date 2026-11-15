@@ -624,4 +624,12 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.create_vpc("10.0.0.0/16", sandbox: [enabled: true])
     end
   end
+
+  describe "delete_vpc/2" do
+    test "keys off the VPC id" do
+      Sandbox.set_delete_vpc_responses([{"vpc-1", fn -> {:ok, %{return: true}} end}])
+
+      assert {:ok, %{return: true}} === EC2.delete_vpc("vpc-1", sandbox: [enabled: true])
+    end
+  end
 end
