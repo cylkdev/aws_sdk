@@ -4587,6 +4587,66 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_delete_subnet_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Creates an internet gateway, not attached to any VPC.
+
+  Attach it to a VPC with `attach_internet_gateway/3`.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_internet_gateway()
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    internet_gateway: %{
+      #=>      internet_gateway_id: "igw-0a1b2c3d",
+      #=>      owner_id: "123456789012",
+      #=>      attachment_set: [],
+      #=>      tag_set: []
+      #=>    }
+      #=>  }, headers: %{...}}}
+  """
+  @spec create_internet_gateway(opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_internet_gateway(opts \\ []) do
+    if sandbox?(opts) do
+      sandbox_create_internet_gateway_response(opts)
+    else
+      do_create_internet_gateway(opts)
+    end
+  end
+
+  defp do_create_internet_gateway(opts) do
+    with {:ok, op} <- build_operation("CreateInternetGateway", %{}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_internet_gateway(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_internet_gateway_for_test(xml), do: parse_create_internet_gateway(xml)
+
+  defp parse_create_internet_gateway(body) do
+    %{
+      internet_gateway:
+        xpath(body, ~x"//CreateInternetGatewayResponse/internetGateway"o,
+          internet_gateway_id: ~x"./internetGatewayId/text()"s,
+          owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+          attachment_set: [
+            ~x"./attachmentSet/item"l,
+            vpc_id: ~x"./vpcId/text()"s,
+            state: ~x"./state/text()"s
+          ],
+          tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+        )
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -4931,6 +4991,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_subnet_response(subnet_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_subnet_response
+
+    @doc false
+    defdelegate sandbox_create_internet_gateway_response(opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_internet_gateway_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5012,6 +5077,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_subnet_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_subnet_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_internet_gateway_response(_), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

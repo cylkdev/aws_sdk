@@ -651,4 +651,15 @@ defmodule AwsSDK.EC2.SandboxTest do
       assert {:ok, %{return: true}} === EC2.delete_subnet("subnet-1", sandbox: [enabled: true])
     end
   end
+
+  describe "create_internet_gateway/1" do
+    test "returns the registered gateway" do
+      Sandbox.set_create_internet_gateway_responses([
+        fn -> {:ok, %{internet_gateway: %{internet_gateway_id: "igw-1"}}} end
+      ])
+
+      assert {:ok, %{internet_gateway: %{internet_gateway_id: "igw-1"}}} ===
+               EC2.create_internet_gateway(sandbox: [enabled: true])
+    end
+  end
 end

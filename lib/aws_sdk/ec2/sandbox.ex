@@ -442,5 +442,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_subnet_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_subnet, entries)
     end
+
+    def create_internet_gateway_response(opts) do
+      binding = [opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_internet_gateway, :*, binding)
+    end
+
+    def set_create_internet_gateway_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_internet_gateway, entries)
+    end
   end
 end

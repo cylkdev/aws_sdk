@@ -1803,4 +1803,33 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_delete_subnet_for_test(xml)
   end
+
+  # The body EC2 answered for a new internet gateway, saved from a real
+  # CreateInternetGateway call (aws-sandbox, us-east-2).
+  test "CreateInternetGateway keeps the created gateway" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateInternetGatewayResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>762227b1-1ca9-40db-897a-38c586b07010</requestId>
+        <internetGateway>
+            <internetGatewayId>igw-0c90d7a87c350c551</internetGatewayId>
+            <ownerId>226147735359</ownerId>
+            <attachmentSet/>
+            <tagSet/>
+            <association/>
+        </internetGateway>
+    </CreateInternetGatewayResponse>
+    """
+
+    expected = %{
+      internet_gateway: %{
+        internet_gateway_id: "igw-0c90d7a87c350c551",
+        owner_id: "226147735359",
+        attachment_set: [],
+        tag_set: []
+      }
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_internet_gateway_for_test(xml)
+  end
 end
