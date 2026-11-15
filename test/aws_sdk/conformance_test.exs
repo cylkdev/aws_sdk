@@ -1832,4 +1832,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.EC2.parse_create_internet_gateway_for_test(xml)
   end
+
+  # The body EC2 answered for a gateway attached to a VPC, saved from a real
+  # AttachInternetGateway call (aws-sandbox, us-east-2).
+  test "AttachInternetGateway keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <AttachInternetGatewayResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>d35ff20c-2f6d-4820-b28b-6821cbd6d7f4</requestId>
+        <return>true</return>
+    </AttachInternetGatewayResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_attach_internet_gateway_for_test(xml)
+  end
 end
