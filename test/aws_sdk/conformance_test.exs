@@ -1949,4 +1949,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_delete_route_table_for_test(xml)
   end
+
+  # The body EC2 answered for a route added through an internet gateway, saved from a real
+  # CreateRoute call (aws-sandbox, us-east-2).
+  test "CreateRoute keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateRouteResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>8f937225-e185-4e98-bf4a-4866af755eef</requestId>
+        <return>true</return>
+    </CreateRouteResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_create_route_for_test(xml)
+  end
 end

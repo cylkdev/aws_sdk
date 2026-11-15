@@ -4943,6 +4943,63 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_delete_route_table_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Adds a route through a gateway to a route table.
+
+  AWS takes one target per route, of several kinds; this function sends the
+  route to a gateway (`GatewayId`).
+
+  ## Arguments
+
+    * `route_table_id` - The route table ID.
+    * `destination_cidr_block` - The IPv4 range the route matches, in CIDR notation.
+    * `gateway_id` - The internet gateway or virtual private gateway the route sends traffic to.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_route("rtb-0a1b2c3d", "0.0.0.0/0", "igw-0a1b2c3d")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec create_route(
+          route_table_id :: String.t(),
+          destination_cidr_block :: String.t(),
+          gateway_id :: String.t(),
+          opts :: keyword()
+        ) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_route(route_table_id, destination_cidr_block, gateway_id, opts \\ [])
+      when is_binary(route_table_id) and is_binary(destination_cidr_block) and
+             is_binary(gateway_id) do
+    if sandbox?(opts) do
+      sandbox_create_route_response(route_table_id, opts)
+    else
+      do_create_route(route_table_id, destination_cidr_block, gateway_id, opts)
+    end
+  end
+
+  defp do_create_route(route_table_id, destination_cidr_block, gateway_id, opts) do
+    params = %{
+      "RouteTableId" => route_table_id,
+      "DestinationCidrBlock" => destination_cidr_block,
+      "GatewayId" => gateway_id
+    }
+
+    with {:ok, op} <- build_operation("CreateRoute", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_route_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5317,6 +5374,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_route_table_response(route_table_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_route_table_response
+
+    @doc false
+    defdelegate sandbox_create_route_response(route_table_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_route_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5410,6 +5472,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_route_table_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_route_table_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_route_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
