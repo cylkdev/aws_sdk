@@ -14,4 +14,14 @@ defmodule AwsSDK.ACM.SandboxTest do
       assert response === ACM.list_certificates(sandbox: [enabled: true])
     end
   end
+
+  describe "request_certificate/2" do
+    test "keys off the domain name" do
+      response = {:ok, %{body: %{certificate_arn: "arn:cert/1"}, headers: %{}}}
+
+      Sandbox.set_request_certificate_responses([{"example.com", fn -> response end}])
+
+      assert response === ACM.request_certificate("example.com", sandbox: [enabled: true])
+    end
+  end
 end

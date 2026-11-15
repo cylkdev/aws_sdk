@@ -23,5 +23,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_list_certificates_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :list_certificates, entries)
     end
+
+    def request_certificate_response(domain_name, opts) do
+      binding = [domain_name: domain_name, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :request_certificate, domain_name, binding)
+    end
+
+    def set_request_certificate_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :request_certificate, entries)
+    end
   end
 end

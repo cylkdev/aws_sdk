@@ -84,6 +84,93 @@ defmodule AwsSDK.ACM do
     end
   end
 
+  @doc """
+  Requests a public or private certificate.
+
+  Maps to AWS `RequestCertificate`. A public certificate stays
+  `PENDING_VALIDATION` until its domains are validated.
+
+  ## Arguments
+
+    * `domain_name` - The fully qualified domain name to secure, such as
+      `"www.example.com"` or `"*.example.com"`.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:validation_method` - `"DNS"` or `"EMAIL"`.
+    * `:subject_alternative_names` - List of additional names to secure.
+    * `:idempotency_token` - Calls with the same token within an hour
+      return the same certificate.
+    * `:domain_validation_options` - List of maps, such as
+      `[%{"DomainName" => "www.example.com", "ValidationDomain" => "example.com"}]`.
+    * `:options` - Map, such as
+      `%{"CertificateTransparencyLoggingPreference" => "ENABLED"}`.
+    * `:certificate_authority_arn` - A private CA, for a private certificate.
+    * `:tags` - List of `%{"Key" => ..., "Value" => ...}` maps.
+    * `:key_algorithm` - Such as `"RSA_2048"` or `"EC_prime256v1"`.
+    * `:managed_by` - The service that manages the certificate.
+    * `:raw_body` - When true, `body` is the JSON ACM answered, undecoded,
+      as the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.ACM.request_certificate("www.example.com", validation_method: "DNS")
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      certificate_arn:
+      #=>        "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+      #=>    },
+      #=>    headers: %{...}
+      #=>  }}
+  """
+  @spec request_certificate(domain_name :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def request_certificate(domain_name, opts \\ []) when is_binary(domain_name) do
+    if sandbox?(opts) do
+      sandbox_request_certificate_response(domain_name, opts)
+    else
+      do_request_certificate(domain_name, opts)
+    end
+  end
+
+  defp do_request_certificate(domain_name, opts) do
+    data = request_certificate_data(domain_name, opts)
+
+    with {:ok, op} <- build_operation("RequestCertificate", data, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_request_certificate(body, opts)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp request_certificate_data(domain_name, opts) do
+    %{"DomainName" => domain_name}
+    |> maybe_put("ValidationMethod", opts[:validation_method])
+    |> maybe_put("SubjectAlternativeNames", opts[:subject_alternative_names])
+    |> maybe_put("IdempotencyToken", opts[:idempotency_token])
+    |> maybe_put("DomainValidationOptions", opts[:domain_validation_options])
+    |> maybe_put("Options", opts[:options])
+    |> maybe_put("CertificateAuthorityArn", opts[:certificate_authority_arn])
+    |> maybe_put("Tags", opts[:tags])
+    |> maybe_put("KeyAlgorithm", opts[:key_algorithm])
+    |> maybe_put("ManagedBy", opts[:managed_by])
+  end
+
+  @doc false
+  def request_certificate_data_for_test(domain_name, opts \\ []),
+    do: request_certificate_data(domain_name, opts)
+
+  @doc false
+  def parse_request_certificate_for_test(json), do: parse_request_certificate(json, [])
+
+  defp parse_request_certificate(body, opts) do
+    body
+    |> decode_body()
+    |> Serializer.deserialize(deserialize_opts(opts))
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -154,9 +241,15 @@ defmodule AwsSDK.ACM do
     defdelegate sandbox_list_certificates_response(opts),
       to: AwsSDK.ACM.Sandbox,
       as: :list_certificates_response
+
+    @doc false
+    defdelegate sandbox_request_certificate_response(domain_name, opts),
+      to: AwsSDK.ACM.Sandbox,
+      as: :request_certificate_response
   else
     defp sandbox_disabled?, do: true
     defp sandbox_list_certificates_response(_), do: raise("sandbox not available")
+    defp sandbox_request_certificate_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

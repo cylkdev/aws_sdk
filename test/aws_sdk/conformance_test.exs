@@ -3033,4 +3033,30 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.AutoScaling.parse_delete_auto_scaling_group_for_test(xml)
   end
+
+  test "RequestCertificate data sends the chosen options" do
+    assert %{
+             "DomainName" => "example.com",
+             "ValidationMethod" => "DNS",
+             "SubjectAlternativeNames" => ["www.example.com"],
+             "KeyAlgorithm" => "RSA_2048"
+           } ===
+             AwsSDK.ACM.request_certificate_data_for_test("example.com",
+               validation_method: "DNS",
+               subject_alternative_names: ["www.example.com"],
+               key_algorithm: "RSA_2048"
+             )
+  end
+
+  # The body ACM answered for a certificate requested with DNS validation,
+  # saved from a real RequestCertificate call (aws-sandbox, us-east-2).
+  test "RequestCertificate keeps the new certificate arn" do
+    json =
+      ~s({"CertificateArn":"arn:aws:acm:us-east-2:226147735359:certificate/727fa769-16a5-4b26-8c8f-63f25c0c6ad9"})
+
+    assert %{
+             certificate_arn:
+               "arn:aws:acm:us-east-2:226147735359:certificate/727fa769-16a5-4b26-8c8f-63f25c0c6ad9"
+           } === AwsSDK.ACM.parse_request_certificate_for_test(json)
+  end
 end
