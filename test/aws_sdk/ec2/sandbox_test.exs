@@ -613,4 +613,15 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.delete_network_insights_path("nip-1", sandbox: [enabled: true])
     end
   end
+
+  describe "create_vpc/2" do
+    test "keys off the CIDR block" do
+      Sandbox.set_create_vpc_responses([
+        {"10.0.0.0/16", fn -> {:ok, %{vpc: %{vpc_id: "vpc-1"}}} end}
+      ])
+
+      assert {:ok, %{vpc: %{vpc_id: "vpc-1"}}} ===
+               EC2.create_vpc("10.0.0.0/16", sandbox: [enabled: true])
+    end
+  end
 end

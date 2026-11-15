@@ -402,5 +402,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_network_insights_path_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_network_insights_path, entries)
     end
+
+    def create_vpc_response(cidr_block, opts) do
+      binding = [cidr_block: cidr_block, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_vpc, cidr_block, binding)
+    end
+
+    def set_create_vpc_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_vpc, entries)
+    end
   end
 end

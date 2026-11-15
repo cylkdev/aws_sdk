@@ -4278,6 +4278,104 @@ defmodule AwsSDK.EC2 do
   end
 
   # ---------------------------------------------------------------------------
+  # Network lifecycle
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Creates a VPC with the given IPv4 CIDR block.
+
+  ## Arguments
+
+    * `cidr_block` - The IPv4 network range, in CIDR notation.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_vpc("10.0.0.0/16")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    vpc: %{
+      #=>      vpc_id: "vpc-1a2b3c4d",
+      #=>      state: "pending",
+      #=>      cidr_block: "10.0.0.0/16",
+      #=>      is_default: false,
+      #=>      ...
+      #=>    }
+      #=>  }, headers: %{...}}}
+  """
+  @spec create_vpc(cidr_block :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_vpc(cidr_block, opts \\ []) when is_binary(cidr_block) do
+    if sandbox?(opts) do
+      sandbox_create_vpc_response(cidr_block, opts)
+    else
+      do_create_vpc(cidr_block, opts)
+    end
+  end
+
+  defp do_create_vpc(cidr_block, opts) do
+    with {:ok, op} <- build_operation("CreateVpc", %{"CidrBlock" => cidr_block}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_vpc(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_vpc_for_test(xml), do: parse_create_vpc(xml)
+
+  defp parse_create_vpc(body) do
+    vpc =
+      xpath(body, ~x"//CreateVpcResponse/vpc"o,
+        vpc_id: ~x"./vpcId/text()"s,
+        cidr_block: ~x"./cidrBlock/text()"o |> transform_by(&optional_text/1),
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+        is_default: ~x"./isDefault/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        dhcp_options_id: ~x"./dhcpOptionsId/text()"o |> transform_by(&optional_text/1),
+        instance_tenancy: ~x"./instanceTenancy/text()"o |> transform_by(&optional_text/1),
+        cidr_block_association_set: [
+          ~x"./cidrBlockAssociationSet/item"l,
+          cidr_block: ~x"./cidrBlock/text()"s,
+          association_id: ~x"./associationId/text()"s,
+          cidr_block_state: [
+            ~x"./cidrBlockState"o,
+            state: ~x"./state/text()"s,
+            status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
+          ]
+        ],
+        ipv6_cidr_block_association_set: [
+          ~x"./ipv6CidrBlockAssociationSet/item"l,
+          ipv6_cidr_block: ~x"./ipv6CidrBlock/text()"s,
+          association_id: ~x"./associationId/text()"s,
+          ipv6_cidr_block_state: [
+            ~x"./ipv6CidrBlockState"o,
+            state: ~x"./state/text()"s,
+            status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
+          ],
+          ipv6_pool: ~x"./ipv6Pool/text()"o |> transform_by(&optional_text/1),
+          ipv6_address_attribute:
+            ~x"./ipv6AddressAttribute/text()"o |> transform_by(&optional_text/1),
+          ip_source: ~x"./ipSource/text()"o |> transform_by(&optional_text/1),
+          network_border_group: ~x"./networkBorderGroup/text()"o |> transform_by(&optional_text/1)
+        ],
+        tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s],
+        block_public_access_states: [
+          ~x"./blockPublicAccessStates"o,
+          internet_gateway_block_mode:
+            ~x"./internetGatewayBlockMode/text()"o |> transform_by(&optional_text/1)
+        ]
+      )
+
+    %{vpc: coerce_is_default(vpc)}
+  end
+
+  # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
 
@@ -4601,6 +4699,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_network_insights_path_response(path_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_network_insights_path_response
+
+    @doc false
+    defdelegate sandbox_create_vpc_response(cidr_block, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_vpc_response
   else
     defp sandbox_disabled?, do: true
 
@@ -4674,6 +4777,8 @@ defmodule AwsSDK.EC2 do
 
     defp sandbox_delete_network_insights_path_response(_, _),
       do: raise("sandbox not available")
+
+    defp sandbox_create_vpc_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

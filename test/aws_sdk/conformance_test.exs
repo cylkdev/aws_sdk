@@ -1653,4 +1653,58 @@ defmodule AwsSDK.ConformanceTest do
     assert err.code == "AccessDenied"
     assert err.message == "Access Denied"
   end
+
+  # The body EC2 answered for a new VPC, saved from a real CreateVpc call
+  # (aws-sandbox, us-east-2).
+  test "CreateVpc keeps the created VPC" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateVpcResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>12c43b0d-b41c-4a34-8c7a-ec93bc54c1b1</requestId>
+        <vpc>
+            <vpcId>vpc-04052fb4d7f3470da</vpcId>
+            <ownerId>226147735359</ownerId>
+            <state>pending</state>
+            <cidrBlock>10.0.0.0/16</cidrBlock>
+            <cidrBlockAssociationSet>
+                <item>
+                    <cidrBlock>10.0.0.0/16</cidrBlock>
+                    <associationId>vpc-cidr-assoc-047981b2977d527f1</associationId>
+                    <cidrBlockState>
+                        <state>associated</state>
+                    </cidrBlockState>
+                </item>
+            </cidrBlockAssociationSet>
+            <ipv6CidrBlockAssociationSet/>
+            <dhcpOptionsId>dopt-0c2cfd575438f25f2</dhcpOptionsId>
+            <instanceTenancy>default</instanceTenancy>
+            <isDefault>false</isDefault>
+        </vpc>
+    </CreateVpcResponse>
+    """
+
+    expected = %{
+      vpc: %{
+        vpc_id: "vpc-04052fb4d7f3470da",
+        cidr_block: "10.0.0.0/16",
+        state: "pending",
+        is_default: false,
+        owner_id: "226147735359",
+        dhcp_options_id: "dopt-0c2cfd575438f25f2",
+        instance_tenancy: "default",
+        cidr_block_association_set: [
+          %{
+            cidr_block: "10.0.0.0/16",
+            association_id: "vpc-cidr-assoc-047981b2977d527f1",
+            cidr_block_state: %{state: "associated", status_message: nil}
+          }
+        ],
+        ipv6_cidr_block_association_set: [],
+        tag_set: [],
+        block_public_access_states: nil
+      }
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_vpc_for_test(xml)
+  end
 end
