@@ -2924,4 +2924,21 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_rule(xml)
   end
+
+  # The body ELBv2 answered for a deleted listener, saved from a real
+  # DeleteListener call (aws-sandbox, us-east-2).
+  test "DeleteListener answers with no members" do
+    xml = """
+    <DeleteListenerResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <DeleteListenerResult/>
+      <ResponseMetadata>
+        <RequestId>f5504512-4032-4e44-b946-4d143eb25f81</RequestId>
+      </ResponseMetadata>
+    </DeleteListenerResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_listener(xml)
+  end
 end

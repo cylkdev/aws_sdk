@@ -323,4 +323,13 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
       assert {:ok, %{}} === ElasticLoadBalancingV2.delete_rule("arn:1", sandbox: [enabled: true])
     end
   end
+
+  describe "delete_listener/2" do
+    test "keys off the listener arn" do
+      Sandbox.set_delete_listener_responses([{"arn:1", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} ===
+               ElasticLoadBalancingV2.delete_listener("arn:1", sandbox: [enabled: true])
+    end
+  end
 end
