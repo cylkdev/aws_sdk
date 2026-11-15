@@ -2727,4 +2727,126 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_listener(xml)
   end
+
+  test "CreateRule params send the conditions, priority and actions" do
+    assert %{
+             "ListenerArn" => "arn:listener/1",
+             "Conditions.member.1.Field" => "path-pattern",
+             "Conditions.member.1.Values.member.1" => "/api/*",
+             "Priority" => "10",
+             "Actions.member.1.Type" => "forward",
+             "Actions.member.1.TargetGroupArn" => "arn:tg/1",
+             "Tags.member.1.Key" => "team",
+             "Tags.member.1.Value" => "web"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.create_rule_params(
+               "arn:listener/1",
+               [%{"Field" => "path-pattern", "Values" => ["/api/*"]}],
+               10,
+               [%{"Type" => "forward", "TargetGroupArn" => "arn:tg/1"}],
+               tags: [%{"Key" => "team", "Value" => "web"}]
+             )
+  end
+
+  # The body ELBv2 answered for a new path-pattern rule forwarding to one
+  # target group, saved from a real CreateRule call (aws-sandbox, us-east-2).
+  test "CreateRule keeps the created rule" do
+    xml = """
+    <CreateRuleResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <CreateRuleResult>
+        <Rules>
+          <member>
+            <IsDefault>false</IsDefault>
+            <Transforms/>
+            <Priority>10</Priority>
+            <Conditions>
+              <member>
+                <PathPatternConfig>
+                  <Values>
+                    <member>/api/*</member>
+                  </Values>
+                </PathPatternConfig>
+                <Field>path-pattern</Field>
+                <Values>
+                  <member>/api/*</member>
+                </Values>
+              </member>
+            </Conditions>
+            <Actions>
+              <member>
+                <TargetGroupArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605</TargetGroupArn>
+                <ForwardConfig>
+                  <TargetGroups>
+                    <member>
+                      <TargetGroupArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605</TargetGroupArn>
+                      <Weight>1</Weight>
+                    </member>
+                  </TargetGroups>
+                  <TargetGroupStickinessConfig>
+                    <Enabled>false</Enabled>
+                  </TargetGroupStickinessConfig>
+                </ForwardConfig>
+                <Type>forward</Type>
+              </member>
+            </Actions>
+            <RuleArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:listener-rule/app/aws-sdk-capture/850eb879424be86f/70d082df8165c39e/b3ad5dd44e6a2f0f</RuleArn>
+          </member>
+        </Rules>
+      </CreateRuleResult>
+      <ResponseMetadata>
+        <RequestId>c6906ad4-104b-4759-a883-b1cb996d882d</RequestId>
+      </ResponseMetadata>
+    </CreateRuleResponse>
+    """
+
+    expected = %{
+      rules: [
+        %{
+          rule_arn:
+            "arn:aws:elasticloadbalancing:us-east-2:226147735359:listener-rule/app/aws-sdk-capture/850eb879424be86f/70d082df8165c39e/b3ad5dd44e6a2f0f",
+          priority: "10",
+          is_default: false,
+          conditions: [
+            %{
+              field: "path-pattern",
+              values: ["/api/*"],
+              regex_values: [],
+              host_header_config: nil,
+              path_pattern_config: %{values: ["/api/*"], regex_values: []},
+              http_header_config: nil,
+              http_request_method_config: nil,
+              source_ip_config: nil,
+              query_string_config: nil
+            }
+          ],
+          actions: [
+            %{
+              type: "forward",
+              order: nil,
+              target_group_arn:
+                "arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605",
+              forward_config: %{
+                target_groups: [
+                  %{
+                    target_group_arn:
+                      "arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605",
+                    weight: 1
+                  }
+                ],
+                target_group_stickiness_config: %{enabled: "false", duration_seconds: nil}
+              },
+              redirect_config: nil,
+              fixed_response_config: nil,
+              authenticate_oidc_config: nil,
+              authenticate_cognito_config: nil,
+              jwt_validation_config: nil
+            }
+          ],
+          transforms: []
+        }
+      ]
+    }
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_rule(xml)
+  end
 end

@@ -272,4 +272,21 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                )
     end
   end
+
+  describe "create_rule/5" do
+    test "keys off the listener arn" do
+      Sandbox.set_create_rule_responses([
+        {"arn:listener/1", fn -> {:ok, %{rules: [%{priority: "10"}]}} end}
+      ])
+
+      assert {:ok, %{rules: [%{priority: "10"}]}} ===
+               ElasticLoadBalancingV2.create_rule(
+                 "arn:listener/1",
+                 [%{"Field" => "path-pattern", "Values" => ["/api/*"]}],
+                 10,
+                 [%{"Type" => "forward", "TargetGroupArn" => "arn:tg/1"}],
+                 sandbox: [enabled: true]
+               )
+    end
+  end
 end

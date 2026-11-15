@@ -198,5 +198,21 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_listener_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_listener, entries)
     end
+
+    def create_rule_response(listener_arn, conditions, priority, actions, opts) do
+      binding = [
+        listener_arn: listener_arn,
+        conditions: conditions,
+        priority: priority,
+        actions: actions,
+        opts: opts
+      ]
+
+      Sandbox.apply(@registry, __MODULE__, :create_rule, listener_arn, binding)
+    end
+
+    def set_create_rule_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_rule, entries)
+    end
   end
 end

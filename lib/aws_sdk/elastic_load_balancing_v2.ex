@@ -1133,6 +1133,94 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     })
   end
 
+  @doc """
+  Creates a rule on a listener, which routes the requests that match its
+  conditions by its actions.
+
+  Maps to AWS `CreateRule`. `conditions` and `actions` use the same
+  encoding as `modify_rule/3`.
+
+  ## Arguments
+
+    - `listener_arn` - the listener to add the rule to
+    - `conditions` - list of condition maps
+    - `priority` - the rule priority, unique on the listener; lower values
+      are evaluated first
+    - `actions` - list of action maps
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:tags` - list of `%{"Key" => ..., "Value" => ...}` maps
+    - `:transforms` - list of transform maps
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.create_rule(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2",
+        [%{"Field" => "path-pattern", "Values" => ["/api/*"]}],
+        10,
+        [%{"Type" => "forward", "TargetGroupArn" => "arn:...:targetgroup/api/73e2d6bc24d8a067"}]
+      )
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      rules: [
+      #=>        %{
+      #=>          rule_arn: "arn:aws:elasticloadbalancing:...:listener-rule/app/web/50dc.../f2f7.../9683b2d02a6cba17",
+      #=>          priority: "10",
+      #=>          is_default: false,
+      #=>          conditions: [%{field: "path-pattern", values: ["/api/*"], ...}],
+      #=>          actions: [%{type: "forward", ...}],
+      #=>          transforms: []
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
+      #=>  }}
+
+  `CreateRule` returns the new rule, with no `:next_marker`.
+  """
+  @spec create_rule(
+          listener_arn :: String.t(),
+          conditions :: [map()],
+          priority :: integer(),
+          actions :: [map()],
+          opts :: keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def create_rule(listener_arn, [_ | _] = conditions, priority, [_ | _] = actions, opts \\ [])
+      when is_binary(listener_arn) and is_integer(priority) do
+    if sandbox?(opts) do
+      sandbox_create_rule_response(listener_arn, conditions, priority, actions, opts)
+    else
+      do_create_rule(listener_arn, conditions, priority, actions, opts)
+    end
+  end
+
+  defp do_create_rule(listener_arn, conditions, priority, actions, opts) do
+    params = create_rule_params(listener_arn, conditions, priority, actions, opts)
+
+    with {:ok, op} <- build_operation("CreateRule", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_rule(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def create_rule_params(listener_arn, conditions, priority, actions, opts) do
+    flatten_query(%{
+      "ListenerArn" => listener_arn,
+      "Conditions" => conditions,
+      "Priority" => priority,
+      "Actions" => actions,
+      "Tags" => opts[:tags],
+      "Transforms" => opts[:transforms]
+    })
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1630,6 +1718,14 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     %{listeners: Enum.map(result.listeners, &coerce_listener/1)}
   end
 
+  @doc false
+  def parse_create_rule(body) do
+    result =
+      xpath(body, ~x"//CreateRuleResult"e, [{:rules, [~x"./Rules/member"l | rule_fields()]}])
+
+    %{rules: normalize_rules(result.rules)}
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1720,6 +1816,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_create_listener_response(load_balancer_arn, default_actions, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :create_listener_response
+
+    @doc false
+    defdelegate sandbox_create_rule_response(listener_arn, conditions, priority, actions, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :create_rule_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1746,6 +1847,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defp sandbox_create_load_balancer_response(_n, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_target_group_response(_n, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_listener_response(_l, _a, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_create_rule_response(_l, _c, _p, _a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------
