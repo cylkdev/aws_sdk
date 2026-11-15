@@ -2958,4 +2958,21 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_load_balancer(xml)
   end
+
+  # The body ELBv2 answered for a deleted target group, saved from a real
+  # DeleteTargetGroup call (aws-sandbox, us-east-2).
+  test "DeleteTargetGroup answers with no members" do
+    xml = """
+    <DeleteTargetGroupResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <DeleteTargetGroupResult/>
+      <ResponseMetadata>
+        <RequestId>60671d16-22a7-44ac-a936-2aa91022a62d</RequestId>
+      </ResponseMetadata>
+    </DeleteTargetGroupResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_target_group(xml)
+  end
 end

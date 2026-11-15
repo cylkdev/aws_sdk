@@ -264,5 +264,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_load_balancer_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_load_balancer, entries)
     end
+
+    def delete_target_group_response(target_group_arn, opts) do
+      binding = [target_group_arn: target_group_arn, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_target_group, target_group_arn, binding)
+    end
+
+    def set_delete_target_group_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_target_group, entries)
+    end
   end
 end

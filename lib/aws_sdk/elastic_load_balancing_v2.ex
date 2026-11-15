@@ -1463,6 +1463,50 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     end
   end
 
+  @doc """
+  Deletes a target group.
+
+  Maps to AWS `DeleteTargetGroup`.
+
+  ## Arguments
+
+    - `target_group_arn` - the target group to delete; it must not be in use by any listener or rule
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.delete_target_group(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067"
+      )
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `DeleteTargetGroup` answers with no members, so `body` is an empty map.
+  """
+  @spec delete_target_group(target_group_arn :: String.t(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def delete_target_group(target_group_arn, opts \\ []) when is_binary(target_group_arn) do
+    if sandbox?(opts) do
+      sandbox_delete_target_group_response(target_group_arn, opts)
+    else
+      do_delete_target_group(target_group_arn, opts)
+    end
+  end
+
+  defp do_delete_target_group(target_group_arn, opts) do
+    params = %{"TargetGroupArn" => target_group_arn}
+
+    with {:ok, op} <- build_operation("DeleteTargetGroup", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_delete_target_group(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1988,6 +2032,10 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   @doc false
   def parse_delete_load_balancer(_body), do: %{}
 
+  # DeleteTargetGroupResult has no members.
+  @doc false
+  def parse_delete_target_group(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -2108,6 +2156,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_delete_load_balancer_response(load_balancer_arn, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :delete_load_balancer_response
+
+    @doc false
+    defdelegate sandbox_delete_target_group_response(target_group_arn, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :delete_target_group_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -2140,6 +2193,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defp sandbox_delete_rule_response(_a, _o), do: raise(@sandbox_unavailable)
     defp sandbox_delete_listener_response(_a, _o), do: raise(@sandbox_unavailable)
     defp sandbox_delete_load_balancer_response(_a, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_delete_target_group_response(_a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------
