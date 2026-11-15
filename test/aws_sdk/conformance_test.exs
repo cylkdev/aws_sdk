@@ -2067,4 +2067,52 @@ defmodule AwsSDK.ConformanceTest do
               response: xml
             })} === AwsSDK.EC2.create_launch_template_result_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted launch template, saved from a real
+  # DeleteLaunchTemplate call (aws-sandbox, us-east-2).
+  test "DeleteLaunchTemplate keeps the deleted template" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteLaunchTemplateResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>d9a2b96a-6f7d-435d-b74c-9946e48d3207</requestId>
+        <launchTemplate>
+            <createTime>2026-11-15T19:10:58.000Z</createTime>
+            <createdBy>arn:aws:sts::226147735359:assumed-role/AccountFullAccessRole/74c8b468-b061-707f-0c68-08d3d7b7676f</createdBy>
+            <defaultVersionNumber>1</defaultVersionNumber>
+            <latestVersionNumber>1</latestVersionNumber>
+            <launchTemplateId>lt-02f72166b8d654600</launchTemplateId>
+            <launchTemplateName>aws-sdk-capture</launchTemplateName>
+            <operator>
+                <managed>false</managed>
+            </operator>
+        </launchTemplate>
+    </DeleteLaunchTemplateResponse>
+    """
+
+    expected = %{
+      launch_template: %{
+        launch_template_id: "lt-02f72166b8d654600",
+        launch_template_name: "aws-sdk-capture",
+        create_time: "2026-11-15T19:10:58.000Z",
+        created_by:
+          "arn:aws:sts::226147735359:assumed-role/AccountFullAccessRole/74c8b468-b061-707f-0c68-08d3d7b7676f",
+        default_version_number: 1,
+        latest_version_number: 1,
+        operator: %{managed: "false", principal: nil},
+        tag_set: []
+      }
+    }
+
+    assert expected === AwsSDK.EC2.parse_delete_launch_template_for_test(xml)
+  end
+
+  test "a DeleteLaunchTemplate 200 without launchTemplate is an unexpected response" do
+    xml = "<DeleteLaunchTemplateResponse></DeleteLaunchTemplateResponse>"
+
+    assert {:error,
+            AwsSDK.Error.new(:unexpected_response, %{
+              operation: "DeleteLaunchTemplate",
+              response: xml
+            })} === AwsSDK.EC2.delete_launch_template_result_for_test(xml)
+  end
 end

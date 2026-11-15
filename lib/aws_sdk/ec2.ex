@@ -5235,6 +5235,92 @@ defmodule AwsSDK.EC2 do
     }
   end
 
+  @doc """
+  Deletes a launch template, with all its versions.
+
+  ## Arguments
+
+    * `launch_template_id` - The launch template ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.delete_launch_template("lt-0a1b2c3d")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    launch_template: %{
+      #=>      launch_template_id: "lt-0a1b2c3d",
+      #=>      launch_template_name: "web",
+      #=>      default_version_number: 1,
+      #=>      latest_version_number: 3,
+      #=>      ...
+      #=>    }
+      #=>  }, headers: %{...}}}
+
+  Returns `{:error, Error.new(:unexpected_response, %{operation: "DeleteLaunchTemplate", response: body})}`
+  if a 200 response carries no `launchTemplate` element, since AWS always
+  returns one on success.
+  """
+  @spec delete_launch_template(launch_template_id :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def delete_launch_template(launch_template_id, opts \\ []) when is_binary(launch_template_id) do
+    if sandbox?(opts) do
+      sandbox_delete_launch_template_response(launch_template_id, opts)
+    else
+      do_delete_launch_template(launch_template_id, opts)
+    end
+  end
+
+  defp do_delete_launch_template(launch_template_id, opts) do
+    params = %{"LaunchTemplateId" => launch_template_id}
+
+    with {:ok, op} <- build_operation("DeleteLaunchTemplate", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op),
+         {:ok, body} <- delete_launch_template_body(body, opts) do
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp delete_launch_template_body(body, opts) do
+    if opts[:raw_body], do: {:ok, body}, else: delete_launch_template_result(body)
+  end
+
+  # AWS always returns launchTemplate on success. Its absence means the
+  # response is not the one this operation promises, not that there is
+  # nothing to report.
+  defp delete_launch_template_result(body) do
+    case parse_delete_launch_template(body) do
+      %{launch_template: nil} ->
+        {:error,
+         Error.new(:unexpected_response, %{operation: "DeleteLaunchTemplate", response: body})}
+
+      result ->
+        {:ok, result}
+    end
+  end
+
+  @doc false
+  def delete_launch_template_result_for_test(xml), do: delete_launch_template_result(xml)
+
+  @doc false
+  def parse_delete_launch_template_for_test(xml), do: parse_delete_launch_template(xml)
+
+  defp parse_delete_launch_template(body) do
+    %{
+      launch_template:
+        xpath(
+          body,
+          ~x"//DeleteLaunchTemplateResponse/launchTemplate"o,
+          launch_template_fields()
+        )
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5629,6 +5715,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_create_launch_template_response(launch_template_name, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :create_launch_template_response
+
+    @doc false
+    defdelegate sandbox_delete_launch_template_response(launch_template_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :delete_launch_template_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5730,6 +5821,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_key_pair_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_create_launch_template_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_delete_launch_template_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

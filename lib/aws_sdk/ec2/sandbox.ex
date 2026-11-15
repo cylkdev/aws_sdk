@@ -542,5 +542,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_launch_template_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_launch_template, entries)
     end
+
+    def delete_launch_template_response(launch_template_id, opts) do
+      binding = [launch_template_id: launch_template_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_launch_template, launch_template_id, binding)
+    end
+
+    def set_delete_launch_template_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_launch_template, entries)
+    end
   end
 end

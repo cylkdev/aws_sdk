@@ -750,4 +750,15 @@ defmodule AwsSDK.EC2.SandboxTest do
                )
     end
   end
+
+  describe "delete_launch_template/2" do
+    test "keys off the launch template id" do
+      Sandbox.set_delete_launch_template_responses([
+        {"lt-1", fn -> {:ok, %{launch_template: %{launch_template_id: "lt-1"}}} end}
+      ])
+
+      assert {:ok, %{launch_template: %{launch_template_id: "lt-1"}}} ===
+               EC2.delete_launch_template("lt-1", sandbox: [enabled: true])
+    end
+  end
 end
