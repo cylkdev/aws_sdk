@@ -2005,4 +2005,66 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.EC2.parse_create_key_pair_for_test(xml)
   end
+
+  # The body EC2 answered for a new launch template, saved from a real
+  # CreateLaunchTemplate call (aws-sandbox, us-east-2).
+  test "CreateLaunchTemplate keeps the created template" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateLaunchTemplateResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>1b45a4a0-d613-4f41-ba2a-5d78be25884c</requestId>
+        <launchTemplate>
+            <createTime>2026-11-15T19:10:58.000Z</createTime>
+            <createdBy>arn:aws:sts::226147735359:assumed-role/AccountFullAccessRole/74c8b468-b061-707f-0c68-08d3d7b7676f</createdBy>
+            <defaultVersionNumber>1</defaultVersionNumber>
+            <latestVersionNumber>1</latestVersionNumber>
+            <launchTemplateId>lt-02f72166b8d654600</launchTemplateId>
+            <launchTemplateName>aws-sdk-capture</launchTemplateName>
+            <operator>
+                <managed>false</managed>
+            </operator>
+        </launchTemplate>
+    </CreateLaunchTemplateResponse>
+    """
+
+    expected = %{
+      launch_template: %{
+        launch_template_id: "lt-02f72166b8d654600",
+        launch_template_name: "aws-sdk-capture",
+        create_time: "2026-11-15T19:10:58.000Z",
+        created_by:
+          "arn:aws:sts::226147735359:assumed-role/AccountFullAccessRole/74c8b468-b061-707f-0c68-08d3d7b7676f",
+        default_version_number: 1,
+        latest_version_number: 1,
+        operator: %{managed: "false", principal: nil},
+        tag_set: []
+      },
+      warning: nil
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_launch_template_for_test(xml)
+  end
+
+  test "CreateLaunchTemplate params send the data members under LaunchTemplateData" do
+    assert %{
+             "LaunchTemplateName" => "web",
+             "LaunchTemplateData.InstanceType" => "t4g.nano",
+             "VersionDescription" => "first"
+           } ===
+             AwsSDK.EC2.create_launch_template_params_for_test(
+               "web",
+               %{"InstanceType" => "t4g.nano"},
+               version_description: "first"
+             )
+  end
+
+  test "a CreateLaunchTemplate 200 without launchTemplate is an unexpected response" do
+    xml = "<CreateLaunchTemplateResponse></CreateLaunchTemplateResponse>"
+
+    assert {:error,
+            AwsSDK.Error.new(:unexpected_response, %{
+              operation: "CreateLaunchTemplate",
+              response: xml
+            })} === AwsSDK.EC2.create_launch_template_result_for_test(xml)
+  end
 end

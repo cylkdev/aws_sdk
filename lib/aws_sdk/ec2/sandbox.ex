@@ -532,5 +532,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_key_pair_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_key_pair, entries)
     end
+
+    def create_launch_template_response(launch_template_name, opts) do
+      binding = [launch_template_name: launch_template_name, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_launch_template, launch_template_name, binding)
+    end
+
+    def set_create_launch_template_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_launch_template, entries)
+    end
   end
 end

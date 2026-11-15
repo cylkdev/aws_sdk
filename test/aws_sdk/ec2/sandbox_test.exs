@@ -737,4 +737,17 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.create_key_pair("deploy", sandbox: [enabled: true])
     end
   end
+
+  describe "create_launch_template/3" do
+    test "keys off the launch template name" do
+      Sandbox.set_create_launch_template_responses([
+        {"web", fn -> {:ok, %{launch_template: %{launch_template_id: "lt-1"}, warning: nil}} end}
+      ])
+
+      assert {:ok, %{launch_template: %{launch_template_id: "lt-1"}, warning: nil}} ===
+               EC2.create_launch_template("web", %{"InstanceType" => "t4g.nano"},
+                 sandbox: [enabled: true]
+               )
+    end
+  end
 end

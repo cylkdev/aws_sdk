@@ -5106,6 +5106,135 @@ defmodule AwsSDK.EC2 do
     )
   end
 
+  @doc """
+  Creates a launch template, with its first version.
+
+  `launch_template_data` is AWS's `RequestLaunchTemplateData`, given with AWS's
+  own member names, the way `create_launch_template_version/3` takes it. Its
+  members are sent as `LaunchTemplateData.<Member>`.
+
+  ## Arguments
+
+    * `launch_template_name` - A name for the template, unique in the region.
+    * `launch_template_data` - The first version's configuration.
+    * `opts` - Shared options.
+
+  ## Examples
+
+      AwsSDK.EC2.create_launch_template("web", %{"ImageId" => "ami-1", "InstanceType" => "t4g.nano"})
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    launch_template: %{
+      #=>      launch_template_id: "lt-0a1b2c3d",
+      #=>      launch_template_name: "web",
+      #=>      default_version_number: 1,
+      #=>      latest_version_number: 1,
+      #=>      ...
+      #=>    },
+      #=>    warning: nil
+      #=>  }, headers: %{...}}}
+
+  Nested members of `RequestLaunchTemplateData` are not encoded: a value must
+  be a scalar AWS accepts as `LaunchTemplateData.<Member>`.
+
+  ## Options
+
+    * `:version_description` - A description for the first version.
+    * `:client_token` - An idempotency token. Without it, a retried call after
+      a timeout fails on the name the first call already took.
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  Returns `{:error, Error.new(:unexpected_response, %{operation: "CreateLaunchTemplate", response: body})}`
+  if a 200 response carries no `launchTemplate` element, since AWS always
+  returns one on success.
+  """
+  @spec create_launch_template(
+          launch_template_name :: String.t(),
+          launch_template_data :: map(),
+          opts :: keyword()
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_launch_template(launch_template_name, launch_template_data, opts \\ [])
+      when is_binary(launch_template_name) and is_map(launch_template_data) do
+    if sandbox?(opts) do
+      sandbox_create_launch_template_response(launch_template_name, opts)
+    else
+      do_create_launch_template(launch_template_name, launch_template_data, opts)
+    end
+  end
+
+  defp do_create_launch_template(launch_template_name, launch_template_data, opts) do
+    params = create_launch_template_params(launch_template_name, launch_template_data, opts)
+
+    with {:ok, op} <- build_operation("CreateLaunchTemplate", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op),
+         {:ok, body} <- create_launch_template_body(body, opts) do
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp create_launch_template_body(body, opts) do
+    if opts[:raw_body], do: {:ok, body}, else: create_launch_template_result(body)
+  end
+
+  defp create_launch_template_params(launch_template_name, launch_template_data, opts) do
+    launch_template_data
+    |> Enum.reduce(%{"LaunchTemplateName" => launch_template_name}, fn {member, value}, acc ->
+      Map.put(acc, "LaunchTemplateData.#{member}", to_string(value))
+    end)
+    |> maybe_put("VersionDescription", opts[:version_description])
+    |> maybe_put("ClientToken", opts[:client_token])
+  end
+
+  @doc false
+  def create_launch_template_params_for_test(
+        launch_template_name,
+        launch_template_data,
+        opts \\ []
+      ),
+      do: create_launch_template_params(launch_template_name, launch_template_data, opts)
+
+  # AWS always returns launchTemplate on success. Its absence means the
+  # response is not the one this operation promises, not that there is
+  # nothing to report.
+  defp create_launch_template_result(body) do
+    case parse_create_launch_template(body) do
+      %{launch_template: nil} ->
+        {:error,
+         Error.new(:unexpected_response, %{operation: "CreateLaunchTemplate", response: body})}
+
+      result ->
+        {:ok, result}
+    end
+  end
+
+  @doc false
+  def create_launch_template_result_for_test(xml), do: create_launch_template_result(xml)
+
+  @doc false
+  def parse_create_launch_template_for_test(xml), do: parse_create_launch_template(xml)
+
+  defp parse_create_launch_template(body) do
+    %{
+      launch_template:
+        xpath(
+          body,
+          ~x"//CreateLaunchTemplateResponse/launchTemplate"o,
+          launch_template_fields()
+        ),
+      warning:
+        xpath(
+          body,
+          ~x"//CreateLaunchTemplateResponse/warning"o,
+          errors: [
+            ~x"./errorSet/item"l,
+            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+            message: ~x"./message/text()"o |> transform_by(&optional_text/1)
+          ]
+        )
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5495,6 +5624,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_create_key_pair_response(key_name, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :create_key_pair_response
+
+    @doc false
+    defdelegate sandbox_create_launch_template_response(launch_template_name, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_launch_template_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5594,6 +5728,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_delete_route_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_create_key_pair_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_launch_template_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
