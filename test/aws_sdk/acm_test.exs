@@ -3,22 +3,34 @@ defmodule AwsSDK.ACMTest do
 
   alias AwsSDK.ACM
 
-  describe "list_certificates/1" do
-    test "key_types lists certificates whose key is not RSA_2048" do
-      {:ok, response} =
-        ACM.list_certificates(
-          profile: "aws-sandbox",
-          region: "us-east-2",
-          certificate_statuses: ["ISSUED"],
-          key_types: ["RSA_4096"]
+  @opts [profile: "aws-sandbox", region: "us-east-2"]
+
+  describe "describe_certificate/2" do
+    test "a requested certificate waits for validation with the domain and key asked for" do
+      domain_name = "aws-sdk-acm-test-describe-certificate.cylk.dev"
+
+      {:ok, requested} =
+        ACM.request_certificate(
+          domain_name,
+          [validation_method: "DNS", key_algorithm: "RSA_2048"] ++ @opts
         )
 
-      domain_names =
-        Enum.map(response.body.certificate_summary_list, fn summary ->
-          {summary.domain_name, summary.key_algorithm}
-        end)
+      # ACM fills in the domain and key a moment after the request returns.
+      described =
+        fn ->
+          Process.sleep(1000)
+          {:ok, described} = ACM.describe_certificate(requested.body.certificate_arn, @opts)
+          described
+        end
+        |> Stream.repeatedly()
+        |> Enum.find(fn described -> Map.has_key?(described.body.certificate, :domain_name) end)
 
-      assert [{"mcp.cylk.dev", "RSA-4096"}] === domain_names
+      {:ok, _deleted} = ACM.delete_certificate(requested.body.certificate_arn, @opts)
+
+      certificate = described.body.certificate
+
+      assert {domain_name, "RSA-2048", "PENDING_VALIDATION"} ===
+               {certificate.domain_name, certificate.key_algorithm, certificate.status}
     end
   end
 end
