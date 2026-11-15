@@ -462,5 +462,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_attach_internet_gateway_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :attach_internet_gateway, entries)
     end
+
+    def detach_internet_gateway_response(internet_gateway_id, opts) do
+      binding = [internet_gateway_id: internet_gateway_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :detach_internet_gateway, internet_gateway_id, binding)
+    end
+
+    def set_detach_internet_gateway_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :detach_internet_gateway, entries)
+    end
   end
 end

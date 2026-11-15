@@ -4696,6 +4696,55 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_attach_internet_gateway_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Detaches an internet gateway from a VPC.
+
+  The VPC must have no running instances with public IP addresses.
+
+  ## Arguments
+
+    * `internet_gateway_id` - The internet gateway ID.
+    * `vpc_id` - The VPC ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.detach_internet_gateway("igw-0a1b2c3d", "vpc-1a2b3c4d")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec detach_internet_gateway(
+          internet_gateway_id :: String.t(),
+          vpc_id :: String.t(),
+          opts :: keyword()
+        ) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def detach_internet_gateway(internet_gateway_id, vpc_id, opts \\ [])
+      when is_binary(internet_gateway_id) and is_binary(vpc_id) do
+    if sandbox?(opts) do
+      sandbox_detach_internet_gateway_response(internet_gateway_id, opts)
+    else
+      do_detach_internet_gateway(internet_gateway_id, vpc_id, opts)
+    end
+  end
+
+  defp do_detach_internet_gateway(internet_gateway_id, vpc_id, opts) do
+    params = %{"InternetGatewayId" => internet_gateway_id, "VpcId" => vpc_id}
+
+    with {:ok, op} <- build_operation("DetachInternetGateway", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_detach_internet_gateway_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5050,6 +5099,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_attach_internet_gateway_response(internet_gateway_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :attach_internet_gateway_response
+
+    @doc false
+    defdelegate sandbox_detach_internet_gateway_response(internet_gateway_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :detach_internet_gateway_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5135,6 +5189,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_internet_gateway_response(_), do: raise("sandbox not available")
 
     defp sandbox_attach_internet_gateway_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_detach_internet_gateway_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

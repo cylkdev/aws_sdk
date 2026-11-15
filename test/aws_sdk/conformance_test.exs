@@ -1846,4 +1846,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_attach_internet_gateway_for_test(xml)
   end
+
+  # The body EC2 answered for a gateway detached from a VPC, saved from a real
+  # DetachInternetGateway call (aws-sandbox, us-east-2).
+  test "DetachInternetGateway keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DetachInternetGatewayResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>24095e82-6e34-4cff-b0ac-3ccf5a562d43</requestId>
+        <return>true</return>
+    </DetachInternetGatewayResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_detach_internet_gateway_for_test(xml)
+  end
 end
