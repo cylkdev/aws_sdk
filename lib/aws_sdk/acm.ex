@@ -225,6 +225,68 @@ defmodule AwsSDK.ACM do
     |> Serializer.deserialize(deserialize_opts(opts))
   end
 
+  @doc """
+  Describes a certificate.
+
+  Maps to AWS `DescribeCertificate`.
+
+  ## Arguments
+
+    * `certificate_arn` - The certificate ARN.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the JSON ACM answered, undecoded,
+      as the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.ACM.describe_certificate(
+        "arn:aws:acm:us-east-1:123456789012:certificate/12345678-1234-1234-1234-123456789012"
+      )
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      certificate: %{
+      #=>        domain_name: "www.example.com",
+      #=>        key_algorithm: "RSA-2048",
+      #=>        status: "PENDING_VALIDATION",
+      #=>        ...
+      #=>      }
+      #=>    },
+      #=>    headers: %{...}
+      #=>  }}
+  """
+  @spec describe_certificate(certificate_arn :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def describe_certificate(certificate_arn, opts \\ []) when is_binary(certificate_arn) do
+    if sandbox?(opts) do
+      sandbox_describe_certificate_response(certificate_arn, opts)
+    else
+      do_describe_certificate(certificate_arn, opts)
+    end
+  end
+
+  defp do_describe_certificate(certificate_arn, opts) do
+    data = %{"CertificateArn" => certificate_arn}
+
+    with {:ok, op} <- build_operation("DescribeCertificate", data, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_describe_certificate(body, opts)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_describe_certificate_for_test(json), do: parse_describe_certificate(json, [])
+
+  defp parse_describe_certificate(body, opts) do
+    body
+    |> decode_body()
+    |> Serializer.deserialize(deserialize_opts(opts))
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -305,11 +367,17 @@ defmodule AwsSDK.ACM do
     defdelegate sandbox_delete_certificate_response(certificate_arn, opts),
       to: AwsSDK.ACM.Sandbox,
       as: :delete_certificate_response
+
+    @doc false
+    defdelegate sandbox_describe_certificate_response(certificate_arn, opts),
+      to: AwsSDK.ACM.Sandbox,
+      as: :describe_certificate_response
   else
     defp sandbox_disabled?, do: true
     defp sandbox_list_certificates_response(_), do: raise("sandbox not available")
     defp sandbox_request_certificate_response(_, _), do: raise("sandbox not available")
     defp sandbox_delete_certificate_response(_, _), do: raise("sandbox not available")
+    defp sandbox_describe_certificate_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

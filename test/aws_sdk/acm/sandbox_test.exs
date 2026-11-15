@@ -34,4 +34,14 @@ defmodule AwsSDK.ACM.SandboxTest do
       assert response === ACM.delete_certificate("arn:cert/1", sandbox: [enabled: true])
     end
   end
+
+  describe "describe_certificate/2" do
+    test "keys off the certificate arn" do
+      response = {:ok, %{body: %{certificate: %{domain_name: "example.com"}}, headers: %{}}}
+
+      Sandbox.set_describe_certificate_responses([{"arn:cert/1", fn -> response end}])
+
+      assert response === ACM.describe_certificate("arn:cert/1", sandbox: [enabled: true])
+    end
+  end
 end

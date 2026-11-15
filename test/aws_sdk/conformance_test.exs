@@ -3065,4 +3065,46 @@ defmodule AwsSDK.ConformanceTest do
   test "DeleteCertificate answers with no members" do
     assert %{} === AwsSDK.ACM.parse_delete_certificate_for_test("")
   end
+
+  # The body ACM answered for a certificate requested with DNS validation for
+  # a name that cannot be validated, saved from a real DescribeCertificate
+  # call (aws-sandbox, us-east-2).
+  test "DescribeCertificate keeps every certificate member" do
+    json =
+      ~s({"Certificate":{"CertificateArn":"arn:aws:acm:us-east-2:226147735359:certificate/5abcd24f-8112-4d2e-9e81-db8b3530c2c2","CertificateKeyPairOrigin":"AWS_MANAGED","CreatedAt":1.794773110114E9,"DomainName":"aws-sdk-describe-capture.invalid","DomainValidationOptions":[{"DomainName":"aws-sdk-describe-capture.invalid","ValidationDomain":"aws-sdk-describe-capture.invalid","ValidationMethod":"DNS","ValidationStatus":"FAILED"}],"ExtendedKeyUsages":[],"FailureReason":"ADDITIONAL_VERIFICATION_REQUIRED","InUseBy":[],"Issuer":"Amazon","KeyAlgorithm":"RSA-2048","KeyUsages":[],"Options":{"CertificateTransparencyLoggingPreference":"ENABLED","Export":"DISABLED"},"RenewalEligibility":"INELIGIBLE","SignatureAlgorithm":"SHA256WITHRSA","Status":"FAILED","Subject":"CN=aws-sdk-describe-capture.invalid","SubjectAlternativeNames":["aws-sdk-describe-capture.invalid"],"Type":"AMAZON_ISSUED"}})
+
+    assert %{
+             certificate: %{
+               certificate_arn:
+                 "arn:aws:acm:us-east-2:226147735359:certificate/5abcd24f-8112-4d2e-9e81-db8b3530c2c2",
+               certificate_key_pair_origin: "AWS_MANAGED",
+               created_at: 1.794773110114e9,
+               domain_name: "aws-sdk-describe-capture.invalid",
+               domain_validation_options: [
+                 %{
+                   domain_name: "aws-sdk-describe-capture.invalid",
+                   validation_domain: "aws-sdk-describe-capture.invalid",
+                   validation_method: "DNS",
+                   validation_status: "FAILED"
+                 }
+               ],
+               extended_key_usages: [],
+               failure_reason: "ADDITIONAL_VERIFICATION_REQUIRED",
+               in_use_by: [],
+               issuer: "Amazon",
+               key_algorithm: "RSA-2048",
+               key_usages: [],
+               options: %{
+                 certificate_transparency_logging_preference: "ENABLED",
+                 export: "DISABLED"
+               },
+               renewal_eligibility: "INELIGIBLE",
+               signature_algorithm: "SHA256WITHRSA",
+               status: "FAILED",
+               subject: "CN=aws-sdk-describe-capture.invalid",
+               subject_alternative_names: ["aws-sdk-describe-capture.invalid"],
+               type: "AMAZON_ISSUED"
+             }
+           } === AwsSDK.ACM.parse_describe_certificate_for_test(json)
+  end
 end
