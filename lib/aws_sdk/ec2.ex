@@ -5434,6 +5434,75 @@ defmodule AwsSDK.EC2 do
     )
   end
 
+  @doc """
+  Creates an AMI from an EBS-backed instance.
+
+  The image starts `pending` and becomes usable once EC2 has snapshotted the
+  instance's volumes. Those snapshots outlive the image: after
+  `deregister_image/2`, delete them with `delete_snapshot/2`.
+
+  ## Arguments
+
+    * `instance_id` - The instance ID.
+    * `name` - A name for the image, unique among the account's images in
+      the region.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:no_reboot` - When `true`, EC2 does not stop the instance before
+      snapshotting it, so the instance keeps running but the file systems
+      are copied as they are mid-write.
+    * `:description` - A description for the image.
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_image("i-1234567890abcdef0", "web-2026-01-01", no_reboot: true)
+      #=> {:ok, %{body: %{image_id: "ami-0abcdef1234567890"}, headers: %{...}}}
+  """
+  @spec create_image(instance_id :: String.t(), name :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_image(instance_id, name, opts \\ [])
+      when is_binary(instance_id) and is_binary(name) do
+    if sandbox?(opts) do
+      sandbox_create_image_response(instance_id, opts)
+    else
+      do_create_image(instance_id, name, opts)
+    end
+  end
+
+  defp do_create_image(instance_id, name, opts) do
+    params = create_image_params(instance_id, name, opts)
+
+    with {:ok, op} <- build_operation("CreateImage", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_image(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp create_image_params(instance_id, name, opts) do
+    %{"InstanceId" => instance_id, "Name" => name}
+    |> maybe_put("NoReboot", opts[:no_reboot])
+    |> maybe_put("Description", opts[:description])
+  end
+
+  @doc false
+  def create_image_params_for_test(instance_id, name, opts \\ []),
+    do: create_image_params(instance_id, name, opts)
+
+  @doc false
+  def parse_create_image_for_test(xml), do: parse_create_image(xml)
+
+  defp parse_create_image(body) do
+    %{
+      image_id:
+        xpath(body, ~x"//CreateImageResponse/imageId/text()"o |> transform_by(&optional_text/1))
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5838,6 +5907,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_run_instances_response(image_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :run_instances_response
+
+    @doc false
+    defdelegate sandbox_create_image_response(instance_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_image_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5943,6 +6017,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_delete_launch_template_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_run_instances_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_image_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

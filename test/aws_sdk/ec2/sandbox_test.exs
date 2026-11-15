@@ -773,4 +773,13 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.run_instances("ami-1", 1, 1, sandbox: [enabled: true])
     end
   end
+
+  describe "create_image/3" do
+    test "keys off the instance id" do
+      Sandbox.set_create_image_responses([{"i-1", fn -> {:ok, %{image_id: "ami-1"}} end}])
+
+      assert {:ok, %{image_id: "ami-1"}} ===
+               EC2.create_image("i-1", "web-2026-01-01", sandbox: [enabled: true])
+    end
+  end
 end

@@ -562,5 +562,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_run_instances_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :run_instances, entries)
     end
+
+    def create_image_response(instance_id, opts) do
+      binding = [instance_id: instance_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_image, instance_id, binding)
+    end
+
+    def set_create_image_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_image, entries)
+    end
   end
 end

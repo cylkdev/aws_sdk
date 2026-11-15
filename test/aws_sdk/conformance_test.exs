@@ -2398,4 +2398,31 @@ defmodule AwsSDK.ConformanceTest do
                subnet_id: "subnet-1"
              )
   end
+
+  # The body EC2 answered for an image of a running instance, saved from a
+  # real CreateImage call (aws-sandbox, us-east-2).
+  test "CreateImage keeps the new image id" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateImageResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>ace91c4c-1b3a-46bf-8757-7ead71362670</requestId>
+        <imageId>ami-0facad42857d886ed</imageId>
+    </CreateImageResponse>
+    """
+
+    assert %{image_id: "ami-0facad42857d886ed"} === AwsSDK.EC2.parse_create_image_for_test(xml)
+  end
+
+  test "CreateImage params send the chosen options" do
+    assert %{
+             "InstanceId" => "i-1",
+             "Name" => "web",
+             "NoReboot" => "true",
+             "Description" => "nightly"
+           } ===
+             AwsSDK.EC2.create_image_params_for_test("i-1", "web",
+               no_reboot: true,
+               description: "nightly"
+             )
+  end
 end
