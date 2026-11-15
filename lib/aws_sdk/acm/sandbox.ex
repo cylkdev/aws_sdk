@@ -33,5 +33,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_request_certificate_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :request_certificate, entries)
     end
+
+    def delete_certificate_response(certificate_arn, opts) do
+      binding = [certificate_arn: certificate_arn, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_certificate, certificate_arn, binding)
+    end
+
+    def set_delete_certificate_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_certificate, entries)
+    end
   end
 end

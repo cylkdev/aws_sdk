@@ -3059,4 +3059,10 @@ defmodule AwsSDK.ConformanceTest do
                "arn:aws:acm:us-east-2:226147735359:certificate/727fa769-16a5-4b26-8c8f-63f25c0c6ad9"
            } === AwsSDK.ACM.parse_request_certificate_for_test(json)
   end
+
+  # A real DeleteCertificate call (aws-sandbox, us-east-2) answered 200 with
+  # content-length 0, so the saved body is empty.
+  test "DeleteCertificate answers with no members" do
+    assert %{} === AwsSDK.ACM.parse_delete_certificate_for_test("")
+  end
 end
