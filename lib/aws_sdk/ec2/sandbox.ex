@@ -492,5 +492,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_route_table_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_route_table, entries)
     end
+
+    def delete_route_table_response(route_table_id, opts) do
+      binding = [route_table_id: route_table_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_route_table, route_table_id, binding)
+    end
+
+    def set_delete_route_table_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_route_table, entries)
+    end
   end
 end

@@ -1935,4 +1935,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.EC2.parse_create_route_table_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted route table, saved from a real
+  # DeleteRouteTable call (aws-sandbox, us-east-2).
+  test "DeleteRouteTable keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteRouteTableResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>615535cf-de06-4c48-834a-6053aca23a7e</requestId>
+        <return>true</return>
+    </DeleteRouteTableResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_delete_route_table_for_test(xml)
+  end
 end
