@@ -2941,4 +2941,21 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_listener(xml)
   end
+
+  # The body ELBv2 answered for a deleted load balancer, saved from a real
+  # DeleteLoadBalancer call (aws-sandbox, us-east-2).
+  test "DeleteLoadBalancer answers with no members" do
+    xml = """
+    <DeleteLoadBalancerResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <DeleteLoadBalancerResult/>
+      <ResponseMetadata>
+        <RequestId>56e0f2d9-5a2d-4581-ae2b-18716effd8cd</RequestId>
+      </ResponseMetadata>
+    </DeleteLoadBalancerResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_load_balancer(xml)
+  end
 end

@@ -1418,6 +1418,51 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     end
   end
 
+  @doc """
+  Deletes a load balancer, with all its listeners.
+
+  Maps to AWS `DeleteLoadBalancer`.
+  Its target groups and registered targets are left in place.
+
+  ## Arguments
+
+    - `load_balancer_arn` - the load balancer to delete
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.delete_load_balancer(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188"
+      )
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `DeleteLoadBalancer` answers with no members, so `body` is an empty map.
+  """
+  @spec delete_load_balancer(load_balancer_arn :: String.t(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def delete_load_balancer(load_balancer_arn, opts \\ []) when is_binary(load_balancer_arn) do
+    if sandbox?(opts) do
+      sandbox_delete_load_balancer_response(load_balancer_arn, opts)
+    else
+      do_delete_load_balancer(load_balancer_arn, opts)
+    end
+  end
+
+  defp do_delete_load_balancer(load_balancer_arn, opts) do
+    params = %{"LoadBalancerArn" => load_balancer_arn}
+
+    with {:ok, op} <- build_operation("DeleteLoadBalancer", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_delete_load_balancer(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1939,6 +1984,10 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   @doc false
   def parse_delete_listener(_body), do: %{}
 
+  # DeleteLoadBalancerResult has no members.
+  @doc false
+  def parse_delete_load_balancer(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -2054,6 +2103,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_delete_listener_response(listener_arn, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :delete_listener_response
+
+    @doc false
+    defdelegate sandbox_delete_load_balancer_response(load_balancer_arn, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :delete_load_balancer_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -2085,6 +2139,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defp sandbox_deregister_targets_response(_g, _t, _o), do: raise(@sandbox_unavailable)
     defp sandbox_delete_rule_response(_a, _o), do: raise(@sandbox_unavailable)
     defp sandbox_delete_listener_response(_a, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_delete_load_balancer_response(_a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

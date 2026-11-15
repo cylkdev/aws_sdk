@@ -254,5 +254,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_listener_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_listener, entries)
     end
+
+    def delete_load_balancer_response(load_balancer_arn, opts) do
+      binding = [load_balancer_arn: load_balancer_arn, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_load_balancer, load_balancer_arn, binding)
+    end
+
+    def set_delete_load_balancer_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_load_balancer, entries)
+    end
   end
 end
