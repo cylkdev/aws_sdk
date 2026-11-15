@@ -717,4 +717,13 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.create_route("rtb-1", "0.0.0.0/0", "igw-1", sandbox: [enabled: true])
     end
   end
+
+  describe "delete_route/3" do
+    test "keys off the route table ID" do
+      Sandbox.set_delete_route_responses([{"rtb-1", fn -> {:ok, %{return: true}} end}])
+
+      assert {:ok, %{return: true}} ===
+               EC2.delete_route("rtb-1", "0.0.0.0/0", sandbox: [enabled: true])
+    end
+  end
 end

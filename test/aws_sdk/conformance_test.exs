@@ -1963,4 +1963,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_create_route_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted route, saved from a real
+  # DeleteRoute call (aws-sandbox, us-east-2).
+  test "DeleteRoute keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteRouteResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>cf51eae4-8e67-4add-b4e1-63dc6692afdd</requestId>
+        <return>true</return>
+    </DeleteRouteResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_delete_route_for_test(xml)
+  end
 end

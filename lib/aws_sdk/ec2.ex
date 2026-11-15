@@ -5000,6 +5000,53 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_create_route_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Deletes a route from a route table.
+
+  ## Arguments
+
+    * `route_table_id` - The route table ID.
+    * `destination_cidr_block` - The IPv4 range of the route, in CIDR notation.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.delete_route("rtb-0a1b2c3d", "0.0.0.0/0")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec delete_route(
+          route_table_id :: String.t(),
+          destination_cidr_block :: String.t(),
+          opts :: keyword()
+        ) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def delete_route(route_table_id, destination_cidr_block, opts \\ [])
+      when is_binary(route_table_id) and is_binary(destination_cidr_block) do
+    if sandbox?(opts) do
+      sandbox_delete_route_response(route_table_id, opts)
+    else
+      do_delete_route(route_table_id, destination_cidr_block, opts)
+    end
+  end
+
+  defp do_delete_route(route_table_id, destination_cidr_block, opts) do
+    params = %{"RouteTableId" => route_table_id, "DestinationCidrBlock" => destination_cidr_block}
+
+    with {:ok, op} <- build_operation("DeleteRoute", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_delete_route_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5379,6 +5426,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_create_route_response(route_table_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :create_route_response
+
+    @doc false
+    defdelegate sandbox_delete_route_response(route_table_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :delete_route_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5474,6 +5526,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_delete_route_table_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_create_route_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_delete_route_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
