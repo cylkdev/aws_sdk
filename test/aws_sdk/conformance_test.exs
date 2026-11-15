@@ -1874,4 +1874,65 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_delete_internet_gateway_for_test(xml)
   end
+
+  # The body EC2 answered for a new route table, saved from a real
+  # CreateRouteTable call (aws-sandbox, us-east-2).
+  test "CreateRouteTable keeps the created route table" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateRouteTableResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>bc790e5e-5178-4b67-a9ea-3386db8a695c</requestId>
+        <routeTable>
+            <routeTableId>rtb-0fbd7cc3118f964be</routeTableId>
+            <vpcId>vpc-0745b72c91dd0b80a</vpcId>
+            <ownerId>226147735359</ownerId>
+            <routeSet>
+                <item>
+                    <destinationCidrBlock>10.0.0.0/16</destinationCidrBlock>
+                    <gatewayId>local</gatewayId>
+                    <state>active</state>
+                    <origin>CreateRouteTable</origin>
+                </item>
+            </routeSet>
+            <associationSet/>
+            <propagatingVgwSet/>
+            <tagSet/>
+        </routeTable>
+    </CreateRouteTableResponse>
+    """
+
+    expected = %{
+      route_table: %{
+        route_table_id: "rtb-0fbd7cc3118f964be",
+        vpc_id: "vpc-0745b72c91dd0b80a",
+        owner_id: "226147735359",
+        route_set: [
+          %{
+            destination_cidr_block: "10.0.0.0/16",
+            destination_ipv6_cidr_block: nil,
+            destination_prefix_list_id: nil,
+            egress_only_internet_gateway_id: nil,
+            gateway_id: "local",
+            instance_id: nil,
+            instance_owner_id: nil,
+            nat_gateway_id: nil,
+            transit_gateway_id: nil,
+            local_gateway_id: nil,
+            carrier_gateway_id: nil,
+            network_interface_id: nil,
+            vpc_peering_connection_id: nil,
+            core_network_arn: nil,
+            state: "active",
+            origin: "CreateRouteTable"
+          }
+        ],
+        association_set: [],
+        propagating_vgw_set: [],
+        tag_set: []
+      },
+      client_token: nil
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_route_table_for_test(xml)
+  end
 end

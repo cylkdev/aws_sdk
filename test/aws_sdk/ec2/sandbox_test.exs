@@ -689,4 +689,15 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.delete_internet_gateway("igw-1", sandbox: [enabled: true])
     end
   end
+
+  describe "create_route_table/2" do
+    test "keys off the VPC id" do
+      Sandbox.set_create_route_table_responses([
+        {"vpc-1", fn -> {:ok, %{route_table: %{route_table_id: "rtb-1"}, client_token: nil}} end}
+      ])
+
+      assert {:ok, %{route_table: %{route_table_id: "rtb-1"}, client_token: nil}} ===
+               EC2.create_route_table("vpc-1", sandbox: [enabled: true])
+    end
+  end
 end

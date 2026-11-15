@@ -4789,6 +4789,116 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_delete_internet_gateway_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Creates a route table in a VPC.
+
+  The new table holds only the local route for the VPC's own range and is
+  associated with no subnet.
+
+  ## Arguments
+
+    * `vpc_id` - The VPC ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_route_table("vpc-1a2b3c4d")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    route_table: %{
+      #=>      route_table_id: "rtb-0a1b2c3d",
+      #=>      vpc_id: "vpc-1a2b3c4d",
+      #=>      route_set: [%{destination_cidr_block: "10.0.0.0/16", gateway_id: "local", ...}],
+      #=>      association_set: [],
+      #=>      ...
+      #=>    },
+      #=>    client_token: nil
+      #=>  }, headers: %{...}}}
+  """
+  @spec create_route_table(vpc_id :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_route_table(vpc_id, opts \\ []) when is_binary(vpc_id) do
+    if sandbox?(opts) do
+      sandbox_create_route_table_response(vpc_id, opts)
+    else
+      do_create_route_table(vpc_id, opts)
+    end
+  end
+
+  defp do_create_route_table(vpc_id, opts) do
+    with {:ok, op} <- build_operation("CreateRouteTable", %{"VpcId" => vpc_id}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_route_table(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_route_table_for_test(xml), do: parse_create_route_table(xml)
+
+  defp parse_create_route_table(body) do
+    route_table =
+      xpath(body, ~x"//CreateRouteTableResponse/routeTable"o,
+        route_table_id: ~x"./routeTableId/text()"s,
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        route_set: [
+          ~x"./routeSet/item"l,
+          destination_cidr_block:
+            ~x"./destinationCidrBlock/text()"o |> transform_by(&optional_text/1),
+          destination_ipv6_cidr_block:
+            ~x"./destinationIpv6CidrBlock/text()"o |> transform_by(&optional_text/1),
+          destination_prefix_list_id:
+            ~x"./destinationPrefixListId/text()"o |> transform_by(&optional_text/1),
+          egress_only_internet_gateway_id:
+            ~x"./egressOnlyInternetGatewayId/text()"o |> transform_by(&optional_text/1),
+          gateway_id: ~x"./gatewayId/text()"o |> transform_by(&optional_text/1),
+          instance_id: ~x"./instanceId/text()"o |> transform_by(&optional_text/1),
+          instance_owner_id: ~x"./instanceOwnerId/text()"o |> transform_by(&optional_text/1),
+          nat_gateway_id: ~x"./natGatewayId/text()"o |> transform_by(&optional_text/1),
+          transit_gateway_id: ~x"./transitGatewayId/text()"o |> transform_by(&optional_text/1),
+          local_gateway_id: ~x"./localGatewayId/text()"o |> transform_by(&optional_text/1),
+          carrier_gateway_id: ~x"./carrierGatewayId/text()"o |> transform_by(&optional_text/1),
+          network_interface_id:
+            ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
+          vpc_peering_connection_id:
+            ~x"./vpcPeeringConnectionId/text()"o |> transform_by(&optional_text/1),
+          core_network_arn: ~x"./coreNetworkArn/text()"o |> transform_by(&optional_text/1),
+          state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+          origin: ~x"./origin/text()"o |> transform_by(&optional_text/1)
+        ],
+        association_set: [
+          ~x"./associationSet/item"l,
+          route_table_association_id: ~x"./routeTableAssociationId/text()"s,
+          route_table_id: ~x"./routeTableId/text()"o |> transform_by(&optional_text/1),
+          subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+          gateway_id: ~x"./gatewayId/text()"o |> transform_by(&optional_text/1),
+          main: ~x"./main/text()"s,
+          association_state: [
+            ~x"./associationState"o,
+            state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+            status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
+          ]
+        ],
+        propagating_vgw_set: [~x"./propagatingVgwSet/item"l, gateway_id: ~x"./gatewayId/text()"s],
+        tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+      )
+
+    %{
+      route_table: coerce_route_table(route_table),
+      client_token:
+        xpath(
+          body,
+          ~x"//CreateRouteTableResponse/clientToken/text()"o |> transform_by(&optional_text/1)
+        )
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5153,6 +5263,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_internet_gateway_response(internet_gateway_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_internet_gateway_response
+
+    @doc false
+    defdelegate sandbox_create_route_table_response(vpc_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_route_table_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5242,6 +5357,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_detach_internet_gateway_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_internet_gateway_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_route_table_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

@@ -482,5 +482,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_internet_gateway_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_internet_gateway, entries)
     end
+
+    def create_route_table_response(vpc_id, opts) do
+      binding = [vpc_id: vpc_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_route_table, vpc_id, binding)
+    end
+
+    def set_create_route_table_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_route_table, entries)
+    end
   end
 end
