@@ -235,4 +235,15 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                )
     end
   end
+
+  describe "create_load_balancer/2" do
+    test "keys off the load balancer name" do
+      Sandbox.set_create_load_balancer_responses([
+        {"web", fn -> {:ok, %{load_balancers: [%{load_balancer_name: "web"}]}} end}
+      ])
+
+      assert {:ok, %{load_balancers: [%{load_balancer_name: "web"}]}} ===
+               ElasticLoadBalancingV2.create_load_balancer("web", sandbox: [enabled: true])
+    end
+  end
 end

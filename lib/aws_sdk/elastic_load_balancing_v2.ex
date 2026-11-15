@@ -848,6 +848,98 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     end
   end
 
+  @doc """
+  Creates an Application, Network, or Gateway Load Balancer.
+
+  Maps to AWS `CreateLoadBalancer`. The load balancer starts
+  `provisioning` and becomes `active` once AWS has placed it in its
+  subnets.
+
+  ## Arguments
+
+    - `name` - the load balancer name, unique in the account and region
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:subnets` - list of subnet IDs, at most one per Availability Zone
+      (an Application Load Balancer needs two zones)
+    - `:subnet_mappings` - list of subnet mapping maps, in place of
+      `:subnets`, e.g. `[%{"SubnetId" => "subnet-1", "AllocationId" => "eipalloc-1"}]`
+    - `:security_groups` - list of security group IDs
+    - `:scheme` - `"internet-facing"` (the AWS default) or `"internal"`
+    - `:tags` - list of `%{"Key" => ..., "Value" => ...}` maps
+    - `:type` - `"application"` (the AWS default), `"network"` or `"gateway"`
+    - `:ip_address_type` - `"ipv4"`, `"dualstack"` or
+      `"dualstack-without-public-ipv4"`
+    - `:customer_owned_ipv4_pool` - an Outposts customer-owned address pool
+    - `:enable_prefix_for_ipv6_source_nat` - `"on"` or `"off"`
+    - `:ipam_pools` - map, e.g. `%{"Ipv4IpamPoolId" => "ipam-pool-1"}`
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.create_load_balancer("web",
+        subnets: ["subnet-1a2b3c4d", "subnet-5e6f7a8b"],
+        scheme: "internal"
+      )
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      load_balancers: [
+      #=>        %{
+      #=>          load_balancer_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
+      #=>          load_balancer_name: "web",
+      #=>          scheme: "internal",
+      #=>          type: "application",
+      #=>          state: %{code: "provisioning", reason: nil},
+      #=>          ...
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
+      #=>  }}
+
+  `CreateLoadBalancer` returns the new load balancer, with no `:next_marker`.
+  """
+  @spec create_load_balancer(name :: String.t(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def create_load_balancer(name, opts \\ []) when is_binary(name) do
+    if sandbox?(opts) do
+      sandbox_create_load_balancer_response(name, opts)
+    else
+      do_create_load_balancer(name, opts)
+    end
+  end
+
+  defp do_create_load_balancer(name, opts) do
+    params = create_load_balancer_params(name, opts)
+
+    with {:ok, op} <- build_operation("CreateLoadBalancer", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_load_balancer(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def create_load_balancer_params(name, opts) do
+    flatten_query(%{
+      "Name" => name,
+      "Subnets" => opts[:subnets],
+      "SubnetMappings" => opts[:subnet_mappings],
+      "SecurityGroups" => opts[:security_groups],
+      "Scheme" => opts[:scheme],
+      "Tags" => opts[:tags],
+      "Type" => opts[:type],
+      "IpAddressType" => opts[:ip_address_type],
+      "CustomerOwnedIpv4Pool" => opts[:customer_owned_ipv4_pool],
+      "EnablePrefixForIpv6SourceNat" => opts[:enable_prefix_for_ipv6_source_nat],
+      "IpamPools" => opts[:ipam_pools]
+    })
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -986,54 +1078,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   def parse_describe_load_balancers(body) do
     result =
       xpath(body, ~x"//DescribeLoadBalancersResult"e,
-        load_balancers: [
-          ~x"./LoadBalancers/member"l,
-          load_balancer_arn: ~x"./LoadBalancerArn/text()"s,
-          load_balancer_name: ~x"./LoadBalancerName/text()"s,
-          dns_name: ~x"./DNSName/text()"s,
-          canonical_hosted_zone_id:
-            ~x"./CanonicalHostedZoneId/text()"o |> transform_by(&optional_text/1),
-          created_time: ~x"./CreatedTime/text()"o |> transform_by(&optional_text/1),
-          scheme: ~x"./Scheme/text()"s,
-          type: ~x"./Type/text()"s,
-          vpc_id: ~x"./VpcId/text()"s,
-          ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
-          customer_owned_ipv4_pool:
-            ~x"./CustomerOwnedIpv4Pool/text()"o |> transform_by(&optional_text/1),
-          # AWS documents these two as Strings carrying "on"/"off", not Booleans.
-          enable_prefix_for_ipv6_source_nat:
-            ~x"./EnablePrefixForIpv6SourceNat/text()"o |> transform_by(&optional_text/1),
-          enforce_security_group_inbound_rules_on_private_link_traffic:
-            ~x"./EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic/text()"o
-            |> transform_by(&optional_text/1),
-          security_groups: ~x"./SecurityGroups/member/text()"sl,
-          state: [
-            ~x"./State"o,
-            code: ~x"./Code/text()"s,
-            reason: ~x"./Reason/text()"o |> transform_by(&optional_text/1)
-          ],
-          ipam_pools: [
-            ~x"./IpamPools"o,
-            ipv4_ipam_pool_id: ~x"./Ipv4IpamPoolId/text()"o |> transform_by(&optional_text/1)
-          ],
-          availability_zones: [
-            ~x"./AvailabilityZones/member"l,
-            zone_name: ~x"./ZoneName/text()"o |> transform_by(&optional_text/1),
-            subnet_id: ~x"./SubnetId/text()"o |> transform_by(&optional_text/1),
-            outpost_id: ~x"./OutpostId/text()"o |> transform_by(&optional_text/1),
-            source_nat_ipv6_prefixes: ~x"./SourceNatIpv6Prefixes/member/text()"sl,
-            load_balancer_addresses: [
-              ~x"./LoadBalancerAddresses/member"l,
-              ip_address: ~x"./IpAddress/text()"o |> transform_by(&optional_text/1),
-              allocation_id: ~x"./AllocationId/text()"o |> transform_by(&optional_text/1),
-              # Casing is irregular here: IpAddress but PrivateIPv4Address /
-              # IPv6Address.
-              private_ipv4_address:
-                ~x"./PrivateIPv4Address/text()"o |> transform_by(&optional_text/1),
-              ipv6_address: ~x"./IPv6Address/text()"o |> transform_by(&optional_text/1)
-            ]
-          ]
-        ],
+        load_balancers: [~x"./LoadBalancers/member"l | load_balancer_fields()],
         next_marker: ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)
       )
 
@@ -1041,6 +1086,58 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       load_balancers: result.load_balancers,
       next_marker: result.next_marker
     }
+  end
+
+  # Shared by DescribeLoadBalancers and CreateLoadBalancer -- both return
+  # <LoadBalancers><member>.
+  defp load_balancer_fields do
+    [
+      load_balancer_arn: ~x"./LoadBalancerArn/text()"s,
+      load_balancer_name: ~x"./LoadBalancerName/text()"s,
+      dns_name: ~x"./DNSName/text()"s,
+      canonical_hosted_zone_id:
+        ~x"./CanonicalHostedZoneId/text()"o |> transform_by(&optional_text/1),
+      created_time: ~x"./CreatedTime/text()"o |> transform_by(&optional_text/1),
+      scheme: ~x"./Scheme/text()"s,
+      type: ~x"./Type/text()"s,
+      vpc_id: ~x"./VpcId/text()"s,
+      ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
+      customer_owned_ipv4_pool:
+        ~x"./CustomerOwnedIpv4Pool/text()"o |> transform_by(&optional_text/1),
+      # AWS documents these two as Strings carrying "on"/"off", not Booleans.
+      enable_prefix_for_ipv6_source_nat:
+        ~x"./EnablePrefixForIpv6SourceNat/text()"o |> transform_by(&optional_text/1),
+      enforce_security_group_inbound_rules_on_private_link_traffic:
+        ~x"./EnforceSecurityGroupInboundRulesOnPrivateLinkTraffic/text()"o
+        |> transform_by(&optional_text/1),
+      security_groups: ~x"./SecurityGroups/member/text()"sl,
+      state: [
+        ~x"./State"o,
+        code: ~x"./Code/text()"s,
+        reason: ~x"./Reason/text()"o |> transform_by(&optional_text/1)
+      ],
+      ipam_pools: [
+        ~x"./IpamPools"o,
+        ipv4_ipam_pool_id: ~x"./Ipv4IpamPoolId/text()"o |> transform_by(&optional_text/1)
+      ],
+      availability_zones: [
+        ~x"./AvailabilityZones/member"l,
+        zone_name: ~x"./ZoneName/text()"o |> transform_by(&optional_text/1),
+        subnet_id: ~x"./SubnetId/text()"o |> transform_by(&optional_text/1),
+        outpost_id: ~x"./OutpostId/text()"o |> transform_by(&optional_text/1),
+        source_nat_ipv6_prefixes: ~x"./SourceNatIpv6Prefixes/member/text()"sl,
+        load_balancer_addresses: [
+          ~x"./LoadBalancerAddresses/member"l,
+          ip_address: ~x"./IpAddress/text()"o |> transform_by(&optional_text/1),
+          allocation_id: ~x"./AllocationId/text()"o |> transform_by(&optional_text/1),
+          # Casing is irregular here: IpAddress but PrivateIPv4Address /
+          # IPv6Address.
+          private_ipv4_address:
+            ~x"./PrivateIPv4Address/text()"o |> transform_by(&optional_text/1),
+          ipv6_address: ~x"./IPv6Address/text()"o |> transform_by(&optional_text/1)
+        ]
+      ]
+    ]
   end
 
   @doc false
@@ -1307,6 +1404,16 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   defp boolish(""), do: nil
   defp boolish(other), do: other
 
+  @doc false
+  def parse_create_load_balancer(body) do
+    result =
+      xpath(body, ~x"//CreateLoadBalancerResult"e,
+        load_balancers: [~x"./LoadBalancers/member"l | load_balancer_fields()]
+      )
+
+    %{load_balancers: result.load_balancers}
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1382,6 +1489,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_describe_target_groups_by_names_response(names, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :describe_target_groups_by_names_response
+
+    @doc false
+    defdelegate sandbox_create_load_balancer_response(name, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :create_load_balancer_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1404,6 +1516,8 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
 
     defp sandbox_describe_target_groups_by_names_response(_names, _opts),
       do: raise("sandbox not available")
+
+    defp sandbox_create_load_balancer_response(_n, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

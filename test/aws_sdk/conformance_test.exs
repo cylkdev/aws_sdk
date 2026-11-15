@@ -2436,4 +2436,112 @@ defmodule AwsSDK.ConformanceTest do
                description: "nightly"
              )
   end
+
+  test "CreateLoadBalancer params send the chosen options" do
+    assert %{
+             "Name" => "web",
+             "Subnets.member.1" => "subnet-1",
+             "Subnets.member.2" => "subnet-2",
+             "SecurityGroups.member.1" => "sg-1",
+             "Scheme" => "internal",
+             "Type" => "application",
+             "IpAddressType" => "ipv4",
+             "Tags.member.1.Key" => "team",
+             "Tags.member.1.Value" => "web"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.create_load_balancer_params("web",
+               subnets: ["subnet-1", "subnet-2"],
+               security_groups: ["sg-1"],
+               scheme: "internal",
+               type: "application",
+               ip_address_type: "ipv4",
+               tags: [%{"Key" => "team", "Value" => "web"}]
+             )
+  end
+
+  # The body ELBv2 answered for a new internal Application Load Balancer,
+  # saved from a real CreateLoadBalancer call (aws-sandbox, us-east-2).
+  test "CreateLoadBalancer keeps the created load balancer" do
+    xml = """
+    <CreateLoadBalancerResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <CreateLoadBalancerResult>
+        <LoadBalancers>
+          <member>
+            <LoadBalancerArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:loadbalancer/app/aws-sdk-capture/850eb879424be86f</LoadBalancerArn>
+            <Scheme>internal</Scheme>
+            <AvailabilityZones>
+              <member>
+                <SubnetId>subnet-0ae992211765ba0c4</SubnetId>
+                <ZoneName>us-east-2a</ZoneName>
+                <LoadBalancerAddresses/>
+              </member>
+              <member>
+                <SubnetId>subnet-0705693ba44f93c78</SubnetId>
+                <ZoneName>us-east-2b</ZoneName>
+                <LoadBalancerAddresses/>
+              </member>
+            </AvailabilityZones>
+            <DNSName>internal-aws-sdk-capture-1490559813.us-east-2.elb.amazonaws.com</DNSName>
+            <Type>application</Type>
+            <IpAddressType>ipv4</IpAddressType>
+            <LoadBalancerName>aws-sdk-capture</LoadBalancerName>
+            <VpcId>vpc-0ac91d5c22359eaa6</VpcId>
+            <CanonicalHostedZoneId>Z3AADJGX6KTTL2</CanonicalHostedZoneId>
+            <CreatedTime>2026-11-15T19:24:10.445Z</CreatedTime>
+            <SecurityGroups>
+              <member>sg-0b7e7ac93cad37768</member>
+            </SecurityGroups>
+            <State>
+              <Code>provisioning</Code>
+            </State>
+          </member>
+        </LoadBalancers>
+      </CreateLoadBalancerResult>
+      <ResponseMetadata>
+        <RequestId>64f97556-09af-45fa-937c-644ac3fd4ff4</RequestId>
+      </ResponseMetadata>
+    </CreateLoadBalancerResponse>
+    """
+
+    expected = %{
+      load_balancers: [
+        %{
+          load_balancer_arn:
+            "arn:aws:elasticloadbalancing:us-east-2:226147735359:loadbalancer/app/aws-sdk-capture/850eb879424be86f",
+          load_balancer_name: "aws-sdk-capture",
+          dns_name: "internal-aws-sdk-capture-1490559813.us-east-2.elb.amazonaws.com",
+          canonical_hosted_zone_id: "Z3AADJGX6KTTL2",
+          created_time: "2026-11-15T19:24:10.445Z",
+          scheme: "internal",
+          type: "application",
+          vpc_id: "vpc-0ac91d5c22359eaa6",
+          ip_address_type: "ipv4",
+          customer_owned_ipv4_pool: nil,
+          enable_prefix_for_ipv6_source_nat: nil,
+          enforce_security_group_inbound_rules_on_private_link_traffic: nil,
+          security_groups: ["sg-0b7e7ac93cad37768"],
+          state: %{code: "provisioning", reason: nil},
+          ipam_pools: nil,
+          availability_zones: [
+            %{
+              zone_name: "us-east-2a",
+              subnet_id: "subnet-0ae992211765ba0c4",
+              outpost_id: nil,
+              source_nat_ipv6_prefixes: [],
+              load_balancer_addresses: []
+            },
+            %{
+              zone_name: "us-east-2b",
+              subnet_id: "subnet-0705693ba44f93c78",
+              outpost_id: nil,
+              source_nat_ipv6_prefixes: [],
+              load_balancer_addresses: []
+            }
+          ]
+        }
+      ]
+    }
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_load_balancer(xml)
+  end
 end

@@ -164,5 +164,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_modify_listener_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :modify_listener, entries)
     end
+
+    def create_load_balancer_response(name, opts) do
+      binding = [name: name, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_load_balancer, name, binding)
+    end
+
+    def set_create_load_balancer_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_load_balancer, entries)
+    end
   end
 end
