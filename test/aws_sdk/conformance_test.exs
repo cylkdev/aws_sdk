@@ -2849,4 +2849,34 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_rule(xml)
   end
+
+  test "RegisterTargets params send each target" do
+    assert %{
+             "TargetGroupArn" => "arn:tg/1",
+             "Targets.member.1.Id" => "10.0.1.10",
+             "Targets.member.1.Port" => "80",
+             "Targets.member.2.Id" => "10.0.1.11"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.register_targets_params("arn:tg/1", [
+               %{"Id" => "10.0.1.10", "Port" => 80},
+               %{"Id" => "10.0.1.11"}
+             ])
+  end
+
+  # The body ELBv2 answered for a registered IP target, saved from a real
+  # RegisterTargets call (aws-sandbox, us-east-2).
+  test "RegisterTargets answers with no members" do
+    xml = """
+    <RegisterTargetsResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <RegisterTargetsResult/>
+      <ResponseMetadata>
+        <RequestId>ecc7888f-b83c-46dd-9dfe-3c7976432e0f</RequestId>
+      </ResponseMetadata>
+    </RegisterTargetsResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_register_targets(xml)
+  end
 end

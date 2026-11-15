@@ -289,4 +289,17 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                )
     end
   end
+
+  describe "register_targets/3" do
+    test "keys off the target group arn" do
+      Sandbox.set_register_targets_responses([{"arn:tg/1", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} ===
+               ElasticLoadBalancingV2.register_targets(
+                 "arn:tg/1",
+                 [%{"Id" => "10.0.1.10", "Port" => 80}],
+                 sandbox: [enabled: true]
+               )
+    end
+  end
 end

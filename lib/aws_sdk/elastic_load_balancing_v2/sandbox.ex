@@ -214,5 +214,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_rule_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_rule, entries)
     end
+
+    def register_targets_response(target_group_arn, targets, opts) do
+      binding = [target_group_arn: target_group_arn, targets: targets, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :register_targets, target_group_arn, binding)
+    end
+
+    def set_register_targets_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :register_targets, entries)
+    end
   end
 end

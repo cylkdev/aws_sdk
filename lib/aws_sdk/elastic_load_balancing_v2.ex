@@ -1221,6 +1221,62 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     })
   end
 
+  @doc """
+  Registers targets with a target group, so the load balancer starts
+  routing to them once they pass health checks.
+
+  Maps to AWS `RegisterTargets`.
+
+  ## Arguments
+
+    - `target_group_arn` - the target group
+    - `targets` - list of target maps, e.g.
+      `[%{"Id" => "i-1234567890abcdef0", "Port" => 80}]`; `"Id"` is an
+      instance ID, IP address, Lambda ARN or ALB ARN, as the target group's
+      target type requires
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.register_targets(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067",
+        [%{"Id" => "10.0.1.10", "Port" => 80}]
+      )
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `RegisterTargets` answers with no members, so `body` is an empty map.
+  """
+  @spec register_targets(target_group_arn :: String.t(), targets :: [map()], opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def register_targets(target_group_arn, [_ | _] = targets, opts \\ [])
+      when is_binary(target_group_arn) do
+    if sandbox?(opts) do
+      sandbox_register_targets_response(target_group_arn, targets, opts)
+    else
+      do_register_targets(target_group_arn, targets, opts)
+    end
+  end
+
+  defp do_register_targets(target_group_arn, targets, opts) do
+    params = register_targets_params(target_group_arn, targets)
+
+    with {:ok, op} <- build_operation("RegisterTargets", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_register_targets(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def register_targets_params(target_group_arn, targets) do
+    flatten_query(%{"TargetGroupArn" => target_group_arn, "Targets" => targets})
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1726,6 +1782,10 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     %{rules: normalize_rules(result.rules)}
   end
 
+  # RegisterTargetsResult has no members.
+  @doc false
+  def parse_register_targets(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1821,6 +1881,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_create_rule_response(listener_arn, conditions, priority, actions, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :create_rule_response
+
+    @doc false
+    defdelegate sandbox_register_targets_response(target_group_arn, targets, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :register_targets_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1848,6 +1913,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defp sandbox_create_target_group_response(_n, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_listener_response(_l, _a, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_rule_response(_l, _c, _p, _a, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_register_targets_response(_g, _t, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------
