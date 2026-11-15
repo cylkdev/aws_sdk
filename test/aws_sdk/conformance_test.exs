@@ -2630,4 +2630,101 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_target_group(xml)
   end
+
+  test "CreateListener params send the chosen options" do
+    assert %{
+             "LoadBalancerArn" => "arn:lb/1",
+             "DefaultActions.member.1.Type" => "forward",
+             "DefaultActions.member.1.TargetGroupArn" => "arn:tg/1",
+             "Protocol" => "HTTP",
+             "Port" => "80"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.create_listener_params(
+               "arn:lb/1",
+               [%{"Type" => "forward", "TargetGroupArn" => "arn:tg/1"}],
+               protocol: "HTTP",
+               port: 80
+             )
+  end
+
+  # The body ELBv2 answered for a new HTTP listener forwarding to one target
+  # group, saved from a real CreateListener call (aws-sandbox, us-east-2).
+  test "CreateListener keeps the created listener" do
+    xml = """
+    <CreateListenerResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <CreateListenerResult>
+        <Listeners>
+          <member>
+            <LoadBalancerArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:loadbalancer/app/aws-sdk-capture/850eb879424be86f</LoadBalancerArn>
+            <Protocol>HTTP</Protocol>
+            <Port>80</Port>
+            <ListenerArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:listener/app/aws-sdk-capture/850eb879424be86f/70d082df8165c39e</ListenerArn>
+            <DefaultActions>
+              <member>
+                <TargetGroupArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605</TargetGroupArn>
+                <ForwardConfig>
+                  <TargetGroups>
+                    <member>
+                      <TargetGroupArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605</TargetGroupArn>
+                      <Weight>1</Weight>
+                    </member>
+                  </TargetGroups>
+                  <TargetGroupStickinessConfig>
+                    <Enabled>false</Enabled>
+                  </TargetGroupStickinessConfig>
+                </ForwardConfig>
+                <Type>forward</Type>
+              </member>
+            </DefaultActions>
+          </member>
+        </Listeners>
+      </CreateListenerResult>
+      <ResponseMetadata>
+        <RequestId>05d17bcc-6e0b-42b9-8003-45d6c1606319</RequestId>
+      </ResponseMetadata>
+    </CreateListenerResponse>
+    """
+
+    expected = %{
+      listeners: [
+        %{
+          listener_arn:
+            "arn:aws:elasticloadbalancing:us-east-2:226147735359:listener/app/aws-sdk-capture/850eb879424be86f/70d082df8165c39e",
+          load_balancer_arn:
+            "arn:aws:elasticloadbalancing:us-east-2:226147735359:loadbalancer/app/aws-sdk-capture/850eb879424be86f",
+          port: 80,
+          protocol: "HTTP",
+          ssl_policy: nil,
+          alpn_policy: [],
+          certificates: [],
+          mutual_authentication: nil,
+          default_actions: [
+            %{
+              type: "forward",
+              order: nil,
+              target_group_arn:
+                "arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605",
+              forward_config: %{
+                target_groups: [
+                  %{
+                    target_group_arn:
+                      "arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605",
+                    weight: 1
+                  }
+                ],
+                target_group_stickiness_config: %{enabled: "false", duration_seconds: nil}
+              },
+              redirect_config: nil,
+              fixed_response_config: nil,
+              authenticate_oidc_config: nil,
+              authenticate_cognito_config: nil,
+              jwt_validation_config: nil
+            }
+          ]
+        }
+      ]
+    }
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_listener(xml)
+  end
 end

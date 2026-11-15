@@ -1042,6 +1042,97 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     })
   end
 
+  @doc """
+  Creates a listener, which checks for connections on a port of a load
+  balancer and routes them by its default actions.
+
+  Maps to AWS `CreateListener`. `default_actions` uses the same action
+  encoding as `modify_rule/3`.
+
+  ## Arguments
+
+    - `load_balancer_arn` - the load balancer to listen on
+    - `default_actions` - list of action maps, used when no rule matches
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:protocol` - e.g. `"HTTP"`, `"HTTPS"`, `"TCP"`
+    - `:port` - the port to listen on
+    - `:ssl_policy` - the security policy of an HTTPS or TLS listener
+    - `:certificates` - list of `%{"CertificateArn" => ...}` maps, one for
+      an HTTPS or TLS listener
+    - `:alpn_policy` - list with one ALPN policy name, for a TLS listener
+    - `:tags` - list of `%{"Key" => ..., "Value" => ...}` maps
+    - `:mutual_authentication` - map, e.g. `%{"Mode" => "verify", "TrustStoreArn" => ...}`
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.create_listener(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:loadbalancer/app/web/50dc6c495c0c9188",
+        [%{"Type" => "forward", "TargetGroupArn" => "arn:...:targetgroup/web/73e2d6bc24d8a067"}],
+        protocol: "HTTP",
+        port: 80
+      )
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      listeners: [
+      #=>        %{
+      #=>          listener_arn: "arn:aws:elasticloadbalancing:...:listener/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2",
+      #=>          port: 80,
+      #=>          protocol: "HTTP",
+      #=>          default_actions: [%{type: "forward", ...}],
+      #=>          ...
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
+      #=>  }}
+
+  `CreateListener` returns the new listener, with no `:next_marker`.
+  """
+  @spec create_listener(
+          load_balancer_arn :: String.t(),
+          default_actions :: [map()],
+          opts :: keyword()
+        ) :: {:ok, map()} | {:error, term()}
+  def create_listener(load_balancer_arn, [_ | _] = default_actions, opts \\ [])
+      when is_binary(load_balancer_arn) do
+    if sandbox?(opts) do
+      sandbox_create_listener_response(load_balancer_arn, default_actions, opts)
+    else
+      do_create_listener(load_balancer_arn, default_actions, opts)
+    end
+  end
+
+  defp do_create_listener(load_balancer_arn, default_actions, opts) do
+    params = create_listener_params(load_balancer_arn, default_actions, opts)
+
+    with {:ok, op} <- build_operation("CreateListener", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_listener(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def create_listener_params(load_balancer_arn, default_actions, opts) do
+    flatten_query(%{
+      "LoadBalancerArn" => load_balancer_arn,
+      "DefaultActions" => default_actions,
+      "Protocol" => opts[:protocol],
+      "Port" => opts[:port],
+      "SslPolicy" => opts[:ssl_policy],
+      "Certificates" => opts[:certificates],
+      "AlpnPolicy" => opts[:alpn_policy],
+      "Tags" => opts[:tags],
+      "MutualAuthentication" => opts[:mutual_authentication]
+    })
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1529,6 +1620,16 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     %{target_groups: result.target_groups}
   end
 
+  @doc false
+  def parse_create_listener(body) do
+    result =
+      xpath(body, ~x"//CreateListenerResult"e,
+        listeners: [~x"./Listeners/member"l | listener_fields()]
+      )
+
+    %{listeners: Enum.map(result.listeners, &coerce_listener/1)}
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1614,6 +1715,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_create_target_group_response(name, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :create_target_group_response
+
+    @doc false
+    defdelegate sandbox_create_listener_response(load_balancer_arn, default_actions, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :create_listener_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1639,6 +1745,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
 
     defp sandbox_create_load_balancer_response(_n, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_target_group_response(_n, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_create_listener_response(_l, _a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

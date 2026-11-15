@@ -257,4 +257,19 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                ElasticLoadBalancingV2.create_target_group("web", sandbox: [enabled: true])
     end
   end
+
+  describe "create_listener/3" do
+    test "keys off the load balancer arn" do
+      Sandbox.set_create_listener_responses([
+        {"arn:lb/1", fn -> {:ok, %{listeners: [%{load_balancer_arn: "arn:lb/1"}]}} end}
+      ])
+
+      assert {:ok, %{listeners: [%{load_balancer_arn: "arn:lb/1"}]}} ===
+               ElasticLoadBalancingV2.create_listener(
+                 "arn:lb/1",
+                 [%{"Type" => "forward", "TargetGroupArn" => "arn:tg/1"}],
+                 sandbox: [enabled: true]
+               )
+    end
+  end
 end

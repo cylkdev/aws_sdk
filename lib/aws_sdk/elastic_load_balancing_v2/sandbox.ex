@@ -184,5 +184,19 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_target_group_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_target_group, entries)
     end
+
+    def create_listener_response(load_balancer_arn, default_actions, opts) do
+      binding = [
+        load_balancer_arn: load_balancer_arn,
+        default_actions: default_actions,
+        opts: opts
+      ]
+
+      Sandbox.apply(@registry, __MODULE__, :create_listener, load_balancer_arn, binding)
+    end
+
+    def set_create_listener_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_listener, entries)
+    end
   end
 end
