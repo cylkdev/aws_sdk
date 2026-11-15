@@ -4442,6 +4442,8 @@ defmodule AwsSDK.EC2 do
 
   ## Options
 
+    * `:availability_zone` - The Availability Zone to place the subnet in,
+      such as `"us-east-2a"`. Without it, EC2 chooses the zone.
     * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
       the evidence a parser test is written from.
 
@@ -4471,7 +4473,7 @@ defmodule AwsSDK.EC2 do
   end
 
   defp do_create_subnet(vpc_id, cidr_block, opts) do
-    params = %{"VpcId" => vpc_id, "CidrBlock" => cidr_block}
+    params = create_subnet_params(vpc_id, cidr_block, opts)
 
     with {:ok, op} <- build_operation("CreateSubnet", params, opts),
          {:ok, %{body: body, headers: headers}} <- Client.request(op) do
@@ -4479,6 +4481,18 @@ defmodule AwsSDK.EC2 do
       {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
     end
   end
+
+  defp create_subnet_params(vpc_id, cidr_block, opts) do
+    maybe_put(
+      %{"VpcId" => vpc_id, "CidrBlock" => cidr_block},
+      "AvailabilityZone",
+      opts[:availability_zone]
+    )
+  end
+
+  @doc false
+  def create_subnet_params_for_test(vpc_id, cidr_block, opts \\ []),
+    do: create_subnet_params(vpc_id, cidr_block, opts)
 
   @doc false
   def parse_create_subnet_for_test(xml), do: parse_create_subnet(xml)

@@ -1790,6 +1790,17 @@ defmodule AwsSDK.ConformanceTest do
     assert expected === AwsSDK.EC2.parse_create_subnet_for_test(xml)
   end
 
+  test "CreateSubnet params send the chosen availability zone" do
+    assert %{
+             "VpcId" => "vpc-1",
+             "CidrBlock" => "10.0.1.0/24",
+             "AvailabilityZone" => "us-east-2a"
+           } ===
+             AwsSDK.EC2.create_subnet_params_for_test("vpc-1", "10.0.1.0/24",
+               availability_zone: "us-east-2a"
+             )
+  end
+
   # The body EC2 answered for a deleted subnet, saved from a real DeleteSubnet call
   # (aws-sandbox, us-east-2).
   test "DeleteSubnet keeps the return flag" do
