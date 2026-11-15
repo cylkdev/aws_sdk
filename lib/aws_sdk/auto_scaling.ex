@@ -955,6 +955,59 @@ defmodule AwsSDK.AutoScaling do
       ),
       do: create_auto_scaling_group_params(auto_scaling_group_name, min_size, max_size, opts)
 
+  @doc """
+  Deletes an Auto Scaling group.
+
+  Maps to AWS `DeleteAutoScalingGroup`. AWS refuses to delete a group that
+  still has instances or scaling activities in progress, unless
+  `:force_delete` is given.
+
+  ## Options
+
+    - `:force_delete` - boolean; when `true`, AWS terminates the group's
+      instances and deletes the group without waiting for them
+    - `:raw_body` - when true, `body` is the XML Auto Scaling answered,
+      unparsed, as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.AutoScaling.delete_auto_scaling_group("web-asg", force_delete: true)
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `DeleteAutoScalingGroup` answers with no members, so `body` is an empty
+  map.
+  """
+  @spec delete_auto_scaling_group(String.t(), keyword) :: {:ok, map} | {:error, term}
+  def delete_auto_scaling_group(auto_scaling_group_name, opts \\ [])
+      when is_binary(auto_scaling_group_name) do
+    if sandbox?(opts) do
+      sandbox_delete_auto_scaling_group_response(auto_scaling_group_name, opts)
+    else
+      do_delete_auto_scaling_group(auto_scaling_group_name, opts)
+    end
+  end
+
+  defp do_delete_auto_scaling_group(auto_scaling_group_name, opts) do
+    params = delete_auto_scaling_group_params(auto_scaling_group_name, opts)
+
+    with {:ok, op} <- build_operation("DeleteAutoScalingGroup", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_delete_auto_scaling_group(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp delete_auto_scaling_group_params(auto_scaling_group_name, opts) do
+    flatten_query(%{
+      "AutoScalingGroupName" => auto_scaling_group_name,
+      "ForceDelete" => opts[:force_delete]
+    })
+  end
+
+  @doc false
+  def delete_auto_scaling_group_params_for_test(auto_scaling_group_name, opts \\ []),
+    do: delete_auto_scaling_group_params(auto_scaling_group_name, opts)
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1598,6 +1651,12 @@ defmodule AwsSDK.AutoScaling do
   # CreateAutoScalingGroup answers with no members.
   defp parse_create_auto_scaling_group(_body), do: %{}
 
+  @doc false
+  def parse_delete_auto_scaling_group_for_test(xml), do: parse_delete_auto_scaling_group(xml)
+
+  # DeleteAutoScalingGroup answers with no members.
+  defp parse_delete_auto_scaling_group(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1682,6 +1741,11 @@ defmodule AwsSDK.AutoScaling do
     defdelegate sandbox_create_auto_scaling_group_response(asg, opts),
       to: AwsSDK.AutoScaling.Sandbox,
       as: :create_auto_scaling_group_response
+
+    @doc false
+    defdelegate sandbox_delete_auto_scaling_group_response(asg, opts),
+      to: AwsSDK.AutoScaling.Sandbox,
+      as: :delete_auto_scaling_group_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1707,6 +1771,7 @@ defmodule AwsSDK.AutoScaling do
 
     defp sandbox_set_desired_capacity_response(_a, _d, _o), do: raise(@sandbox_unavailable)
     defp sandbox_create_auto_scaling_group_response(_a, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_delete_auto_scaling_group_response(_a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

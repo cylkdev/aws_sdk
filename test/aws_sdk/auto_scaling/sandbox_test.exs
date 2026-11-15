@@ -183,4 +183,13 @@ defmodule AwsSDK.AutoScaling.SandboxTest do
                AutoScaling.create_auto_scaling_group("web-asg", 0, 0, sandbox: [enabled: true])
     end
   end
+
+  describe "delete_auto_scaling_group/2" do
+    test "keys off the group name" do
+      Sandbox.set_delete_auto_scaling_group_responses([{"web-asg", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} ===
+               AutoScaling.delete_auto_scaling_group("web-asg", sandbox: [enabled: true])
+    end
+  end
 end

@@ -3010,4 +3010,27 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.AutoScaling.parse_create_auto_scaling_group_for_test(xml)
   end
+
+  test "DeleteAutoScalingGroup params send force_delete" do
+    assert %{"AutoScalingGroupName" => "web-asg", "ForceDelete" => "true"} ===
+             AwsSDK.AutoScaling.delete_auto_scaling_group_params_for_test("web-asg",
+               force_delete: true
+             )
+  end
+
+  # The body Auto Scaling answered for a force-deleted group, saved from a
+  # real DeleteAutoScalingGroup call (aws-sandbox, us-east-2).
+  test "DeleteAutoScalingGroup answers with no members" do
+    xml = """
+    <DeleteAutoScalingGroupResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+      <ResponseMetadata>
+        <RequestId>5be7a8e5-1b48-4ab6-a118-76f1a99ec2db</RequestId>
+      </ResponseMetadata>
+    </DeleteAutoScalingGroupResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.AutoScaling.parse_delete_auto_scaling_group_for_test(xml)
+  end
 end

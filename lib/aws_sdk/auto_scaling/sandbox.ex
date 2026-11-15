@@ -175,5 +175,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_auto_scaling_group_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_auto_scaling_group, entries)
     end
+
+    def delete_auto_scaling_group_response(asg, opts) do
+      binding = [asg: asg, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_auto_scaling_group, asg, binding)
+    end
+
+    def set_delete_auto_scaling_group_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_auto_scaling_group, entries)
+    end
   end
 end
