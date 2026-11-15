@@ -726,4 +726,15 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.delete_route("rtb-1", "0.0.0.0/0", sandbox: [enabled: true])
     end
   end
+
+  describe "create_key_pair/2" do
+    test "keys off the key name" do
+      Sandbox.set_create_key_pair_responses([
+        {"deploy", fn -> {:ok, %{key_name: "deploy", key_pair_id: "key-1"}} end}
+      ])
+
+      assert {:ok, %{key_name: "deploy", key_pair_id: "key-1"}} ===
+               EC2.create_key_pair("deploy", sandbox: [enabled: true])
+    end
+  end
 end

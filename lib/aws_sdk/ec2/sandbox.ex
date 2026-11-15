@@ -522,5 +522,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_route_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_route, entries)
     end
+
+    def create_key_pair_response(key_name, opts) do
+      binding = [key_name: key_name, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_key_pair, key_name, binding)
+    end
+
+    def set_create_key_pair_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_key_pair, entries)
+    end
   end
 end

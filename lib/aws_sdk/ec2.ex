@@ -5047,6 +5047,65 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_delete_route_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Creates a key pair and returns its private key.
+
+  EC2 keeps only the public key. The private key, in `:key_material`, is
+  given once, in this response, and cannot be fetched again.
+
+  ## Arguments
+
+    * `key_name` - A name for the key pair, unique in the region.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_key_pair("deploy")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    key_name: "deploy",
+      #=>    key_fingerprint: "1f:51:ae:28:...",
+      #=>    key_material: "-----BEGIN RSA PRIVATE KEY-----...",
+      #=>    key_pair_id: "key-0abc",
+      #=>    tag_set: []
+      #=>  }, headers: %{...}}}
+  """
+  @spec create_key_pair(key_name :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_key_pair(key_name, opts \\ []) when is_binary(key_name) do
+    if sandbox?(opts) do
+      sandbox_create_key_pair_response(key_name, opts)
+    else
+      do_create_key_pair(key_name, opts)
+    end
+  end
+
+  defp do_create_key_pair(key_name, opts) do
+    with {:ok, op} <- build_operation("CreateKeyPair", %{"KeyName" => key_name}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_key_pair(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_key_pair_for_test(xml), do: parse_create_key_pair(xml)
+
+  defp parse_create_key_pair(body) do
+    xpath(body, ~x"//CreateKeyPairResponse"e,
+      key_name: ~x"./keyName/text()"s,
+      key_fingerprint: ~x"./keyFingerprint/text()"o |> transform_by(&optional_text/1),
+      key_material: ~x"./keyMaterial/text()"o |> transform_by(&optional_text/1),
+      key_pair_id: ~x"./keyPairId/text()"o |> transform_by(&optional_text/1),
+      tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+    )
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5431,6 +5490,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_route_response(route_table_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_route_response
+
+    @doc false
+    defdelegate sandbox_create_key_pair_response(key_name, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_key_pair_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5528,6 +5592,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_route_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_route_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_key_pair_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

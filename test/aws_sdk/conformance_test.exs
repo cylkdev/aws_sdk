@@ -1977,4 +1977,32 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_delete_route_for_test(xml)
   end
+
+  # The body EC2 answered for a new key pair, saved from a real CreateKeyPair
+  # call (aws-sandbox, us-east-2). The private key's lines are replaced with
+  # REDACTED; the key pair was deleted after the call.
+  test "CreateKeyPair keeps the key material" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateKeyPairResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>eb525dde-f4da-493f-ae04-1d691f4b95a5</requestId>
+        <keyName>aws-sdk-capture</keyName>
+        <keyFingerprint>5e:a7:4a:6d:bb:2b:32:d1:74:2d:03:b4:dc:70:fb:07:eb:7f:3a:52</keyFingerprint>
+        <keyMaterial>-----BEGIN RSA PRIVATE KEY-----
+    REDACTED
+    -----END RSA PRIVATE KEY-----</keyMaterial>
+        <keyPairId>key-0dd1e68db9b755b72</keyPairId>
+    </CreateKeyPairResponse>
+    """
+
+    expected = %{
+      key_name: "aws-sdk-capture",
+      key_fingerprint: "5e:a7:4a:6d:bb:2b:32:d1:74:2d:03:b4:dc:70:fb:07:eb:7f:3a:52",
+      key_material: "-----BEGIN RSA PRIVATE KEY-----\nREDACTED\n-----END RSA PRIVATE KEY-----",
+      key_pair_id: "key-0dd1e68db9b755b72",
+      tag_set: []
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_key_pair_for_test(xml)
+  end
 end
