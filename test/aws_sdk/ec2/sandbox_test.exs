@@ -643,4 +643,12 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.create_subnet("vpc-1", "10.0.1.0/24", sandbox: [enabled: true])
     end
   end
+
+  describe "delete_subnet/2" do
+    test "keys off the subnet id" do
+      Sandbox.set_delete_subnet_responses([{"subnet-1", fn -> {:ok, %{return: true}} end}])
+
+      assert {:ok, %{return: true}} === EC2.delete_subnet("subnet-1", sandbox: [enabled: true])
+    end
+  end
 end

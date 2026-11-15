@@ -432,5 +432,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_subnet_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_subnet, entries)
     end
+
+    def delete_subnet_response(subnet_id, opts) do
+      binding = [subnet_id: subnet_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_subnet, subnet_id, binding)
+    end
+
+    def set_delete_subnet_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_subnet, entries)
+    end
   end
 end

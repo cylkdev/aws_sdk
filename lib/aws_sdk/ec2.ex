@@ -4545,6 +4545,48 @@ defmodule AwsSDK.EC2 do
     }
   end
 
+  @doc """
+  Deletes a subnet.
+
+  Every network interface in the subnet, and so every instance launched
+  into it, must be gone first.
+
+  ## Arguments
+
+    * `subnet_id` - The subnet ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.delete_subnet("subnet-9d4a7b6c")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec delete_subnet(subnet_id :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def delete_subnet(subnet_id, opts \\ []) when is_binary(subnet_id) do
+    if sandbox?(opts) do
+      sandbox_delete_subnet_response(subnet_id, opts)
+    else
+      do_delete_subnet(subnet_id, opts)
+    end
+  end
+
+  defp do_delete_subnet(subnet_id, opts) do
+    with {:ok, op} <- build_operation("DeleteSubnet", %{"SubnetId" => subnet_id}, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_delete_subnet_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -4884,6 +4926,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_create_subnet_response(vpc_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :create_subnet_response
+
+    @doc false
+    defdelegate sandbox_delete_subnet_response(subnet_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :delete_subnet_response
   else
     defp sandbox_disabled?, do: true
 
@@ -4963,6 +5010,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_delete_vpc_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_create_subnet_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_delete_subnet_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

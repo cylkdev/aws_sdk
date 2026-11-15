@@ -1789,4 +1789,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.EC2.parse_create_subnet_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted subnet, saved from a real DeleteSubnet call
+  # (aws-sandbox, us-east-2).
+  test "DeleteSubnet keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteSubnetResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>3841fb2e-bac4-46a5-8c57-8f7113efcecb</requestId>
+        <return>true</return>
+    </DeleteSubnetResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_delete_subnet_for_test(xml)
+  end
 end
