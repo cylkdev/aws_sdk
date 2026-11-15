@@ -2879,4 +2879,32 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_register_targets(xml)
   end
+
+  test "DeregisterTargets params send each target" do
+    assert %{
+             "TargetGroupArn" => "arn:tg/1",
+             "Targets.member.1.Id" => "10.0.1.10",
+             "Targets.member.1.Port" => "80"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.deregister_targets_params("arn:tg/1", [
+               %{"Id" => "10.0.1.10", "Port" => 80}
+             ])
+  end
+
+  # The body ELBv2 answered for a deregistered IP target, saved from a real
+  # DeregisterTargets call (aws-sandbox, us-east-2).
+  test "DeregisterTargets answers with no members" do
+    xml = """
+    <DeregisterTargetsResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <DeregisterTargetsResult/>
+      <ResponseMetadata>
+        <RequestId>1e1a97c8-c7d1-4238-9be1-209f5d7433fa</RequestId>
+      </ResponseMetadata>
+    </DeregisterTargetsResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_deregister_targets(xml)
+  end
 end

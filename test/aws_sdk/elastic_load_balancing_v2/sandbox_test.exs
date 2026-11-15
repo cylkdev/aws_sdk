@@ -302,4 +302,17 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                )
     end
   end
+
+  describe "deregister_targets/3" do
+    test "keys off the target group arn" do
+      Sandbox.set_deregister_targets_responses([{"arn:tg/1", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} ===
+               ElasticLoadBalancingV2.deregister_targets(
+                 "arn:tg/1",
+                 [%{"Id" => "10.0.1.10", "Port" => 80}],
+                 sandbox: [enabled: true]
+               )
+    end
+  end
 end
