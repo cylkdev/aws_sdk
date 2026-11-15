@@ -761,4 +761,16 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.delete_launch_template("lt-1", sandbox: [enabled: true])
     end
   end
+
+  describe "run_instances/4" do
+    test "keys off the image id" do
+      Sandbox.set_run_instances_responses([
+        {"ami-1",
+         fn -> {:ok, %{reservation_id: "r-1", instances_set: [%{instance_id: "i-1"}]}} end}
+      ])
+
+      assert {:ok, %{reservation_id: "r-1", instances_set: [%{instance_id: "i-1"}]}} ===
+               EC2.run_instances("ami-1", 1, 1, sandbox: [enabled: true])
+    end
+  end
 end

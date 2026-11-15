@@ -1413,226 +1413,7 @@ defmodule AwsSDK.EC2 do
         reservation_id: ~x"./reservationId/text()"s,
         owner_id: ~x"./ownerId/text()"s,
         requester_id: ~x"./requesterId/text()"o |> transform_by(&optional_text/1),
-        instances_set: [
-          ~x"./instancesSet/item"l,
-          instance_id: ~x"./instanceId/text()"s,
-          image_id: ~x"./imageId/text()"s,
-          instance_type: ~x"./instanceType/text()"s,
-          instance_state: [
-            ~x"./instanceState"o,
-            # Required: No on every EC2 member, so no integer is ever cast
-            # unconditionally in this module.
-            code: ~x"./code/text()"oi,
-            name: ~x"./name/text()"o |> transform_by(&optional_text/1)
-          ],
-          private_ip_address: ~x"./privateIpAddress/text()"s,
-          ip_address: ~x"./ipAddress/text()"s,
-          subnet_id: ~x"./subnetId/text()"s,
-          vpc_id: ~x"./vpcId/text()"s,
-          launch_time: ~x"./launchTime/text()"s,
-          ami_launch_index: ~x"./amiLaunchIndex/text()"oi,
-          private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
-          dns_name: ~x"./dnsName/text()"o |> transform_by(&optional_text/1),
-          reason: ~x"./reason/text()"o |> transform_by(&optional_text/1),
-          key_name: ~x"./keyName/text()"o |> transform_by(&optional_text/1),
-          source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
-          architecture: ~x"./architecture/text()"o |> transform_by(&optional_text/1),
-          root_device_type: ~x"./rootDeviceType/text()"o |> transform_by(&optional_text/1),
-          root_device_name: ~x"./rootDeviceName/text()"o |> transform_by(&optional_text/1),
-          virtualization_type: ~x"./virtualizationType/text()"o |> transform_by(&optional_text/1),
-          client_token: ~x"./clientToken/text()"o |> transform_by(&optional_text/1),
-          hypervisor: ~x"./hypervisor/text()"o |> transform_by(&optional_text/1),
-          ebs_optimized: ~x"./ebsOptimized/text()"o |> transform_by(&optional_text/1),
-          kernel_id: ~x"./kernelId/text()"o |> transform_by(&optional_text/1),
-          ramdisk_id: ~x"./ramdiskId/text()"o |> transform_by(&optional_text/1),
-          platform: ~x"./platform/text()"o |> transform_by(&optional_text/1),
-          platform_details: ~x"./platformDetails/text()"o |> transform_by(&optional_text/1),
-          usage_operation: ~x"./usageOperation/text()"o |> transform_by(&optional_text/1),
-          usage_operation_update_time:
-            ~x"./usageOperationUpdateTime/text()"o |> transform_by(&optional_text/1),
-          sriov_net_support: ~x"./sriovNetSupport/text()"o |> transform_by(&optional_text/1),
-          spot_instance_request_id:
-            ~x"./spotInstanceRequestId/text()"o |> transform_by(&optional_text/1),
-          instance_lifecycle: ~x"./instanceLifecycle/text()"o |> transform_by(&optional_text/1),
-          capacity_reservation_id:
-            ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
-          capacity_block_id: ~x"./capacityBlockId/text()"o |> transform_by(&optional_text/1),
-          boot_mode: ~x"./bootMode/text()"o |> transform_by(&optional_text/1),
-          current_instance_boot_mode:
-            ~x"./currentInstanceBootMode/text()"o |> transform_by(&optional_text/1),
-          ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
-          tpm_support: ~x"./tpmSupport/text()"o |> transform_by(&optional_text/1),
-          outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
-          monitoring: [
-            ~x"./monitoring"o,
-            state: ~x"./state/text()"o |> transform_by(&optional_text/1)
-          ],
-          state_reason: [
-            ~x"./stateReason"o,
-            code: ~x"./code/text()"o |> transform_by(&optional_text/1),
-            message: ~x"./message/text()"o |> transform_by(&optional_text/1)
-          ],
-          iam_instance_profile: [
-            ~x"./iamInstanceProfile"o,
-            arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
-            id: ~x"./id/text()"o |> transform_by(&optional_text/1)
-          ],
-          placement: [
-            ~x"./placement"o,
-            availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
-            group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
-            group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
-            tenancy: ~x"./tenancy/text()"o |> transform_by(&optional_text/1),
-            affinity: ~x"./affinity/text()"o |> transform_by(&optional_text/1),
-            host_id: ~x"./hostId/text()"o |> transform_by(&optional_text/1),
-            host_resource_group_arn:
-              ~x"./hostResourceGroupArn/text()"o |> transform_by(&optional_text/1),
-            availability_zone_id:
-              ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
-            spread_domain: ~x"./spreadDomain/text()"o |> transform_by(&optional_text/1),
-            partition_number: ~x"./partitionNumber/text()"oi
-          ],
-          cpu_options: [
-            ~x"./cpuOptions"o,
-            core_count: ~x"./coreCount/text()"oi,
-            threads_per_core: ~x"./threadsPerCore/text()"oi,
-            amd_sev_snp: ~x"./amdSevSnp/text()"o |> transform_by(&optional_text/1)
-          ],
-          # The docs' Example 9 renders this block in PascalCase; a live
-          # DescribeInstances response uses lowerCamel like every other
-          # structure, so the example is a doc typo.
-          metadata_options: [
-            ~x"./metadataOptions"o,
-            http_tokens: ~x"./httpTokens/text()"o |> transform_by(&optional_text/1),
-            http_endpoint: ~x"./httpEndpoint/text()"o |> transform_by(&optional_text/1),
-            http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"o |> transform_by(&optional_text/1),
-            instance_metadata_tags:
-              ~x"./instanceMetadataTags/text()"o |> transform_by(&optional_text/1),
-            state: ~x"./state/text()"o |> transform_by(&optional_text/1),
-            http_put_response_hop_limit: ~x"./httpPutResponseHopLimit/text()"oi
-          ],
-          enclave_options: [
-            ~x"./enclaveOptions"o,
-            enabled: ~x"./enabled/text()"o |> transform_by(&optional_text/1)
-          ],
-          hibernation_options: [
-            ~x"./hibernationOptions"o,
-            configured: ~x"./configured/text()"o |> transform_by(&optional_text/1)
-          ],
-          maintenance_options: [
-            ~x"./maintenanceOptions"o,
-            auto_recovery: ~x"./autoRecovery/text()"o |> transform_by(&optional_text/1),
-            reboot_migration: ~x"./rebootMigration/text()"o |> transform_by(&optional_text/1)
-          ],
-          private_dns_name_options: [
-            ~x"./privateDnsNameOptions"o,
-            hostname_type: ~x"./hostnameType/text()"o |> transform_by(&optional_text/1),
-            enable_resource_name_dns_a_record:
-              ~x"./enableResourceNameDnsARecord/text()"o |> transform_by(&optional_text/1),
-            enable_resource_name_dns_aaaa_record:
-              ~x"./enableResourceNameDnsAAAARecord/text()"o |> transform_by(&optional_text/1)
-          ],
-          capacity_reservation_specification: [
-            ~x"./capacityReservationSpecification"o,
-            capacity_reservation_preference:
-              ~x"./capacityReservationPreference/text()"o |> transform_by(&optional_text/1),
-            capacity_reservation_target: [
-              ~x"./capacityReservationTarget"o,
-              capacity_reservation_id:
-                ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
-              capacity_reservation_resource_group_arn:
-                ~x"./capacityReservationResourceGroupArn/text()"o
-                |> transform_by(&optional_text/1)
-            ]
-          ],
-          product_codes: [
-            ~x"./productCodes/item"l,
-            product_code: ~x"./productCode/text()"s,
-            type: ~x"./type/text()"o |> transform_by(&optional_text/1)
-          ],
-          block_device_mapping: [
-            ~x"./blockDeviceMapping/item"l,
-            device_name: ~x"./deviceName/text()"s,
-            ebs: [
-              ~x"./ebs"o,
-              volume_id: ~x"./volumeId/text()"o |> transform_by(&optional_text/1),
-              status: ~x"./status/text()"o |> transform_by(&optional_text/1),
-              attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
-              delete_on_termination:
-                ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
-              volume_owner_id: ~x"./volumeOwnerId/text()"o |> transform_by(&optional_text/1),
-              associated_resource:
-                ~x"./associatedResource/text()"o |> transform_by(&optional_text/1),
-              ebs_card_index: ~x"./ebsCardIndex/text()"oi
-            ]
-          ],
-          network_interface_set: [
-            ~x"./networkInterfaceSet/item"l,
-            network_interface_id:
-              ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
-            subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
-            vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
-            description: ~x"./description/text()"o |> transform_by(&optional_text/1),
-            owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
-            status: ~x"./status/text()"o |> transform_by(&optional_text/1),
-            mac_address: ~x"./macAddress/text()"o |> transform_by(&optional_text/1),
-            private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
-            private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
-            source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
-            interface_type: ~x"./interfaceType/text()"o |> transform_by(&optional_text/1),
-            association: [
-              ~x"./association"o,
-              public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
-              public_dns_name: ~x"./publicDnsName/text()"o |> transform_by(&optional_text/1),
-              ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1),
-              carrier_ip: ~x"./carrierIp/text()"o |> transform_by(&optional_text/1),
-              customer_owned_ip: ~x"./customerOwnedIp/text()"o |> transform_by(&optional_text/1)
-            ],
-            attachment: [
-              ~x"./attachment"o,
-              attachment_id: ~x"./attachmentId/text()"o |> transform_by(&optional_text/1),
-              status: ~x"./status/text()"o |> transform_by(&optional_text/1),
-              attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
-              delete_on_termination:
-                ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
-              device_index: ~x"./deviceIndex/text()"oi,
-              network_card_index: ~x"./networkCardIndex/text()"oi,
-              ena_queue_count: ~x"./enaQueueCount/text()"oi
-            ],
-            group_set: [
-              ~x"./groupSet/item"l,
-              group_id: ~x"./groupId/text()"s,
-              group_name: ~x"./groupName/text()"s
-            ],
-            private_ip_addresses_set: [
-              ~x"./privateIpAddressesSet/item"l,
-              private_ip_address:
-                ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
-              private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
-              primary: ~x"./primary/text()"o |> transform_by(&optional_text/1),
-              association: [
-                ~x"./association"o,
-                public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
-                ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1)
-              ]
-            ],
-            ipv6_addresses_set: [
-              ~x"./ipv6AddressesSet/item"l,
-              ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
-              is_primary_ipv6: ~x"./isPrimaryIpv6/text()"o |> transform_by(&optional_text/1)
-            ]
-          ],
-          tag_set: [
-            ~x"./tagSet/item"l,
-            key: ~x"./key/text()"s,
-            value: ~x"./value/text()"s
-          ],
-          group_set: [
-            ~x"./groupSet/item"l,
-            group_id: ~x"./groupId/text()"s,
-            group_name: ~x"./groupName/text()"s
-          ]
-        ]
+        instances_set: [~x"./instancesSet/item"l | instance_fields()]
       )
 
     %{
@@ -1643,6 +1424,237 @@ defmodule AwsSDK.EC2 do
           ~x"//DescribeInstancesResponse/nextToken/text()"o |> transform_by(&optional_text/1)
         )
     }
+  end
+
+  # Instance, as DescribeInstances and RunInstances both return it.
+  defp instance_fields do
+    [
+      instance_id: ~x"./instanceId/text()"s,
+      image_id: ~x"./imageId/text()"s,
+      instance_type: ~x"./instanceType/text()"s,
+      instance_state: [
+        ~x"./instanceState"o,
+        # Required: No on every EC2 member, so no integer is ever cast
+        # unconditionally in this module.
+        code: ~x"./code/text()"oi,
+        name: ~x"./name/text()"o |> transform_by(&optional_text/1)
+      ],
+      private_ip_address: ~x"./privateIpAddress/text()"s,
+      ip_address: ~x"./ipAddress/text()"s,
+      subnet_id: ~x"./subnetId/text()"s,
+      vpc_id: ~x"./vpcId/text()"s,
+      launch_time: ~x"./launchTime/text()"s,
+      ami_launch_index: ~x"./amiLaunchIndex/text()"oi,
+      private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+      dns_name: ~x"./dnsName/text()"o |> transform_by(&optional_text/1),
+      reason: ~x"./reason/text()"o |> transform_by(&optional_text/1),
+      key_name: ~x"./keyName/text()"o |> transform_by(&optional_text/1),
+      source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
+      architecture: ~x"./architecture/text()"o |> transform_by(&optional_text/1),
+      root_device_type: ~x"./rootDeviceType/text()"o |> transform_by(&optional_text/1),
+      root_device_name: ~x"./rootDeviceName/text()"o |> transform_by(&optional_text/1),
+      virtualization_type: ~x"./virtualizationType/text()"o |> transform_by(&optional_text/1),
+      client_token: ~x"./clientToken/text()"o |> transform_by(&optional_text/1),
+      hypervisor: ~x"./hypervisor/text()"o |> transform_by(&optional_text/1),
+      ebs_optimized: ~x"./ebsOptimized/text()"o |> transform_by(&optional_text/1),
+      ena_support: ~x"./enaSupport/text()"o |> transform_by(&optional_text/1),
+      kernel_id: ~x"./kernelId/text()"o |> transform_by(&optional_text/1),
+      ramdisk_id: ~x"./ramdiskId/text()"o |> transform_by(&optional_text/1),
+      platform: ~x"./platform/text()"o |> transform_by(&optional_text/1),
+      platform_details: ~x"./platformDetails/text()"o |> transform_by(&optional_text/1),
+      usage_operation: ~x"./usageOperation/text()"o |> transform_by(&optional_text/1),
+      usage_operation_update_time:
+        ~x"./usageOperationUpdateTime/text()"o |> transform_by(&optional_text/1),
+      sriov_net_support: ~x"./sriovNetSupport/text()"o |> transform_by(&optional_text/1),
+      spot_instance_request_id:
+        ~x"./spotInstanceRequestId/text()"o |> transform_by(&optional_text/1),
+      instance_lifecycle: ~x"./instanceLifecycle/text()"o |> transform_by(&optional_text/1),
+      capacity_reservation_id:
+        ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
+      capacity_block_id: ~x"./capacityBlockId/text()"o |> transform_by(&optional_text/1),
+      boot_mode: ~x"./bootMode/text()"o |> transform_by(&optional_text/1),
+      current_instance_boot_mode:
+        ~x"./currentInstanceBootMode/text()"o |> transform_by(&optional_text/1),
+      ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+      tpm_support: ~x"./tpmSupport/text()"o |> transform_by(&optional_text/1),
+      outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+      monitoring: [
+        ~x"./monitoring"o,
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1)
+      ],
+      state_reason: [
+        ~x"./stateReason"o,
+        code: ~x"./code/text()"o |> transform_by(&optional_text/1),
+        message: ~x"./message/text()"o |> transform_by(&optional_text/1)
+      ],
+      iam_instance_profile: [
+        ~x"./iamInstanceProfile"o,
+        arn: ~x"./arn/text()"o |> transform_by(&optional_text/1),
+        id: ~x"./id/text()"o |> transform_by(&optional_text/1)
+      ],
+      placement: [
+        ~x"./placement"o,
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+        group_name: ~x"./groupName/text()"o |> transform_by(&optional_text/1),
+        group_id: ~x"./groupId/text()"o |> transform_by(&optional_text/1),
+        tenancy: ~x"./tenancy/text()"o |> transform_by(&optional_text/1),
+        affinity: ~x"./affinity/text()"o |> transform_by(&optional_text/1),
+        host_id: ~x"./hostId/text()"o |> transform_by(&optional_text/1),
+        host_resource_group_arn:
+          ~x"./hostResourceGroupArn/text()"o |> transform_by(&optional_text/1),
+        availability_zone_id: ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
+        spread_domain: ~x"./spreadDomain/text()"o |> transform_by(&optional_text/1),
+        partition_number: ~x"./partitionNumber/text()"oi
+      ],
+      cpu_options: [
+        ~x"./cpuOptions"o,
+        core_count: ~x"./coreCount/text()"oi,
+        threads_per_core: ~x"./threadsPerCore/text()"oi,
+        amd_sev_snp: ~x"./amdSevSnp/text()"o |> transform_by(&optional_text/1)
+      ],
+      # The docs' Example 9 renders this block in PascalCase; a live
+      # DescribeInstances response uses lowerCamel like every other
+      # structure, so the example is a doc typo.
+      metadata_options: [
+        ~x"./metadataOptions"o,
+        http_tokens: ~x"./httpTokens/text()"o |> transform_by(&optional_text/1),
+        http_endpoint: ~x"./httpEndpoint/text()"o |> transform_by(&optional_text/1),
+        http_protocol_ipv4: ~x"./httpProtocolIpv4/text()"o |> transform_by(&optional_text/1),
+        http_protocol_ipv6: ~x"./httpProtocolIpv6/text()"o |> transform_by(&optional_text/1),
+        instance_metadata_tags:
+          ~x"./instanceMetadataTags/text()"o |> transform_by(&optional_text/1),
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+        http_put_response_hop_limit: ~x"./httpPutResponseHopLimit/text()"oi
+      ],
+      enclave_options: [
+        ~x"./enclaveOptions"o,
+        enabled: ~x"./enabled/text()"o |> transform_by(&optional_text/1)
+      ],
+      hibernation_options: [
+        ~x"./hibernationOptions"o,
+        configured: ~x"./configured/text()"o |> transform_by(&optional_text/1)
+      ],
+      maintenance_options: [
+        ~x"./maintenanceOptions"o,
+        auto_recovery: ~x"./autoRecovery/text()"o |> transform_by(&optional_text/1),
+        reboot_migration: ~x"./rebootMigration/text()"o |> transform_by(&optional_text/1)
+      ],
+      private_dns_name_options: [
+        ~x"./privateDnsNameOptions"o,
+        hostname_type: ~x"./hostnameType/text()"o |> transform_by(&optional_text/1),
+        enable_resource_name_dns_a_record:
+          ~x"./enableResourceNameDnsARecord/text()"o |> transform_by(&optional_text/1),
+        enable_resource_name_dns_aaaa_record:
+          ~x"./enableResourceNameDnsAAAARecord/text()"o |> transform_by(&optional_text/1)
+      ],
+      capacity_reservation_specification: [
+        ~x"./capacityReservationSpecification"o,
+        capacity_reservation_preference:
+          ~x"./capacityReservationPreference/text()"o |> transform_by(&optional_text/1),
+        capacity_reservation_target: [
+          ~x"./capacityReservationTarget"o,
+          capacity_reservation_id:
+            ~x"./capacityReservationId/text()"o |> transform_by(&optional_text/1),
+          capacity_reservation_resource_group_arn:
+            ~x"./capacityReservationResourceGroupArn/text()"o
+            |> transform_by(&optional_text/1)
+        ]
+      ],
+      product_codes: [
+        ~x"./productCodes/item"l,
+        product_code: ~x"./productCode/text()"s,
+        type: ~x"./type/text()"o |> transform_by(&optional_text/1)
+      ],
+      block_device_mapping: [
+        ~x"./blockDeviceMapping/item"l,
+        device_name: ~x"./deviceName/text()"s,
+        ebs: [
+          ~x"./ebs"o,
+          volume_id: ~x"./volumeId/text()"o |> transform_by(&optional_text/1),
+          status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+          attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
+          delete_on_termination:
+            ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+          volume_owner_id: ~x"./volumeOwnerId/text()"o |> transform_by(&optional_text/1),
+          associated_resource: ~x"./associatedResource/text()"o |> transform_by(&optional_text/1),
+          ebs_card_index: ~x"./ebsCardIndex/text()"oi
+        ]
+      ],
+      network_interface_set: [
+        ~x"./networkInterfaceSet/item"l,
+        network_interface_id: ~x"./networkInterfaceId/text()"o |> transform_by(&optional_text/1),
+        subnet_id: ~x"./subnetId/text()"o |> transform_by(&optional_text/1),
+        vpc_id: ~x"./vpcId/text()"o |> transform_by(&optional_text/1),
+        description: ~x"./description/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+        mac_address: ~x"./macAddress/text()"o |> transform_by(&optional_text/1),
+        private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+        private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+        source_dest_check: ~x"./sourceDestCheck/text()"o |> transform_by(&optional_text/1),
+        interface_type: ~x"./interfaceType/text()"o |> transform_by(&optional_text/1),
+        association: [
+          ~x"./association"o,
+          public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+          public_dns_name: ~x"./publicDnsName/text()"o |> transform_by(&optional_text/1),
+          ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1),
+          carrier_ip: ~x"./carrierIp/text()"o |> transform_by(&optional_text/1),
+          customer_owned_ip: ~x"./customerOwnedIp/text()"o |> transform_by(&optional_text/1)
+        ],
+        attachment: [
+          ~x"./attachment"o,
+          attachment_id: ~x"./attachmentId/text()"o |> transform_by(&optional_text/1),
+          status: ~x"./status/text()"o |> transform_by(&optional_text/1),
+          attach_time: ~x"./attachTime/text()"o |> transform_by(&optional_text/1),
+          delete_on_termination:
+            ~x"./deleteOnTermination/text()"o |> transform_by(&optional_text/1),
+          device_index: ~x"./deviceIndex/text()"oi,
+          network_card_index: ~x"./networkCardIndex/text()"oi,
+          ena_queue_count: ~x"./enaQueueCount/text()"oi
+        ],
+        group_set: [
+          ~x"./groupSet/item"l,
+          group_id: ~x"./groupId/text()"s,
+          group_name: ~x"./groupName/text()"s
+        ],
+        private_ip_addresses_set: [
+          ~x"./privateIpAddressesSet/item"l,
+          private_ip_address: ~x"./privateIpAddress/text()"o |> transform_by(&optional_text/1),
+          private_dns_name: ~x"./privateDnsName/text()"o |> transform_by(&optional_text/1),
+          primary: ~x"./primary/text()"o |> transform_by(&optional_text/1),
+          association: [
+            ~x"./association"o,
+            public_ip: ~x"./publicIp/text()"o |> transform_by(&optional_text/1),
+            ip_owner_id: ~x"./ipOwnerId/text()"o |> transform_by(&optional_text/1)
+          ]
+        ],
+        ipv6_addresses_set: [
+          ~x"./ipv6AddressesSet/item"l,
+          ipv6_address: ~x"./ipv6Address/text()"o |> transform_by(&optional_text/1),
+          is_primary_ipv6: ~x"./isPrimaryIpv6/text()"o |> transform_by(&optional_text/1)
+        ],
+        operator: [
+          ~x"./operator"o,
+          managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+          principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
+        ]
+      ],
+      operator: [
+        ~x"./operator"o,
+        managed: ~x"./managed/text()"o |> transform_by(&optional_text/1),
+        principal: ~x"./principal/text()"o |> transform_by(&optional_text/1)
+      ],
+      tag_set: [
+        ~x"./tagSet/item"l,
+        key: ~x"./key/text()"s,
+        value: ~x"./value/text()"s
+      ],
+      group_set: [
+        ~x"./groupSet/item"l,
+        group_id: ~x"./groupId/text()"s,
+        group_name: ~x"./groupName/text()"s
+      ]
+    ]
   end
 
   @doc """
@@ -5322,6 +5334,107 @@ defmodule AwsSDK.EC2 do
   end
 
   # ---------------------------------------------------------------------------
+  # Instance and image creation
+  # ---------------------------------------------------------------------------
+
+  @doc """
+  Launches instances from an AMI.
+
+  ## Arguments
+
+    * `image_id` - The AMI ID.
+    * `min_count` - The fewest instances to launch. If EC2 cannot launch
+      this many, it launches none.
+    * `max_count` - The most instances to launch.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:instance_type` - The instance type, such as `"t4g.nano"`. Without it,
+      AWS launches its default type, `m1.small`.
+    * `:subnet_id` - The subnet to launch into. Without it, AWS launches into
+      the default VPC.
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.run_instances("ami-0abcdef1234567890", 1, 1, instance_type: "t4g.nano")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    reservation_id: "r-0a1b2c3d",
+      #=>    owner_id: "123456789012",
+      #=>    requester_id: nil,
+      #=>    group_set: [],
+      #=>    instances_set: [
+      #=>      %{
+      #=>        instance_id: "i-1234567890abcdef0",
+      #=>        instance_state: %{code: 0, name: "pending"},
+      #=>        ...
+      #=>      }
+      #=>    ]
+      #=>  }, headers: %{...}}}
+
+  Instances run, and are billed, until they are terminated with
+  `terminate_instances/2`.
+  """
+  @spec run_instances(
+          image_id :: String.t(),
+          min_count :: pos_integer(),
+          max_count :: pos_integer(),
+          opts :: keyword()
+        ) :: {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def run_instances(image_id, min_count, max_count, opts \\ [])
+      when is_binary(image_id) and is_integer(min_count) and is_integer(max_count) do
+    if sandbox?(opts) do
+      sandbox_run_instances_response(image_id, opts)
+    else
+      do_run_instances(image_id, min_count, max_count, opts)
+    end
+  end
+
+  defp do_run_instances(image_id, min_count, max_count, opts) do
+    params = run_instances_params(image_id, min_count, max_count, opts)
+
+    with {:ok, op} <- build_operation("RunInstances", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_run_instances(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp run_instances_params(image_id, min_count, max_count, opts) do
+    %{
+      "ImageId" => image_id,
+      "MinCount" => Integer.to_string(min_count),
+      "MaxCount" => Integer.to_string(max_count)
+    }
+    |> maybe_put("InstanceType", opts[:instance_type])
+    |> maybe_put("SubnetId", opts[:subnet_id])
+  end
+
+  @doc false
+  def run_instances_params_for_test(image_id, min_count, max_count, opts \\ []),
+    do: run_instances_params(image_id, min_count, max_count, opts)
+
+  @doc false
+  def parse_run_instances_for_test(xml), do: parse_run_instances(xml)
+
+  defp parse_run_instances(body) do
+    xpath(body, ~x"//RunInstancesResponse"e,
+      reservation_id: ~x"./reservationId/text()"s,
+      owner_id: ~x"./ownerId/text()"s,
+      requester_id: ~x"./requesterId/text()"o |> transform_by(&optional_text/1),
+      group_set: [
+        ~x"./groupSet/item"l,
+        group_id: ~x"./groupId/text()"s,
+        group_name: ~x"./groupName/text()"s
+      ],
+      instances_set: [~x"./instancesSet/item"l | instance_fields()]
+    )
+  end
+
+  # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
 
@@ -5720,6 +5833,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_launch_template_response(launch_template_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_launch_template_response
+
+    @doc false
+    defdelegate sandbox_run_instances_response(image_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :run_instances_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5823,6 +5941,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_launch_template_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_launch_template_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_run_instances_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------

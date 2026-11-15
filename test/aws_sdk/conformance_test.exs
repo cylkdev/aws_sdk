@@ -2115,4 +2115,287 @@ defmodule AwsSDK.ConformanceTest do
               response: xml
             })} === AwsSDK.EC2.delete_launch_template_result_for_test(xml)
   end
+
+  # The body EC2 answered for one t4g.micro launched into a new subnet, saved
+  # from a real RunInstances call (aws-sandbox, us-east-2).
+  test "RunInstances keeps the reservation and its instances" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <RunInstancesResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>78e54422-f002-4b5a-b651-5046864c73c7</requestId>
+        <reservationId>r-0a12d686848534e50</reservationId>
+        <ownerId>226147735359</ownerId>
+        <groupSet/>
+        <instancesSet>
+            <item>
+                <instanceId>i-0070f1d94117be683</instanceId>
+                <imageId>ami-01d1725cdd0f5b3e3</imageId>
+                <instanceState>
+                    <code>0</code>
+                    <name>pending</name>
+                </instanceState>
+                <privateDnsName>ip-10-0-1-15.us-east-2.compute.internal</privateDnsName>
+                <dnsName></dnsName>
+                <reason></reason>
+                <amiLaunchIndex>0</amiLaunchIndex>
+                <productCodes/>
+                <operator>
+                    <managed>false</managed>
+                </operator>
+                <instanceType>t4g.micro</instanceType>
+                <launchTime>2026-11-15T19:13:42.000Z</launchTime>
+                <placement>
+                    <availabilityZone>us-east-2b</availabilityZone>
+                    <availabilityZoneId>use2-az2</availabilityZoneId>
+                    <groupName></groupName>
+                    <tenancy>default</tenancy>
+                </placement>
+                <monitoring>
+                    <state>disabled</state>
+                </monitoring>
+                <subnetId>subnet-03b6c98919dee3f08</subnetId>
+                <vpcId>vpc-0c7e8dd3e85377b64</vpcId>
+                <privateIpAddress>10.0.1.15</privateIpAddress>
+                <sourceDestCheck>true</sourceDestCheck>
+                <groupSet>
+                    <item>
+                        <groupId>sg-030877fa4522e558d</groupId>
+                        <groupName>default</groupName>
+                    </item>
+                </groupSet>
+                <stateReason>
+                    <code>pending</code>
+                    <message>pending</message>
+                </stateReason>
+                <architecture>arm64</architecture>
+                <rootDeviceType>ebs</rootDeviceType>
+                <rootDeviceName>/dev/xvda</rootDeviceName>
+                <blockDeviceMapping/>
+                <virtualizationType>hvm</virtualizationType>
+                <clientToken></clientToken>
+                <hypervisor>xen</hypervisor>
+                <networkInterfaceSet>
+                    <item>
+                        <networkInterfaceId>eni-045b570f19fcd9708</networkInterfaceId>
+                        <subnetId>subnet-03b6c98919dee3f08</subnetId>
+                        <vpcId>vpc-0c7e8dd3e85377b64</vpcId>
+                        <description></description>
+                        <ownerId>226147735359</ownerId>
+                        <status>in-use</status>
+                        <macAddress>06:ff:e0:c9:09:51</macAddress>
+                        <privateIpAddress>10.0.1.15</privateIpAddress>
+                        <sourceDestCheck>true</sourceDestCheck>
+                        <groupSet>
+                            <item>
+                                <groupId>sg-030877fa4522e558d</groupId>
+                                <groupName>default</groupName>
+                            </item>
+                        </groupSet>
+                        <attachment>
+                            <attachmentId>eni-attach-02eb84fdca8394691</attachmentId>
+                            <deviceIndex>0</deviceIndex>
+                            <status>attaching</status>
+                            <attachTime>2026-11-15T19:13:42.000Z</attachTime>
+                            <deleteOnTermination>true</deleteOnTermination>
+                            <networkCardIndex>0</networkCardIndex>
+                        </attachment>
+                        <privateIpAddressesSet>
+                            <item>
+                                <privateIpAddress>10.0.1.15</privateIpAddress>
+                                <primary>true</primary>
+                            </item>
+                        </privateIpAddressesSet>
+                        <ipv6AddressesSet/>
+                        <interfaceType>interface</interfaceType>
+                        <operator>
+                            <managed>false</managed>
+                        </operator>
+                    </item>
+                </networkInterfaceSet>
+                <ebsOptimized>false</ebsOptimized>
+                <enaSupport>true</enaSupport>
+                <cpuOptions>
+                    <coreCount>2</coreCount>
+                    <threadsPerCore>1</threadsPerCore>
+                </cpuOptions>
+                <capacityReservationSpecification>
+                    <capacityReservationPreference>open</capacityReservationPreference>
+                </capacityReservationSpecification>
+                <enclaveOptions>
+                    <enabled>false</enabled>
+                </enclaveOptions>
+                <metadataOptions>
+                    <state>pending</state>
+                    <httpTokens>required</httpTokens>
+                    <httpPutResponseHopLimit>2</httpPutResponseHopLimit>
+                    <httpEndpoint>enabled</httpEndpoint>
+                    <httpProtocolIpv4>enabled</httpProtocolIpv4>
+                    <httpProtocolIpv6>disabled</httpProtocolIpv6>
+                    <instanceMetadataTags>disabled</instanceMetadataTags>
+                </metadataOptions>
+                <maintenanceOptions>
+                    <autoRecovery>default</autoRecovery>
+                    <rebootMigration>default</rebootMigration>
+                </maintenanceOptions>
+                <bootMode>uefi</bootMode>
+                <currentInstanceBootMode>uefi</currentInstanceBootMode>
+                <privateDnsNameOptions>
+                    <hostnameType>ip-name</hostnameType>
+                    <enableResourceNameDnsARecord>false</enableResourceNameDnsARecord>
+                    <enableResourceNameDnsAAAARecord>false</enableResourceNameDnsAAAARecord>
+                </privateDnsNameOptions>
+            </item>
+        </instancesSet>
+    </RunInstancesResponse>
+    """
+
+    expected = %{
+      group_set: [],
+      instances_set: [
+        %{
+          ami_launch_index: 0,
+          architecture: "arm64",
+          block_device_mapping: [],
+          boot_mode: "uefi",
+          capacity_block_id: nil,
+          capacity_reservation_id: nil,
+          capacity_reservation_specification: %{
+            capacity_reservation_preference: "open",
+            capacity_reservation_target: nil
+          },
+          client_token: nil,
+          cpu_options: %{amd_sev_snp: nil, core_count: 2, threads_per_core: 1},
+          current_instance_boot_mode: "uefi",
+          dns_name: nil,
+          ebs_optimized: "false",
+          ena_support: "true",
+          enclave_options: %{enabled: "false"},
+          group_set: [%{group_id: "sg-030877fa4522e558d", group_name: "default"}],
+          hibernation_options: nil,
+          hypervisor: "xen",
+          iam_instance_profile: nil,
+          image_id: "ami-01d1725cdd0f5b3e3",
+          instance_id: "i-0070f1d94117be683",
+          instance_lifecycle: nil,
+          instance_state: %{code: 0, name: "pending"},
+          instance_type: "t4g.micro",
+          ip_address: "",
+          ipv6_address: nil,
+          kernel_id: nil,
+          key_name: nil,
+          launch_time: "2026-11-15T19:13:42.000Z",
+          maintenance_options: %{
+            auto_recovery: "default",
+            reboot_migration: "default"
+          },
+          metadata_options: %{
+            http_endpoint: "enabled",
+            http_protocol_ipv4: "enabled",
+            http_protocol_ipv6: "disabled",
+            http_put_response_hop_limit: 2,
+            http_tokens: "required",
+            instance_metadata_tags: "disabled",
+            state: "pending"
+          },
+          monitoring: %{state: "disabled"},
+          network_interface_set: [
+            %{
+              association: nil,
+              attachment: %{
+                attach_time: "2026-11-15T19:13:42.000Z",
+                attachment_id: "eni-attach-02eb84fdca8394691",
+                delete_on_termination: "true",
+                device_index: 0,
+                ena_queue_count: nil,
+                network_card_index: 0,
+                status: "attaching"
+              },
+              description: nil,
+              group_set: [
+                %{group_id: "sg-030877fa4522e558d", group_name: "default"}
+              ],
+              interface_type: "interface",
+              ipv6_addresses_set: [],
+              mac_address: "06:ff:e0:c9:09:51",
+              network_interface_id: "eni-045b570f19fcd9708",
+              operator: %{managed: "false", principal: nil},
+              owner_id: "226147735359",
+              private_dns_name: nil,
+              private_ip_address: "10.0.1.15",
+              private_ip_addresses_set: [
+                %{
+                  association: nil,
+                  primary: "true",
+                  private_dns_name: nil,
+                  private_ip_address: "10.0.1.15"
+                }
+              ],
+              source_dest_check: "true",
+              status: "in-use",
+              subnet_id: "subnet-03b6c98919dee3f08",
+              vpc_id: "vpc-0c7e8dd3e85377b64"
+            }
+          ],
+          operator: %{managed: "false", principal: nil},
+          outpost_arn: nil,
+          placement: %{
+            affinity: nil,
+            availability_zone: "us-east-2b",
+            availability_zone_id: "use2-az2",
+            group_id: nil,
+            group_name: nil,
+            host_id: nil,
+            host_resource_group_arn: nil,
+            partition_number: nil,
+            spread_domain: nil,
+            tenancy: "default"
+          },
+          platform: nil,
+          platform_details: nil,
+          private_dns_name: "ip-10-0-1-15.us-east-2.compute.internal",
+          private_dns_name_options: %{
+            enable_resource_name_dns_a_record: "false",
+            enable_resource_name_dns_aaaa_record: "false",
+            hostname_type: "ip-name"
+          },
+          private_ip_address: "10.0.1.15",
+          product_codes: [],
+          ramdisk_id: nil,
+          reason: nil,
+          root_device_name: "/dev/xvda",
+          root_device_type: "ebs",
+          source_dest_check: "true",
+          spot_instance_request_id: nil,
+          sriov_net_support: nil,
+          state_reason: %{code: "pending", message: "pending"},
+          subnet_id: "subnet-03b6c98919dee3f08",
+          tag_set: [],
+          tpm_support: nil,
+          usage_operation: nil,
+          usage_operation_update_time: nil,
+          virtualization_type: "hvm",
+          vpc_id: "vpc-0c7e8dd3e85377b64"
+        }
+      ],
+      owner_id: "226147735359",
+      requester_id: nil,
+      reservation_id: "r-0a12d686848534e50"
+    }
+
+    assert expected === AwsSDK.EC2.parse_run_instances_for_test(xml)
+  end
+
+  test "RunInstances params send the counts and the chosen options" do
+    assert %{
+             "ImageId" => "ami-1",
+             "MinCount" => "1",
+             "MaxCount" => "2",
+             "InstanceType" => "t4g.nano",
+             "SubnetId" => "subnet-1"
+           } ===
+             AwsSDK.EC2.run_instances_params_for_test("ami-1", 1, 2,
+               instance_type: "t4g.nano",
+               subnet_id: "subnet-1"
+             )
+  end
 end
