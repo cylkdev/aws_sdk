@@ -18,9 +18,9 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   identifier is `elasticloadbalancing` and the API version is
   `2015-12-01`.
 
-  `modify_rule/3` and `modify_listener/3` are the only mutating
-  operations; load balancers, listeners, and target groups are expected
-  to be declared elsewhere (e.g. terraform) and otherwise only read here.
+  Load balancers, listeners, rules, and target groups can be created and
+  deleted here, targets registered and deregistered, and rules and
+  listeners modified with `modify_rule/3` and `modify_listener/3`.
 
   Where AWS accepts one of several mutually exclusive selectors, each is
   its own function, because each sends a different wire parameter --
