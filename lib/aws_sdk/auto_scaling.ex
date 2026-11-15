@@ -822,6 +822,139 @@ defmodule AwsSDK.AutoScaling do
     end
   end
 
+  @doc """
+  Creates an Auto Scaling group.
+
+  Maps to AWS `CreateAutoScalingGroup`. The group launches instances
+  until it holds its desired capacity, which is `min_size` unless
+  `:desired_capacity` is given.
+
+  ## Arguments
+
+    - `auto_scaling_group_name` - the group name, unique in the account and
+      region
+    - `min_size` - the fewest instances the group holds
+    - `max_size` - the most instances the group holds
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+  AWS requires one of `:launch_template`, `:mixed_instances_policy`,
+  `:launch_configuration_name` or `:instance_id`.
+
+    - `:launch_template` - map, e.g.
+      `%{"LaunchTemplateId" => "lt-1", "Version" => "$Latest"}`
+    - `:mixed_instances_policy` - map passed verbatim to AWS
+      `MixedInstancesPolicy`
+    - `:launch_configuration_name` - a launch configuration name
+    - `:instance_id` - an instance to copy the configuration from
+    - `:desired_capacity` - integer
+    - `:default_cooldown` - seconds between scaling activities
+    - `:availability_zones` - list of zone names
+    - `:vpc_zone_identifier` - comma-separated subnet IDs
+    - `:load_balancer_names` - list of Classic Load Balancer names
+    - `:target_group_arns` - list of target group ARNs
+    - `:traffic_sources` - list of `%{"Identifier" => ..., "Type" => ...}` maps
+    - `:health_check_type` - e.g. `"EC2"` or `"ELB"`
+    - `:health_check_grace_period` - seconds
+    - `:placement_group` - a placement group name
+    - `:termination_policies` - list of policy names
+    - `:new_instances_protected_from_scale_in` - boolean
+    - `:capacity_rebalance` - boolean
+    - `:lifecycle_hook_specification_list` - list of lifecycle hook maps
+    - `:tags` - list of tag maps, e.g.
+      `[%{"Key" => "team", "Value" => "web", "PropagateAtLaunch" => true}]`
+    - `:service_linked_role_arn` - the service-linked role the group uses
+    - `:max_instance_lifetime` - seconds
+    - `:context` - reserved by AWS
+    - `:desired_capacity_type` - `"units"`, `"vcpu"` or `"memory-mib"`
+    - `:default_instance_warmup` - seconds
+    - `:instance_maintenance_policy` - map
+    - `:availability_zone_distribution` - map
+    - `:availability_zone_impairment_policy` - map
+    - `:skip_zonal_shift_validation` - boolean
+    - `:capacity_reservation_specification` - map
+    - `:raw_body` - when true, `body` is the XML Auto Scaling answered,
+      unparsed, as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.AutoScaling.create_auto_scaling_group("web-asg", 1, 3,
+        launch_template: %{"LaunchTemplateId" => "lt-0a1b2c3d", "Version" => "$Latest"},
+        vpc_zone_identifier: "subnet-1a2b3c4d,subnet-5e6f7a8b"
+      )
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `CreateAutoScalingGroup` answers with no members, so `body` is an empty
+  map.
+  """
+  @spec create_auto_scaling_group(String.t(), integer, integer, keyword) ::
+          {:ok, map} | {:error, term}
+  def create_auto_scaling_group(auto_scaling_group_name, min_size, max_size, opts \\ [])
+      when is_binary(auto_scaling_group_name) and is_integer(min_size) and is_integer(max_size) do
+    if sandbox?(opts) do
+      sandbox_create_auto_scaling_group_response(auto_scaling_group_name, opts)
+    else
+      do_create_auto_scaling_group(auto_scaling_group_name, min_size, max_size, opts)
+    end
+  end
+
+  defp do_create_auto_scaling_group(auto_scaling_group_name, min_size, max_size, opts) do
+    params = create_auto_scaling_group_params(auto_scaling_group_name, min_size, max_size, opts)
+
+    with {:ok, op} <- build_operation("CreateAutoScalingGroup", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_auto_scaling_group(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  defp create_auto_scaling_group_params(auto_scaling_group_name, min_size, max_size, opts) do
+    flatten_query(%{
+      "AutoScalingGroupName" => auto_scaling_group_name,
+      "MinSize" => min_size,
+      "MaxSize" => max_size,
+      "LaunchTemplate" => opts[:launch_template],
+      "MixedInstancesPolicy" => opts[:mixed_instances_policy],
+      "LaunchConfigurationName" => opts[:launch_configuration_name],
+      "InstanceId" => opts[:instance_id],
+      "DesiredCapacity" => opts[:desired_capacity],
+      "DefaultCooldown" => opts[:default_cooldown],
+      "AvailabilityZones" => opts[:availability_zones],
+      "VPCZoneIdentifier" => opts[:vpc_zone_identifier],
+      "LoadBalancerNames" => opts[:load_balancer_names],
+      "TargetGroupARNs" => opts[:target_group_arns],
+      "TrafficSources" => opts[:traffic_sources],
+      "HealthCheckType" => opts[:health_check_type],
+      "HealthCheckGracePeriod" => opts[:health_check_grace_period],
+      "PlacementGroup" => opts[:placement_group],
+      "TerminationPolicies" => opts[:termination_policies],
+      "NewInstancesProtectedFromScaleIn" => opts[:new_instances_protected_from_scale_in],
+      "CapacityRebalance" => opts[:capacity_rebalance],
+      "LifecycleHookSpecificationList" => opts[:lifecycle_hook_specification_list],
+      "Tags" => opts[:tags],
+      "ServiceLinkedRoleARN" => opts[:service_linked_role_arn],
+      "MaxInstanceLifetime" => opts[:max_instance_lifetime],
+      "Context" => opts[:context],
+      "DesiredCapacityType" => opts[:desired_capacity_type],
+      "DefaultInstanceWarmup" => opts[:default_instance_warmup],
+      "InstanceMaintenancePolicy" => opts[:instance_maintenance_policy],
+      "AvailabilityZoneDistribution" => opts[:availability_zone_distribution],
+      "AvailabilityZoneImpairmentPolicy" => opts[:availability_zone_impairment_policy],
+      "SkipZonalShiftValidation" => opts[:skip_zonal_shift_validation],
+      "CapacityReservationSpecification" => opts[:capacity_reservation_specification]
+    })
+  end
+
+  @doc false
+  def create_auto_scaling_group_params_for_test(
+        auto_scaling_group_name,
+        min_size,
+        max_size,
+        opts \\ []
+      ),
+      do: create_auto_scaling_group_params(auto_scaling_group_name, min_size, max_size, opts)
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1459,6 +1592,12 @@ defmodule AwsSDK.AutoScaling do
     %{activity: activity}
   end
 
+  @doc false
+  def parse_create_auto_scaling_group_for_test(xml), do: parse_create_auto_scaling_group(xml)
+
+  # CreateAutoScalingGroup answers with no members.
+  defp parse_create_auto_scaling_group(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1538,6 +1677,11 @@ defmodule AwsSDK.AutoScaling do
     defdelegate sandbox_set_desired_capacity_response(asg, desired, opts),
       to: AwsSDK.AutoScaling.Sandbox,
       as: :set_desired_capacity_response
+
+    @doc false
+    defdelegate sandbox_create_auto_scaling_group_response(asg, opts),
+      to: AwsSDK.AutoScaling.Sandbox,
+      as: :create_auto_scaling_group_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1562,6 +1706,7 @@ defmodule AwsSDK.AutoScaling do
       do: raise(@sandbox_unavailable)
 
     defp sandbox_set_desired_capacity_response(_a, _d, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_create_auto_scaling_group_response(_a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

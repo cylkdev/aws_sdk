@@ -165,5 +165,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_set_desired_capacity_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :set_desired_capacity, entries)
     end
+
+    def create_auto_scaling_group_response(asg, opts) do
+      binding = [asg: asg, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_auto_scaling_group, asg, binding)
+    end
+
+    def set_create_auto_scaling_group_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_auto_scaling_group, entries)
+    end
   end
 end

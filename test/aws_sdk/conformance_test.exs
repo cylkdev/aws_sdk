@@ -2975,4 +2975,39 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_target_group(xml)
   end
+
+  test "CreateAutoScalingGroup params send the sizes and the chosen options" do
+    assert %{
+             "AutoScalingGroupName" => "web-asg",
+             "MinSize" => "0",
+             "MaxSize" => "2",
+             "DesiredCapacity" => "1",
+             "LaunchTemplate.LaunchTemplateId" => "lt-1",
+             "LaunchTemplate.Version" => "$Latest",
+             "VPCZoneIdentifier" => "subnet-1,subnet-2",
+             "TargetGroupARNs.member.1" => "arn:tg/1"
+           } ===
+             AwsSDK.AutoScaling.create_auto_scaling_group_params_for_test("web-asg", 0, 2,
+               desired_capacity: 1,
+               launch_template: %{"LaunchTemplateId" => "lt-1", "Version" => "$Latest"},
+               vpc_zone_identifier: "subnet-1,subnet-2",
+               target_group_arns: ["arn:tg/1"]
+             )
+  end
+
+  # The body Auto Scaling answered for a new group with no instances, saved
+  # from a real CreateAutoScalingGroup call (aws-sandbox, us-east-2).
+  test "CreateAutoScalingGroup answers with no members" do
+    xml = """
+    <CreateAutoScalingGroupResponse xmlns="http://autoscaling.amazonaws.com/doc/2011-01-01/">
+      <ResponseMetadata>
+        <RequestId>059b39fe-dda9-403a-9463-762ecb12f913</RequestId>
+      </ResponseMetadata>
+    </CreateAutoScalingGroupResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.AutoScaling.parse_create_auto_scaling_group_for_test(xml)
+  end
 end

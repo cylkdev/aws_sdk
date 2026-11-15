@@ -174,4 +174,13 @@ defmodule AwsSDK.AutoScaling.SandboxTest do
                )
     end
   end
+
+  describe "create_auto_scaling_group/4" do
+    test "keys off the group name" do
+      Sandbox.set_create_auto_scaling_group_responses([{"web-asg", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} ===
+               AutoScaling.create_auto_scaling_group("web-asg", 0, 0, sandbox: [enabled: true])
+    end
+  end
 end
