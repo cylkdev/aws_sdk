@@ -1860,4 +1860,18 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_detach_internet_gateway_for_test(xml)
   end
+
+  # The body EC2 answered for a deleted internet gateway, saved from a real
+  # DeleteInternetGateway call (aws-sandbox, us-east-2).
+  test "DeleteInternetGateway keeps the return flag" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <DeleteInternetGatewayResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>f0a7f5e3-a1d0-4920-9769-640ac7057820</requestId>
+        <return>true</return>
+    </DeleteInternetGatewayResponse>
+    """
+
+    assert %{return: true} === AwsSDK.EC2.parse_delete_internet_gateway_for_test(xml)
+  end
 end

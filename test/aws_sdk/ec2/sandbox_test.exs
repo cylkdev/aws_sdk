@@ -680,4 +680,13 @@ defmodule AwsSDK.EC2.SandboxTest do
                EC2.detach_internet_gateway("igw-1", "vpc-1", sandbox: [enabled: true])
     end
   end
+
+  describe "delete_internet_gateway/2" do
+    test "keys off the internet gateway ID" do
+      Sandbox.set_delete_internet_gateway_responses([{"igw-1", fn -> {:ok, %{return: true}} end}])
+
+      assert {:ok, %{return: true}} ===
+               EC2.delete_internet_gateway("igw-1", sandbox: [enabled: true])
+    end
+  end
 end

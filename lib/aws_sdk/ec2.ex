@@ -4745,6 +4745,50 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_detach_internet_gateway_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Deletes an internet gateway.
+
+  It must first be detached from its VPC with `detach_internet_gateway/3`.
+
+  ## Arguments
+
+    * `internet_gateway_id` - The internet gateway ID.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.delete_internet_gateway("igw-0a1b2c3d")
+      #=> {:ok, %{body: %{return: true}, headers: %{...}}}
+  """
+  @spec delete_internet_gateway(internet_gateway_id :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def delete_internet_gateway(internet_gateway_id, opts \\ [])
+      when is_binary(internet_gateway_id) do
+    if sandbox?(opts) do
+      sandbox_delete_internet_gateway_response(internet_gateway_id, opts)
+    else
+      do_delete_internet_gateway(internet_gateway_id, opts)
+    end
+  end
+
+  defp do_delete_internet_gateway(internet_gateway_id, opts) do
+    params = %{"InternetGatewayId" => internet_gateway_id}
+
+    with {:ok, op} <- build_operation("DeleteInternetGateway", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_return(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_delete_internet_gateway_for_test(xml), do: parse_return(xml)
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -5104,6 +5148,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_detach_internet_gateway_response(internet_gateway_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :detach_internet_gateway_response
+
+    @doc false
+    defdelegate sandbox_delete_internet_gateway_response(internet_gateway_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :delete_internet_gateway_response
   else
     defp sandbox_disabled?, do: true
 
@@ -5191,6 +5240,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_attach_internet_gateway_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_detach_internet_gateway_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_delete_internet_gateway_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
