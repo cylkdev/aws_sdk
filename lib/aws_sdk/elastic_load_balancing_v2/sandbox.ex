@@ -174,5 +174,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_create_load_balancer_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :create_load_balancer, entries)
     end
+
+    def create_target_group_response(name, opts) do
+      binding = [name: name, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_target_group, name, binding)
+    end
+
+    def set_create_target_group_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_target_group, entries)
+    end
   end
 end

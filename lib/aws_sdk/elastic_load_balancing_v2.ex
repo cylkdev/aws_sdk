@@ -940,6 +940,108 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     })
   end
 
+  @doc """
+  Creates a target group, the set of targets a load balancer routes to.
+
+  Maps to AWS `CreateTargetGroup`.
+
+  ## Arguments
+
+    - `name` - the target group name, unique in the account and region
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:protocol` - e.g. `"HTTP"`, `"HTTPS"`, `"TCP"`
+    - `:protocol_version` - `"HTTP1"`, `"HTTP2"` or `"GRPC"`
+    - `:port` - the port targets receive traffic on
+    - `:vpc_id` - the VPC of the targets (required by AWS unless
+      `:target_type` is `"lambda"`)
+    - `:target_type` - `"instance"` (the AWS default), `"ip"`, `"lambda"` or
+      `"alb"`
+    - `:health_check_protocol`, `:health_check_port`,
+      `:health_check_enabled`, `:health_check_path`,
+      `:health_check_interval_seconds`, `:health_check_timeout_seconds`,
+      `:healthy_threshold_count`, `:unhealthy_threshold_count` - health check
+      settings
+    - `:matcher` - map, e.g. `%{"HttpCode" => "200"}`
+    - `:tags` - list of `%{"Key" => ..., "Value" => ...}` maps
+    - `:ip_address_type` - `"ipv4"` or `"ipv6"`
+    - `:target_control_port` - the port of the target control agent
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.create_target_group("web",
+        protocol: "HTTP",
+        port: 80,
+        vpc_id: "vpc-1a2b3c4d",
+        target_type: "ip"
+      )
+      #=> {:ok,
+      #=>  %{
+      #=>    body: %{
+      #=>      target_groups: [
+      #=>        %{
+      #=>          target_group_arn: "arn:aws:elasticloadbalancing:us-east-1:123456789012:targetgroup/web/73e2d6bc24d8a067",
+      #=>          target_group_name: "web",
+      #=>          protocol: "HTTP",
+      #=>          port: 80,
+      #=>          target_type: "ip",
+      #=>          ...
+      #=>        }
+      #=>      ]
+      #=>    },
+      #=>    headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}
+      #=>  }}
+
+  `CreateTargetGroup` returns the new target group, with no `:next_marker`.
+  """
+  @spec create_target_group(name :: String.t(), opts :: keyword()) ::
+          {:ok, map()} | {:error, term()}
+  def create_target_group(name, opts \\ []) when is_binary(name) do
+    if sandbox?(opts) do
+      sandbox_create_target_group_response(name, opts)
+    else
+      do_create_target_group(name, opts)
+    end
+  end
+
+  defp do_create_target_group(name, opts) do
+    params = create_target_group_params(name, opts)
+
+    with {:ok, op} <- build_operation("CreateTargetGroup", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_target_group(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def create_target_group_params(name, opts) do
+    flatten_query(%{
+      "Name" => name,
+      "Protocol" => opts[:protocol],
+      "ProtocolVersion" => opts[:protocol_version],
+      "Port" => opts[:port],
+      "VpcId" => opts[:vpc_id],
+      "HealthCheckProtocol" => opts[:health_check_protocol],
+      "HealthCheckPort" => opts[:health_check_port],
+      "HealthCheckEnabled" => opts[:health_check_enabled],
+      "HealthCheckPath" => opts[:health_check_path],
+      "HealthCheckIntervalSeconds" => opts[:health_check_interval_seconds],
+      "HealthCheckTimeoutSeconds" => opts[:health_check_timeout_seconds],
+      "HealthyThresholdCount" => opts[:healthy_threshold_count],
+      "UnhealthyThresholdCount" => opts[:unhealthy_threshold_count],
+      "Matcher" => opts[:matcher],
+      "TargetType" => opts[:target_type],
+      "Tags" => opts[:tags],
+      "IpAddressType" => opts[:ip_address_type],
+      "TargetControlPort" => opts[:target_control_port]
+    })
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -993,36 +1095,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   def parse_describe_target_groups(body) do
     result =
       xpath(body, ~x"//DescribeTargetGroupsResult"e,
-        target_groups: [
-          ~x"./TargetGroups/member"l,
-          target_group_arn: ~x"./TargetGroupArn/text()"s,
-          target_group_name: ~x"./TargetGroupName/text()"s,
-          protocol: ~x"./Protocol/text()"o |> transform_by(&optional_text/1),
-          protocol_version: ~x"./ProtocolVersion/text()"o |> transform_by(&optional_text/1),
-          port: ~x"./Port/text()"oi,
-          vpc_id: ~x"./VpcId/text()"o |> transform_by(&optional_text/1),
-          target_type: ~x"./TargetType/text()"o |> transform_by(&optional_text/1),
-          ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
-          target_control_port: ~x"./TargetControlPort/text()"oi,
-          health_check_enabled:
-            ~x"./HealthCheckEnabled/text()"o |> transform_by(&optional_text/1),
-          health_check_protocol:
-            ~x"./HealthCheckProtocol/text()"o |> transform_by(&optional_text/1),
-          # HealthCheckPort is documented as a String, not an Integer -- it
-          # carries "traffic-port" as well as a number.
-          health_check_port: ~x"./HealthCheckPort/text()"o |> transform_by(&optional_text/1),
-          health_check_path: ~x"./HealthCheckPath/text()"o |> transform_by(&optional_text/1),
-          health_check_interval_seconds: ~x"./HealthCheckIntervalSeconds/text()"oi,
-          health_check_timeout_seconds: ~x"./HealthCheckTimeoutSeconds/text()"oi,
-          healthy_threshold_count: ~x"./HealthyThresholdCount/text()"oi,
-          unhealthy_threshold_count: ~x"./UnhealthyThresholdCount/text()"oi,
-          load_balancer_arns: ~x"./LoadBalancerArns/member/text()"sl,
-          matcher: [
-            ~x"./Matcher"o,
-            http_code: ~x"./HttpCode/text()"o |> transform_by(&optional_text/1),
-            grpc_code: ~x"./GrpcCode/text()"o |> transform_by(&optional_text/1)
-          ]
-        ],
+        target_groups: [~x"./TargetGroups/member"l | target_group_fields()],
         next_marker: ~x"./NextMarker/text()"o |> transform_by(&optional_text/1)
       )
 
@@ -1030,6 +1103,38 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       target_groups: result.target_groups,
       next_marker: result.next_marker
     }
+  end
+
+  # Shared by DescribeTargetGroups and CreateTargetGroup -- both return
+  # <TargetGroups><member>.
+  defp target_group_fields do
+    [
+      target_group_arn: ~x"./TargetGroupArn/text()"s,
+      target_group_name: ~x"./TargetGroupName/text()"s,
+      protocol: ~x"./Protocol/text()"o |> transform_by(&optional_text/1),
+      protocol_version: ~x"./ProtocolVersion/text()"o |> transform_by(&optional_text/1),
+      port: ~x"./Port/text()"oi,
+      vpc_id: ~x"./VpcId/text()"o |> transform_by(&optional_text/1),
+      target_type: ~x"./TargetType/text()"o |> transform_by(&optional_text/1),
+      ip_address_type: ~x"./IpAddressType/text()"o |> transform_by(&optional_text/1),
+      target_control_port: ~x"./TargetControlPort/text()"oi,
+      health_check_enabled: ~x"./HealthCheckEnabled/text()"o |> transform_by(&optional_text/1),
+      health_check_protocol: ~x"./HealthCheckProtocol/text()"o |> transform_by(&optional_text/1),
+      # HealthCheckPort is documented as a String, not an Integer -- it
+      # carries "traffic-port" as well as a number.
+      health_check_port: ~x"./HealthCheckPort/text()"o |> transform_by(&optional_text/1),
+      health_check_path: ~x"./HealthCheckPath/text()"o |> transform_by(&optional_text/1),
+      health_check_interval_seconds: ~x"./HealthCheckIntervalSeconds/text()"oi,
+      health_check_timeout_seconds: ~x"./HealthCheckTimeoutSeconds/text()"oi,
+      healthy_threshold_count: ~x"./HealthyThresholdCount/text()"oi,
+      unhealthy_threshold_count: ~x"./UnhealthyThresholdCount/text()"oi,
+      load_balancer_arns: ~x"./LoadBalancerArns/member/text()"sl,
+      matcher: [
+        ~x"./Matcher"o,
+        http_code: ~x"./HttpCode/text()"o |> transform_by(&optional_text/1),
+        grpc_code: ~x"./GrpcCode/text()"o |> transform_by(&optional_text/1)
+      ]
+    ]
   end
 
   @doc false
@@ -1414,6 +1519,16 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     %{load_balancers: result.load_balancers}
   end
 
+  @doc false
+  def parse_create_target_group(body) do
+    result =
+      xpath(body, ~x"//CreateTargetGroupResult"e,
+        target_groups: [~x"./TargetGroups/member"l | target_group_fields()]
+      )
+
+    %{target_groups: result.target_groups}
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1494,6 +1609,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_create_load_balancer_response(name, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :create_load_balancer_response
+
+    @doc false
+    defdelegate sandbox_create_target_group_response(name, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :create_target_group_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1518,6 +1638,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
       do: raise("sandbox not available")
 
     defp sandbox_create_load_balancer_response(_n, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_create_target_group_response(_n, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------

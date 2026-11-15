@@ -246,4 +246,15 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                ElasticLoadBalancingV2.create_load_balancer("web", sandbox: [enabled: true])
     end
   end
+
+  describe "create_target_group/2" do
+    test "keys off the target group name" do
+      Sandbox.set_create_target_group_responses([
+        {"web", fn -> {:ok, %{target_groups: [%{target_group_name: "web"}]}} end}
+      ])
+
+      assert {:ok, %{target_groups: [%{target_group_name: "web"}]}} ===
+               ElasticLoadBalancingV2.create_target_group("web", sandbox: [enabled: true])
+    end
+  end
 end

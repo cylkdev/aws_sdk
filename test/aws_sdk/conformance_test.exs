@@ -2544,4 +2544,90 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_load_balancer(xml)
   end
+
+  test "CreateTargetGroup params send the chosen options" do
+    assert %{
+             "Name" => "web",
+             "Protocol" => "HTTP",
+             "Port" => "80",
+             "VpcId" => "vpc-1",
+             "TargetType" => "ip",
+             "HealthCheckPath" => "/health",
+             "Matcher.HttpCode" => "200"
+           } ===
+             AwsSDK.ElasticLoadBalancingV2.create_target_group_params("web",
+               protocol: "HTTP",
+               port: 80,
+               vpc_id: "vpc-1",
+               target_type: "ip",
+               health_check_path: "/health",
+               matcher: %{"HttpCode" => "200"}
+             )
+  end
+
+  # The body ELBv2 answered for a new IP target group, saved from a real
+  # CreateTargetGroup call (aws-sandbox, us-east-2).
+  test "CreateTargetGroup keeps the created target group" do
+    xml = """
+    <CreateTargetGroupResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <CreateTargetGroupResult>
+        <TargetGroups>
+          <member>
+            <HealthCheckEnabled>true</HealthCheckEnabled>
+            <TargetGroupArn>arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605</TargetGroupArn>
+            <HealthCheckTimeoutSeconds>5</HealthCheckTimeoutSeconds>
+            <HealthCheckPort>traffic-port</HealthCheckPort>
+            <TargetType>ip</TargetType>
+            <Matcher>
+              <HttpCode>200</HttpCode>
+            </Matcher>
+            <HealthCheckProtocol>HTTP</HealthCheckProtocol>
+            <TargetGroupName>aws-sdk-capture</TargetGroupName>
+            <IpAddressType>ipv4</IpAddressType>
+            <Protocol>HTTP</Protocol>
+            <HealthCheckPath>/</HealthCheckPath>
+            <Port>80</Port>
+            <VpcId>vpc-0ac91d5c22359eaa6</VpcId>
+            <HealthyThresholdCount>5</HealthyThresholdCount>
+            <HealthCheckIntervalSeconds>30</HealthCheckIntervalSeconds>
+            <ProtocolVersion>HTTP1</ProtocolVersion>
+            <UnhealthyThresholdCount>2</UnhealthyThresholdCount>
+          </member>
+        </TargetGroups>
+      </CreateTargetGroupResult>
+      <ResponseMetadata>
+        <RequestId>86104d42-2e50-4ab2-bb9b-45b89f48566c</RequestId>
+      </ResponseMetadata>
+    </CreateTargetGroupResponse>
+    """
+
+    expected = %{
+      target_groups: [
+        %{
+          target_group_arn:
+            "arn:aws:elasticloadbalancing:us-east-2:226147735359:targetgroup/aws-sdk-capture/534869aed396b605",
+          target_group_name: "aws-sdk-capture",
+          protocol: "HTTP",
+          protocol_version: "HTTP1",
+          port: 80,
+          vpc_id: "vpc-0ac91d5c22359eaa6",
+          target_type: "ip",
+          ip_address_type: "ipv4",
+          target_control_port: nil,
+          health_check_enabled: "true",
+          health_check_protocol: "HTTP",
+          health_check_port: "traffic-port",
+          health_check_path: "/",
+          health_check_interval_seconds: 30,
+          health_check_timeout_seconds: 5,
+          healthy_threshold_count: 5,
+          unhealthy_threshold_count: 2,
+          load_balancer_arns: [],
+          matcher: %{http_code: "200", grpc_code: nil}
+        }
+      ]
+    }
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_create_target_group(xml)
+  end
 end
