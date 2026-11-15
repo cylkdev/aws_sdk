@@ -315,4 +315,12 @@ defmodule AwsSDK.ElasticLoadBalancingV2.SandboxTest do
                )
     end
   end
+
+  describe "delete_rule/2" do
+    test "keys off the rule arn" do
+      Sandbox.set_delete_rule_responses([{"arn:1", fn -> {:ok, %{}} end}])
+
+      assert {:ok, %{}} === ElasticLoadBalancingV2.delete_rule("arn:1", sandbox: [enabled: true])
+    end
+  end
 end

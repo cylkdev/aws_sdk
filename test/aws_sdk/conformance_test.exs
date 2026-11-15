@@ -2907,4 +2907,21 @@ defmodule AwsSDK.ConformanceTest do
 
     assert expected === AwsSDK.ElasticLoadBalancingV2.parse_deregister_targets(xml)
   end
+
+  # The body ELBv2 answered for a deleted rule, saved from a real
+  # DeleteRule call (aws-sandbox, us-east-2).
+  test "DeleteRule answers with no members" do
+    xml = """
+    <DeleteRuleResponse xmlns="http://elasticloadbalancing.amazonaws.com/doc/2015-12-01/">
+      <DeleteRuleResult/>
+      <ResponseMetadata>
+        <RequestId>0e0f855a-9318-4b9f-a726-c20b2af6b111</RequestId>
+      </ResponseMetadata>
+    </DeleteRuleResponse>
+    """
+
+    expected = %{}
+
+    assert expected === AwsSDK.ElasticLoadBalancingV2.parse_delete_rule(xml)
+  end
 end

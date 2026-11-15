@@ -234,5 +234,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_deregister_targets_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :deregister_targets, entries)
     end
+
+    def delete_rule_response(rule_arn, opts) do
+      binding = [rule_arn: rule_arn, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :delete_rule, rule_arn, binding)
+    end
+
+    def set_delete_rule_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :delete_rule, entries)
+    end
   end
 end

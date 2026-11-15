@@ -1331,6 +1331,49 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     flatten_query(%{"TargetGroupArn" => target_group_arn, "Targets" => targets})
   end
 
+  @doc """
+  Deletes a rule from its listener.
+
+  Maps to AWS `DeleteRule`.
+
+  ## Arguments
+
+    - `rule_arn` - the rule to delete; a listener's default rule cannot be deleted
+    - `opts` - options below, plus shared credentials / region / endpoint
+
+  ## Options
+
+    - `:raw_body` - when true, `body` is the XML ELBv2 answered, unparsed,
+      as the evidence a parser test is written from
+
+  ## Examples
+
+      AwsSDK.ElasticLoadBalancingV2.delete_rule(
+        "arn:aws:elasticloadbalancing:us-east-1:123456789012:listener-rule/app/web/50dc6c495c0c9188/f2f7dc8efc522ab2/9683b2d02a6cba17"
+      )
+      #=> {:ok, %{body: %{}, headers: %{x_amzn_request_id: "c6c8a2a1-EXAMPLE", content_type: "text/xml"}}}
+
+  `DeleteRule` answers with no members, so `body` is an empty map.
+  """
+  @spec delete_rule(rule_arn :: String.t(), opts :: keyword()) :: {:ok, map()} | {:error, term()}
+  def delete_rule(rule_arn, opts \\ []) when is_binary(rule_arn) do
+    if sandbox?(opts) do
+      sandbox_delete_rule_response(rule_arn, opts)
+    else
+      do_delete_rule(rule_arn, opts)
+    end
+  end
+
+  defp do_delete_rule(rule_arn, opts) do
+    params = %{"RuleArn" => rule_arn}
+
+    with {:ok, op} <- build_operation("DeleteRule", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_delete_rule(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
   # ---------------------------------------------------------------------------
   # Request building
   # ---------------------------------------------------------------------------
@@ -1844,6 +1887,10 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
   @doc false
   def parse_deregister_targets(_body), do: %{}
 
+  # DeleteRuleResult has no members.
+  @doc false
+  def parse_delete_rule(_body), do: %{}
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -1949,6 +1996,11 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defdelegate sandbox_deregister_targets_response(target_group_arn, targets, opts),
       to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
       as: :deregister_targets_response
+
+    @doc false
+    defdelegate sandbox_delete_rule_response(rule_arn, opts),
+      to: AwsSDK.ElasticLoadBalancingV2.Sandbox,
+      as: :delete_rule_response
   else
     @sandbox_unavailable "sandbox not available; add :sandbox_registry as a dep"
 
@@ -1978,6 +2030,7 @@ defmodule AwsSDK.ElasticLoadBalancingV2 do
     defp sandbox_create_rule_response(_l, _c, _p, _a, _o), do: raise(@sandbox_unavailable)
     defp sandbox_register_targets_response(_g, _t, _o), do: raise(@sandbox_unavailable)
     defp sandbox_deregister_targets_response(_g, _t, _o), do: raise(@sandbox_unavailable)
+    defp sandbox_delete_rule_response(_a, _o), do: raise(@sandbox_unavailable)
   end
 
   # ---------------------------------------------------------------------------
