@@ -632,4 +632,15 @@ defmodule AwsSDK.EC2.SandboxTest do
       assert {:ok, %{return: true}} === EC2.delete_vpc("vpc-1", sandbox: [enabled: true])
     end
   end
+
+  describe "create_subnet/3" do
+    test "keys off the VPC id" do
+      Sandbox.set_create_subnet_responses([
+        {"vpc-1", fn -> {:ok, %{subnet: %{subnet_id: "subnet-1"}}} end}
+      ])
+
+      assert {:ok, %{subnet: %{subnet_id: "subnet-1"}}} ===
+               EC2.create_subnet("vpc-1", "10.0.1.0/24", sandbox: [enabled: true])
+    end
+  end
 end

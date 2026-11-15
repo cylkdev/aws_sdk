@@ -422,5 +422,15 @@ if Code.ensure_loaded?(SandboxRegistry) do
     def set_delete_vpc_responses(entries) do
       Sandbox.register(@registry, __MODULE__, :delete_vpc, entries)
     end
+
+    def create_subnet_response(vpc_id, opts) do
+      binding = [vpc_id: vpc_id, opts: opts]
+
+      Sandbox.apply(@registry, __MODULE__, :create_subnet, vpc_id, binding)
+    end
+
+    def set_create_subnet_responses(entries) do
+      Sandbox.register(@registry, __MODULE__, :create_subnet, entries)
+    end
   end
 end

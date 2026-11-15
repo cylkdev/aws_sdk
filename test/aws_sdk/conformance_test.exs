@@ -1721,4 +1721,72 @@ defmodule AwsSDK.ConformanceTest do
 
     assert %{return: true} === AwsSDK.EC2.parse_delete_vpc_for_test(xml)
   end
+
+  # The body EC2 answered for a new subnet, saved from a real CreateSubnet call
+  # (aws-sandbox, us-east-2).
+  test "CreateSubnet keeps the created subnet" do
+    xml = """
+    <?xml version="1.0" encoding="UTF-8"?>
+    <CreateSubnetResponse xmlns="http://ec2.amazonaws.com/doc/2016-11-15/">
+        <requestId>4a3c0e2c-9086-4e85-80d1-928f61d20e1b</requestId>
+        <subnet>
+            <subnetId>subnet-091916da4ab073d4a</subnetId>
+            <subnetArn>arn:aws:ec2:us-east-2:226147735359:subnet/subnet-091916da4ab073d4a</subnetArn>
+            <state>available</state>
+            <ownerId>226147735359</ownerId>
+            <vpcId>vpc-042ab04cfa92b271d</vpcId>
+            <cidrBlock>10.0.1.0/24</cidrBlock>
+            <ipv6CidrBlockAssociationSet/>
+            <availableIpAddressCount>251</availableIpAddressCount>
+            <availabilityZone>us-east-2a</availabilityZone>
+            <availabilityZoneId>use2-az1</availabilityZoneId>
+            <defaultForAz>false</defaultForAz>
+            <mapPublicIpOnLaunch>false</mapPublicIpOnLaunch>
+            <assignIpv6AddressOnCreation>false</assignIpv6AddressOnCreation>
+            <mapCustomerOwnedIpOnLaunch>false</mapCustomerOwnedIpOnLaunch>
+            <privateDnsNameOptionsOnLaunch>
+                <hostnameType>ip-name</hostnameType>
+                <enableResourceNameDnsARecord>false</enableResourceNameDnsARecord>
+                <enableResourceNameDnsAAAARecord>false</enableResourceNameDnsAAAARecord>
+            </privateDnsNameOptionsOnLaunch>
+            <ipv6Native>false</ipv6Native>
+            <enableDns64>false</enableDns64>
+        </subnet>
+    </CreateSubnetResponse>
+    """
+
+    expected = %{
+      subnet: %{
+        subnet_id: "subnet-091916da4ab073d4a",
+        vpc_id: "vpc-042ab04cfa92b271d",
+        cidr_block: "10.0.1.0/24",
+        availability_zone: "us-east-2a",
+        state: "available",
+        subnet_arn: "arn:aws:ec2:us-east-2:226147735359:subnet/subnet-091916da4ab073d4a",
+        owner_id: "226147735359",
+        availability_zone_id: "use2-az1",
+        available_ip_address_count: 251,
+        enable_lni_at_device_index: nil,
+        default_for_az: false,
+        map_public_ip_on_launch: false,
+        assign_ipv6_address_on_creation: false,
+        map_customer_owned_ip_on_launch: false,
+        customer_owned_ipv4_pool: nil,
+        outpost_arn: nil,
+        enable_dns64: false,
+        ipv6_native: false,
+        type: nil,
+        ipv6_cidr_block_association_set: [],
+        private_dns_name_options_on_launch: %{
+          hostname_type: "ip-name",
+          enable_resource_name_dns_a_record: false,
+          enable_resource_name_dns_aaaa_record: false
+        },
+        block_public_access_states: nil,
+        tag_set: []
+      }
+    }
+
+    assert expected === AwsSDK.EC2.parse_create_subnet_for_test(xml)
+  end
 end

@@ -4418,6 +4418,133 @@ defmodule AwsSDK.EC2 do
   @doc false
   def parse_delete_vpc_for_test(xml), do: parse_return(xml)
 
+  @doc """
+  Creates a subnet in a VPC.
+
+  ## Arguments
+
+    * `vpc_id` - The VPC ID.
+    * `cidr_block` - The subnet's IPv4 network range, in CIDR notation,
+      inside the VPC's range.
+    * `opts` - Shared options.
+
+  ## Options
+
+    * `:raw_body` - When true, `body` is the XML EC2 answered, unparsed, as
+      the evidence a parser test is written from.
+
+  ## Examples
+
+      AwsSDK.EC2.create_subnet("vpc-1a2b3c4d", "10.0.1.0/24")
+      #=> {:ok,
+      #=>  %{body: %{
+      #=>    subnet: %{
+      #=>      subnet_id: "subnet-9d4a7b6c",
+      #=>      vpc_id: "vpc-1a2b3c4d",
+      #=>      cidr_block: "10.0.1.0/24",
+      #=>      state: "available",
+      #=>      ...
+      #=>    }
+      #=>  }, headers: %{...}}}
+  """
+  @spec create_subnet(vpc_id :: String.t(), cidr_block :: String.t(), opts :: keyword()) ::
+          {:ok, %{body: map(), headers: map()}} | {:error, term()}
+  def create_subnet(vpc_id, cidr_block, opts \\ [])
+      when is_binary(vpc_id) and is_binary(cidr_block) do
+    if sandbox?(opts) do
+      sandbox_create_subnet_response(vpc_id, opts)
+    else
+      do_create_subnet(vpc_id, cidr_block, opts)
+    end
+  end
+
+  defp do_create_subnet(vpc_id, cidr_block, opts) do
+    params = %{"VpcId" => vpc_id, "CidrBlock" => cidr_block}
+
+    with {:ok, op} <- build_operation("CreateSubnet", params, opts),
+         {:ok, %{body: body, headers: headers}} <- Client.request(op) do
+      body = if opts[:raw_body], do: body, else: parse_create_subnet(body)
+      {:ok, %{body: body, headers: Client.deserialize_headers(headers, opts)}}
+    end
+  end
+
+  @doc false
+  def parse_create_subnet_for_test(xml), do: parse_create_subnet(xml)
+
+  defp parse_create_subnet(body) do
+    subnet =
+      xpath(body, ~x"//CreateSubnetResponse/subnet"o,
+        subnet_id: ~x"./subnetId/text()"s,
+        vpc_id: ~x"./vpcId/text()"s,
+        cidr_block: ~x"./cidrBlock/text()"o |> transform_by(&optional_text/1),
+        availability_zone: ~x"./availabilityZone/text()"o |> transform_by(&optional_text/1),
+        state: ~x"./state/text()"o |> transform_by(&optional_text/1),
+        subnet_arn: ~x"./subnetArn/text()"o |> transform_by(&optional_text/1),
+        owner_id: ~x"./ownerId/text()"o |> transform_by(&optional_text/1),
+        availability_zone_id: ~x"./availabilityZoneId/text()"o |> transform_by(&optional_text/1),
+        available_ip_address_count: ~x"./availableIpAddressCount/text()"oi,
+        enable_lni_at_device_index: ~x"./enableLniAtDeviceIndex/text()"oi,
+        default_for_az: ~x"./defaultForAz/text()"o |> transform_by(&optional_text/1),
+        map_public_ip_on_launch:
+          ~x"./mapPublicIpOnLaunch/text()"o |> transform_by(&optional_text/1),
+        assign_ipv6_address_on_creation:
+          ~x"./assignIpv6AddressOnCreation/text()"o |> transform_by(&optional_text/1),
+        map_customer_owned_ip_on_launch:
+          ~x"./mapCustomerOwnedIpOnLaunch/text()"o |> transform_by(&optional_text/1),
+        customer_owned_ipv4_pool:
+          ~x"./customerOwnedIpv4Pool/text()"o |> transform_by(&optional_text/1),
+        outpost_arn: ~x"./outpostArn/text()"o |> transform_by(&optional_text/1),
+        enable_dns64: ~x"./enableDns64/text()"o |> transform_by(&optional_text/1),
+        ipv6_native: ~x"./ipv6Native/text()"o |> transform_by(&optional_text/1),
+        type: ~x"./type/text()"o |> transform_by(&optional_text/1),
+        ipv6_cidr_block_association_set: [
+          ~x"./ipv6CidrBlockAssociationSet/item"l,
+          ipv6_cidr_block: ~x"./ipv6CidrBlock/text()"s,
+          association_id: ~x"./associationId/text()"s,
+          ipv6_cidr_block_state: [
+            ~x"./ipv6CidrBlockState"o,
+            state: ~x"./state/text()"s,
+            status_message: ~x"./statusMessage/text()"o |> transform_by(&optional_text/1)
+          ],
+          ipv6_address_attribute:
+            ~x"./ipv6AddressAttribute/text()"o |> transform_by(&optional_text/1),
+          ip_source: ~x"./ipSource/text()"o |> transform_by(&optional_text/1)
+        ],
+        private_dns_name_options_on_launch: [
+          ~x"./privateDnsNameOptionsOnLaunch"o,
+          hostname_type: ~x"./hostnameType/text()"o |> transform_by(&optional_text/1),
+          enable_resource_name_dns_a_record:
+            ~x"./enableResourceNameDnsARecord/text()"o |> transform_by(&optional_text/1),
+          enable_resource_name_dns_aaaa_record:
+            ~x"./enableResourceNameDnsAAAARecord/text()"o |> transform_by(&optional_text/1)
+        ],
+        block_public_access_states: [
+          ~x"./blockPublicAccessStates"o,
+          internet_gateway_block_mode:
+            ~x"./internetGatewayBlockMode/text()"o |> transform_by(&optional_text/1)
+        ],
+        tag_set: [~x"./tagSet/item"l, key: ~x"./key/text()"s, value: ~x"./value/text()"s]
+      )
+
+    %{
+      subnet:
+        subnet
+        |> coerce_subnet_booleans()
+        |> Map.update!(:private_dns_name_options_on_launch, &coerce_private_dns_name_options/1)
+    }
+  end
+
+  defp coerce_private_dns_name_options(nil), do: nil
+
+  defp coerce_private_dns_name_options(options) do
+    %{
+      options
+      | enable_resource_name_dns_a_record: to_bool(options.enable_resource_name_dns_a_record),
+        enable_resource_name_dns_aaaa_record:
+          to_bool(options.enable_resource_name_dns_aaaa_record)
+    }
+  end
+
   # ---------------------------------------------------------------------------
   # Sandbox delegation
   # ---------------------------------------------------------------------------
@@ -4752,6 +4879,11 @@ defmodule AwsSDK.EC2 do
     defdelegate sandbox_delete_vpc_response(vpc_id, opts),
       to: AwsSDK.EC2.Sandbox,
       as: :delete_vpc_response
+
+    @doc false
+    defdelegate sandbox_create_subnet_response(vpc_id, opts),
+      to: AwsSDK.EC2.Sandbox,
+      as: :create_subnet_response
   else
     defp sandbox_disabled?, do: true
 
@@ -4829,6 +4961,8 @@ defmodule AwsSDK.EC2 do
     defp sandbox_create_vpc_response(_, _), do: raise("sandbox not available")
 
     defp sandbox_delete_vpc_response(_, _), do: raise("sandbox not available")
+
+    defp sandbox_create_subnet_response(_, _), do: raise("sandbox not available")
   end
 
   # ---------------------------------------------------------------------------
